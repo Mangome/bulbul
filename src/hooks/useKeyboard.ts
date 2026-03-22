@@ -1,0 +1,127 @@
+// ============================================================
+// 键盘快捷键 Hook (useKeyboard)
+//
+// 在 MainPage 挂载时注册 window keydown 监听，卸载时移除。
+// 支持 W/S 分组切换、Ctrl 组合键、Escape 多功能。
+// 输入框聚焦时跳过所有快捷键。
+// ============================================================
+
+import { useEffect } from 'react';
+import { useAppStore } from '../stores/useAppStore';
+import { useSelectionStore } from '../stores/useSelectionStore';
+import { useCanvasStore } from '../stores/useCanvasStore';
+
+// ─── 类型 ─────────────────────────────────────────────
+
+export interface UseKeyboardOptions {
+  /** 打开文件夹回调 */
+  onOpenFolder: () => void;
+  /** 导出回调 */
+  onExport: () => void;
+  /** 分组跳转回调（切换后触发画布滚动） */
+  onGroupNavigated?: () => void;
+}
+
+// ─── 辅助 ─────────────────────────────────────────────
+
+/** 判断当前焦点是否在输入控件上 */
+function isInputFocused(): boolean {
+  const el = document.activeElement;
+  if (!el) return false;
+  const tag = el.tagName.toLowerCase();
+  if (tag === 'input' || tag === 'textarea') return true;
+  if ((el as HTMLElement).isContentEditable) return true;
+  return false;
+}
+
+// ─── Hook ─────────────────────────────────────────────
+
+export function useKeyboard({
+  onOpenFolder,
+  onExport,
+  onGroupNavigated,
+}: UseKeyboardOptions): void {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 输入框聚焦时跳过
+      if (isInputFocused()) return;
+
+      const ctrl = e.ctrlKey || e.metaKey;
+
+      // ── Ctrl 组合键 ──
+      if (ctrl) {
+        switch (e.key.toLowerCase()) {
+          case 'o':
+            e.preventDefault();
+            onOpenFolder();
+            return;
+          case 'e':
+            e.preventDefault();
+            onExport();
+            return;
+          case 'a': {
+            e.preventDefault();
+            const { selectedGroupId, groups } = useAppStore.getState();
+            if (selectedGroupId == null) return;
+            const group = groups.find((g) => g.id === selectedGroupId);
+            if (group) {
+              useSelectionStore.getState().selectAllInGroup(group.pictureHashes);
+            }
+            return;
+          }
+          case '0':
+            e.preventDefault();
+            useCanvasStore.getState().fitToWindow();
+            return;
+          case '1':
+            e.preventDefault();
+            useCanvasStore.getState().resetZoom();
+            return;
+          case '=':
+          case '+':
+            e.preventDefault();
+            useCanvasStore.getState().zoomIn();
+            return;
+          case '-':
+            e.preventDefault();
+            useCanvasStore.getState().zoomOut();
+            return;
+        }
+        return;
+      }
+
+      // ── 单键 ──
+      switch (e.key.toLowerCase()) {
+        case 'w':
+          e.preventDefault();
+          useAppStore.getState().navigateGroup('prev');
+          onGroupNavigated?.();
+          return;
+        case 's':
+          e.preventDefault();
+          useAppStore.getState().navigateGroup('next');
+          onGroupNavigated?.();
+          return;
+        case 'escape': {
+          e.preventDefault();
+          const selectionStore = useSelectionStore.getState();
+          if (selectionStore.selectedCount > 0) {
+            selectionStore.clearSelection();
+            return;
+          }
+          // 处理中按 Escape → 取消处理
+          const { processingState } = useAppStore.getState();
+          const cancelableStates = ['scanning', 'processing', 'analyzing', 'grouping'];
+          if (cancelableStates.includes(processingState)) {
+            // 取消处理通过外部机制，这里仅设置状态
+            useAppStore.getState().setProcessingState('cancelling');
+          }
+          return;
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onOpenFolder, onExport, onGroupNavigated]);
+}

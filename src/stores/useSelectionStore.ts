@@ -9,6 +9,8 @@ interface SelectionStoreState {
   toggleSelection: (hash: string) => void;
   clearSelection: () => void;
   getSelectedInGroup: (groupHashes: string[]) => number;
+  selectAllInGroup: (groupHashes: string[]) => void;
+  deselectAllInGroup: (groupHashes: string[]) => void;
 }
 
 export const useSelectionStore = create<SelectionStoreState>((set, get) => ({
@@ -33,4 +35,22 @@ export const useSelectionStore = create<SelectionStoreState>((set, get) => ({
     const { selectedHashes } = get();
     return groupHashes.filter((h) => selectedHashes.has(h)).length;
   },
+
+  selectAllInGroup: (groupHashes) =>
+    set((state) => {
+      const newSet = new Set(state.selectedHashes);
+      for (const hash of groupHashes) {
+        newSet.add(hash);
+      }
+      return { selectedHashes: newSet, selectedCount: newSet.size };
+    }),
+
+  deselectAllInGroup: (groupHashes) =>
+    set((state) => {
+      const newSet = new Set(state.selectedHashes);
+      for (const hash of groupHashes) {
+        newSet.delete(hash);
+      }
+      return { selectedHashes: newSet, selectedCount: newSet.size };
+    }),
 }));

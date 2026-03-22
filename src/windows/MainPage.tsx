@@ -1,11 +1,16 @@
 import { useEffect, useCallback, useState, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../stores/useAppStore';
+import { useSelectionStore } from '../stores/useSelectionStore';
 import { useProcessing } from '../hooks/useProcessing';
+import { useKeyboard } from '../hooks/useKeyboard';
 import { ProgressDialog } from '../components/dialogs/ProgressDialog';
-import InfiniteCanvas from '../components/canvas/InfiniteCanvas';
+import InfiniteCanvas, { type InfiniteCanvasHandle } from '../components/canvas/InfiniteCanvas';
+import { FloatingGroupList } from '../components/panels/FloatingGroupList';
+import { FloatingControlBar } from '../components/panels/FloatingControlBar';
 import { computeWaterfallLayout, type LayoutResult, type ImageDimension } from '../utils/layout';
 import * as imageService from '../services/imageService';
+import { runExportFlow } from '../services/exportService';
 import type { ImageMetadata } from '../types';
 
 function MainPage() {
@@ -23,7 +28,85 @@ function MainPage() {
   const [layout, setLayout] = useState<LayoutResult | null>(null);
   const [fileNames, setFileNames] = useState<Map<string, string>>(new Map());
   const [metadataMap, setMetadataMap] = useState<Map<string, ImageMetadata>>(new Map());
+  const [thumbnailUrls, setThumbnailUrls] = useState<Map<string, string>>(new Map());
   const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<InfiniteCanvasHandle>(null);
+
+  // ── 导出流程 ──
+  const handleExport = useCallback(async () => {
+    const { selectedHashes } = useSelectionStore.getState();
+    const hashes = Array.from(selectedHashes);
+    if (hashes.length === 0) return;
+
+    const result = await runExportFlow(hashes);
+
+    if (result.cancelled) return;
+
+    if (result.success && result.result) {
+      const r = result.result;
+      const msg =
+        r.failedFiles.length > 0
+          ? `导出完成：成功 ${r.exportedCount}/${r.totalCount}，失败 ${r.failedFiles.length}`
+          : `导出完成：成功导出 ${r.exportedCount} 张图片到 ${r.targetDir}`;
+      alert(msg);
+      useSelectionStore.getState().clearSelection();
+      canvasRef.current?.syncSelectionVisuals();
+    } else if (result.error) {
+      alert(`导出失败：${result.error}`);
+    }
+  }, []);
+
+  // ── 打开文件夹（键盘快捷键回调） ──
+  const handleOpenFolder = useCallback(async () => {
+    try {
+      const folder = await invoke<string | null>('select_folder');
+      if (!folder) return;
+      const info = await invoke<{
+        path: string; name: string; fileCount: number; rawCount: number;
+      }>('get_folder_info', { path: folder });
+      setFolder(folder, info);
+      await startProcessing(folder);
+    } catch (err) {
+      console.error('打开文件夹失败:', err);
+    }
+  }, [setFolder, startProcessing]);
+
+  // ── 分组跳转回调 ──
+  const handleGroupClick = useCallback(
+    (groupId: number) => {
+      useAppStore.getState().selectGroup(groupId);
+      // 计算目标分组在布局中的 Y 坐标
+      if (layout) {
+        const titleItem = layout.groupTitles.find(
+          (t) => t.groupId === groupId,
+        );
+        if (titleItem && canvasRef.current) {
+          canvasRef.current.scrollToY(titleItem.y);
+        }
+      }
+    },
+    [layout],
+  );
+
+  // ── 键盘快捷键分组导航后滚动 ──
+  const handleGroupNavigated = useCallback(() => {
+    if (!layout) return;
+    const { selectedGroupId } = useAppStore.getState();
+    if (selectedGroupId == null) return;
+    const titleItem = layout.groupTitles.find(
+      (t) => t.groupId === selectedGroupId,
+    );
+    if (titleItem && canvasRef.current) {
+      canvasRef.current.scrollToY(titleItem.y);
+    }
+  }, [layout]);
+
+  // ── 键盘快捷键 ──
+  useKeyboard({
+    onOpenFolder: handleOpenFolder,
+    onExport: handleExport,
+    onGroupNavigated: handleGroupNavigated,
+  });
 
   // 获取当前文件夹并自动触发处理（防 StrictMode double-fire）
   const initCalledRef = useRef(false);
@@ -114,6 +197,20 @@ function MainPage() {
       setFileNames(nameMap);
       setMetadataMap(metaMap);
       setLayout(layoutResult);
+
+      // 为分组代表图构建缩略图 URL
+      const thumbUrls = new Map<string, string>();
+      for (const group of groups) {
+        try {
+          const url = await imageService.getImageUrl(group.representativeHash, 'thumbnail');
+          if (url) thumbUrls.set(group.representativeHash, url);
+        } catch {
+          // 缩略图加载失败不阻塞
+        }
+      }
+      if (!cancelled) {
+        setThumbnailUrls(thumbUrls);
+      }
     };
 
     prepareCanvas();
@@ -156,11 +253,24 @@ function MainPage() {
       {/* 画布区域 */}
       <div ref={canvasContainerRef} style={styles.canvasArea}>
         {isCanvasReady ? (
-          <InfiniteCanvas
-            layout={layout}
-            fileNames={fileNames}
-            metadataMap={metadataMap}
-          />
+          <>
+            <InfiniteCanvas
+              ref={canvasRef}
+              layout={layout}
+              fileNames={fileNames}
+              metadataMap={metadataMap}
+            />
+
+            {/* 悬浮面板层 — pointer-events: none 防止拦截画布事件 */}
+            <div style={styles.panelLayer}>
+              <FloatingGroupList
+                groups={groups}
+                thumbnailUrls={thumbnailUrls}
+                onGroupClick={handleGroupClick}
+              />
+              <FloatingControlBar onExport={handleExport} />
+            </div>
+          </>
         ) : (
           <div style={styles.placeholder}>
             <p style={styles.placeholderText}>
@@ -216,6 +326,12 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     position: 'relative' as const,
     overflow: 'hidden',
+  },
+  panelLayer: {
+    position: 'absolute' as const,
+    inset: 0,
+    pointerEvents: 'none' as const,
+    zIndex: 10,
   },
   placeholder: {
     width: '100%',

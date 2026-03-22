@@ -9,6 +9,7 @@ describe('useCanvasStore', () => {
       viewportX: 0,
       viewportY: 0,
       viewportRect: null,
+      fitCounter: 0,
     });
   });
 
@@ -85,7 +86,7 @@ describe('useCanvasStore', () => {
   });
 
   describe('fitToWindow', () => {
-    it('应重置缩放和视口', () => {
+    it('应重置缩放和视口，并递增 fitCounter', () => {
       useCanvasStore.getState().setZoom(2.0);
       useCanvasStore.getState().setViewport(100, 200);
       useCanvasStore.getState().setViewportRect({ x: 10, y: 20, width: 800, height: 600 });
@@ -97,6 +98,13 @@ describe('useCanvasStore', () => {
       expect(state.viewportX).toBe(0);
       expect(state.viewportY).toBe(0);
       expect(state.viewportRect).toBeNull();
+      expect(state.fitCounter).toBe(1);
+    });
+
+    it('多次调用 fitToWindow 应持续递增 fitCounter', () => {
+      useCanvasStore.getState().fitToWindow();
+      useCanvasStore.getState().fitToWindow();
+      expect(useCanvasStore.getState().fitCounter).toBe(2);
     });
   });
 

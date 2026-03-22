@@ -12,6 +12,8 @@ interface CanvasStoreState {
   viewportY: number;
   /** 实时视口矩形（ContentLayer 坐标系） */
   viewportRect: ViewportRect | null;
+  /** fitToWindow 触发计数器，每次递增触发画布重置 */
+  fitCounter: number;
 
   // Actions
   setZoom: (level: number) => void;
@@ -28,6 +30,7 @@ export const useCanvasStore = create<CanvasStoreState>((set) => ({
   viewportX: 0,
   viewportY: 0,
   viewportRect: null,
+  fitCounter: 0,
 
   setZoom: (level) =>
     set({ zoomLevel: Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, level)) }),
@@ -49,7 +52,13 @@ export const useCanvasStore = create<CanvasStoreState>((set) => ({
     })),
 
   fitToWindow: () =>
-    set({ zoomLevel: 1.0, viewportX: 0, viewportY: 0, viewportRect: null }),
+    set((state) => ({
+      zoomLevel: 1.0,
+      viewportX: 0,
+      viewportY: 0,
+      viewportRect: null,
+      fitCounter: state.fitCounter + 1,
+    })),
 
   resetZoom: () =>
     set({ zoomLevel: 1.0 }),

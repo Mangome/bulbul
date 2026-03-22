@@ -123,6 +123,7 @@ export interface ScanResult {
 /** 导出结果 */
 export interface ExportResult {
   exportedCount: number;
+  totalCount: number;
   targetDir: string;
-  errors: string[];
+  failedFiles: string[];
 }

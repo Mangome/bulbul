@@ -12,7 +12,7 @@
 //     └── CanvasImageItem × N (由虚拟化引擎管理)
 // ============================================================
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { Application, Container } from 'pixi.js';
 import { DotBackground } from './DotBackground';
 import { CanvasImageItem } from './CanvasImageItem';
@@ -31,6 +31,7 @@ import type {
 } from '../../utils/layout';
 import type { ImageMetadata } from '../../types';
 import { useCanvasStore } from '../../stores/useCanvasStore';
+import { useSelectionStore } from '../../stores/useSelectionStore';
 
 // ─── 常量 ─────────────────────────────────────────────
 
@@ -50,13 +51,22 @@ export interface InfiniteCanvasProps {
   metadataMap: Map<string, ImageMetadata>;
 }
 
+// ─── Handle ───────────────────────────────────────────
+
+export interface InfiniteCanvasHandle {
+  /** 将 SelectionStore 状态同步到所有可见 CanvasImageItem */
+  syncSelectionVisuals: () => void;
+  /** 将画布视口滚动到指定 Y 坐标 */
+  scrollToY: (y: number) => void;
+}
+
 // ─── Component ────────────────────────────────────────
 
-export default function InfiniteCanvas({
+const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({
   layout,
   fileNames,
   metadataMap,
-}: InfiniteCanvasProps) {
+}, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
   const contentLayerRef = useRef<Container | null>(null);
@@ -68,6 +78,9 @@ export default function InfiniteCanvas({
   const zoomLevelRef = useRef(1.0);
   const prevZoomSizeRef = useRef<string>('medium');
 
+  // ── 选中状态同步 fn ref（在 effect 内赋值） ──
+  const syncSelectionVisualsRef = useRef<(() => void) | null>(null);
+
   // ── Drag state ──
   const isDraggingRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0 });
@@ -75,6 +88,8 @@ export default function InfiniteCanvas({
   const hasDraggedRef = useRef(false);
 
   // Store sync
+  const storeZoomLevel = useCanvasStore((s) => s.zoomLevel);
+  const fitCounter = useCanvasStore((s) => s.fitCounter);
   const setZoom = useCanvasStore((s) => s.setZoom);
   const setViewport = useCanvasStore((s) => s.setViewport);
   const setViewportRect = useCanvasStore((s) => s.setViewportRect);
@@ -125,6 +140,10 @@ export default function InfiniteCanvas({
       const meta = metadataMap.get(item.hash);
       canvasItem.setImageInfo(fileName, meta);
       canvasItem.updateZoomVisibility(zoomLevelRef.current);
+
+      // 同步选中状态
+      const { selectedHashes } = useSelectionStore.getState();
+      canvasItem.setSelected(selectedHashes.has(item.hash));
 
       contentLayer.addChild(canvasItem);
       canvasItemsRef.current.set(item.hash, canvasItem);
@@ -313,9 +332,62 @@ export default function InfiniteCanvas({
       updateViewport();
     };
 
-    const handlePointerUp = () => {
+    const handlePointerUp = (e: PointerEvent) => {
+      const wasDragging = isDraggingRef.current;
       isDraggingRef.current = false;
+
+      // 如果未拖拽（在死区内），视为点击 → 尝试选中图片
+      if (wasDragging && !hasDraggedRef.current) {
+        handleCanvasClick(e);
+      }
     };
+
+    /** 处理画布点击：命中检测 → 切换选中 */
+    const handleCanvasClick = (e: PointerEvent) => {
+      const contentLayer = contentLayerRef.current;
+      if (!contentLayer) return;
+
+      // 将屏幕坐标转换为内容坐标
+      const rect = (e.target as HTMLElement).getBoundingClientRect();
+      const screenX = e.clientX - rect.left;
+      const screenY = e.clientY - rect.top;
+      const zoom = zoomLevelRef.current;
+      const contentX = (screenX - contentLayer.x) / zoom;
+      const contentY = (screenY - contentLayer.y) / zoom;
+
+      // 遍历可见 item 做命中检测
+      for (const [hash, item] of canvasItemsRef.current) {
+        const lx = item.x;
+        const ly = item.y;
+        // item 的宽高通过 bounds 推断
+        const bounds = item.getBounds();
+        const w = bounds.width / zoom;
+        const h = bounds.height / zoom;
+
+        if (
+          contentX >= lx &&
+          contentX <= lx + w &&
+          contentY >= ly &&
+          contentY <= ly + h
+        ) {
+          // 命中：切换选中状态
+          useSelectionStore.getState().toggleSelection(hash);
+          syncSelectionVisuals();
+          return;
+        }
+      }
+    };
+
+    /** 将 SelectionStore 状态同步到所有可见 CanvasImageItem */
+    const syncSelectionVisuals = () => {
+      const { selectedHashes } = useSelectionStore.getState();
+      for (const [hash, item] of canvasItemsRef.current) {
+        item.setSelected(selectedHashes.has(hash));
+      }
+    };
+
+    // 暴露给 ref
+    syncSelectionVisualsRef.current = syncSelectionVisuals;
 
     initApp();
 
@@ -341,6 +413,75 @@ export default function InfiniteCanvas({
     };
   }, [layout, updateViewport, setZoom, handleZoomThresholdChange]);
 
+  // ── 暴露 handle ──
+  useImperativeHandle(ref, () => ({
+    syncSelectionVisuals: () => {
+      syncSelectionVisualsRef.current?.();
+    },
+    scrollToY: (y: number) => {
+      const contentLayer = contentLayerRef.current;
+      if (!contentLayer) return;
+      const zoom = zoomLevelRef.current;
+      contentLayer.y = -y * zoom;
+      updateViewport();
+    },
+  }), [updateViewport]);
+
+  // ── 外部缩放同步（来自控制栏的 slider/+/-/resetZoom） ──
+  useEffect(() => {
+    const contentLayer = contentLayerRef.current;
+    const app = appRef.current;
+    if (!contentLayer || !app) return;
+
+    // 仅当 store 值与本地 ref 不同时才应用（避免循环触发）
+    if (Math.abs(storeZoomLevel - zoomLevelRef.current) < 0.001) return;
+
+    const oldZoom = zoomLevelRef.current;
+    const newZoom = storeZoomLevel;
+
+    // 以视口中心为锚点进行缩放
+    const centerX = app.screen.width / 2;
+    const centerY = app.screen.height / 2;
+    const contentCenterX = (centerX - contentLayer.x) / oldZoom;
+    const contentCenterY = (centerY - contentLayer.y) / oldZoom;
+
+    contentLayer.scale.set(newZoom);
+    contentLayer.x = centerX - contentCenterX * newZoom;
+    contentLayer.y = centerY - contentCenterY * newZoom;
+
+    zoomLevelRef.current = newZoom;
+
+    // 更新覆盖层可见性
+    for (const item of canvasItemsRef.current.values()) {
+      item.updateZoomVisibility(newZoom);
+    }
+
+    handleZoomThresholdChange(newZoom);
+    updateViewport();
+  }, [storeZoomLevel, handleZoomThresholdChange, updateViewport]);
+
+  // ── fitToWindow：重置缩放和视口位置 ──
+  useEffect(() => {
+    // 跳过初始渲染（fitCounter 初始为 0）
+    if (fitCounter === 0) return;
+
+    const contentLayer = contentLayerRef.current;
+    if (!contentLayer) return;
+
+    const newZoom = 1.0;
+    contentLayer.scale.set(newZoom);
+    contentLayer.x = 0;
+    contentLayer.y = 0;
+    zoomLevelRef.current = newZoom;
+
+    for (const item of canvasItemsRef.current.values()) {
+      item.updateZoomVisibility(newZoom);
+    }
+
+    handleZoomThresholdChange(newZoom);
+    updateViewport();
+  }, [fitCounter, handleZoomThresholdChange, updateViewport]);
+
   return (
     <div
       ref={containerRef}
@@ -351,4 +492,6 @@ export default function InfiniteCanvas({
       }}
     />
   );
-}
+});
+
+export default InfiniteCanvas;
