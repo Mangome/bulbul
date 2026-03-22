@@ -12,9 +12,13 @@
   "app": {
     "windows": [
       {
-        "title": "bulbul",
-        "width": 800,
-        "height": 600
+        "label": "welcome",
+        "title": "Bulbul",
+        "width": 600,
+        "height": 450,
+        "resizable": false,
+        "center": true,
+        "decorations": true
       }
     ],
     "security": {
