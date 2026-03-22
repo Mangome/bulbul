@@ -33,7 +33,7 @@ describe('useAppStore', () => {
     expect(state.folderInfo).toEqual(folderInfo);
   });
 
-  it('should set groups', () => {
+  it('should set groups and mark processing as completed', () => {
     const groups: GroupData[] = [
       {
         id: 0,
@@ -52,6 +52,7 @@ describe('useAppStore', () => {
     const state = useAppStore.getState();
     expect(state.groups).toEqual(groups);
     expect(state.totalImages).toBe(3);
+    expect(state.processingState).toBe('completed');
   });
 
   it('should navigate groups cyclically', () => {

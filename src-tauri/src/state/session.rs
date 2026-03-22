@@ -12,6 +12,8 @@ pub struct SessionState {
     pub hash_filename_map: HashMap<String, String>,
     pub hash_path_map: HashMap<String, PathBuf>,
     pub metadata_cache: HashMap<String, ImageMetadata>,
+    /// 文件路径 hash → pHash 感知哈希值的缓存
+    pub phash_cache: HashMap<String, u64>,
     pub group_result: Option<GroupResult>,
     pub processing_state: ProcessingState,
     pub cancel_flag: Arc<AtomicBool>,
@@ -26,6 +28,7 @@ impl SessionState {
             hash_filename_map: HashMap::new(),
             hash_path_map: HashMap::new(),
             metadata_cache: HashMap::new(),
+            phash_cache: HashMap::new(),
             group_result: None,
             processing_state: ProcessingState::Idle,
             cancel_flag: Arc::new(AtomicBool::new(false)),
@@ -51,6 +54,7 @@ impl SessionState {
         self.hash_filename_map.clear();
         self.hash_path_map.clear();
         self.metadata_cache.clear();
+        self.phash_cache.clear();
         self.group_result = None;
         self.processing_state = ProcessingState::Idle;
         self.cancel_flag.store(false, Ordering::Relaxed);
@@ -75,6 +79,7 @@ mod tests {
         assert!(state.hash_filename_map.is_empty());
         assert!(state.hash_path_map.is_empty());
         assert!(state.metadata_cache.is_empty());
+        assert!(state.phash_cache.is_empty());
         assert!(state.group_result.is_none());
         assert_eq!(state.processing_state, ProcessingState::Idle);
         assert!(!state.cancel_flag.load(Ordering::Relaxed));
@@ -86,6 +91,7 @@ mod tests {
         let state = SessionState::default();
         assert!(state.current_folder.is_none());
         assert!(state.filename_hash_map.is_empty());
+        assert!(state.phash_cache.is_empty());
         assert_eq!(state.processing_state, ProcessingState::Idle);
         assert_eq!(state.cache_dir, PathBuf::new());
     }
@@ -98,6 +104,7 @@ mod tests {
         assert_eq!(state.cache_dir, cache_dir);
         assert!(state.current_folder.is_none());
         assert!(state.filename_hash_map.is_empty());
+        assert!(state.phash_cache.is_empty());
         assert_eq!(state.processing_state, ProcessingState::Idle);
     }
 
@@ -111,6 +118,7 @@ mod tests {
         state.hash_filename_map.insert("hash_a".into(), "a.nef".into());
         state.hash_path_map.insert("hash_a".into(), PathBuf::from("/photos/a.nef"));
         state.metadata_cache.insert("hash_a".into(), ImageMetadata::default());
+        state.phash_cache.insert("hash_a".into(), 0xAAAA);
         state.processing_state = ProcessingState::Processing;
         state.cancel_flag.store(true, Ordering::Relaxed);
 
@@ -122,6 +130,7 @@ mod tests {
         assert!(state.hash_filename_map.is_empty());
         assert!(state.hash_path_map.is_empty());
         assert!(state.metadata_cache.is_empty());
+        assert!(state.phash_cache.is_empty());
         assert!(state.group_result.is_none());
         assert_eq!(state.processing_state, ProcessingState::Idle);
         assert!(!state.cancel_flag.load(Ordering::Relaxed));
@@ -134,7 +143,22 @@ mod tests {
         let cache_dir = PathBuf::from("/my/cache/dir");
         let mut state = SessionState::with_cache_dir(cache_dir.clone());
         state.current_folder = Some(PathBuf::from("/photos"));
+        state.phash_cache.insert("test".into(), 42);
         state.reset();
         assert_eq!(state.cache_dir, cache_dir);
+        assert!(state.phash_cache.is_empty());
+    }
+
+    #[test]
+    fn test_phash_cache_operations() {
+        let mut state = SessionState::new();
+        assert!(state.phash_cache.is_empty());
+
+        state.phash_cache.insert("hash_a".into(), 0xDEADBEEF);
+        assert_eq!(state.phash_cache.get("hash_a"), Some(&0xDEADBEEF));
+        assert_eq!(state.phash_cache.len(), 1);
+
+        state.phash_cache.insert("hash_b".into(), 0xCAFEBABE);
+        assert_eq!(state.phash_cache.len(), 2);
     }
 }

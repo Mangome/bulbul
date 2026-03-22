@@ -9,8 +9,8 @@ export async function processFolder(
     similarityThreshold?: number;
     timeGapSeconds?: number;
   }
-): Promise<void> {
-  return await invoke('process_folder', {
+): Promise<GroupResult> {
+  return await invoke<GroupResult>('process_folder', {
     folderPath,
     similarityThreshold: options?.similarityThreshold ?? 90.0,
     timeGapSeconds: options?.timeGapSeconds ?? 10,

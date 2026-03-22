@@ -12,7 +12,11 @@
 - **THEN** SHALL 调用 invoke('get_folder_info', { path: "/path" }) 并返回 FolderInfo 对象
 
 ### Requirement: processService 处理服务
-系统 SHALL 提供 `services/processService.ts` 模块，封装处理流水线 IPC 调用：processFolder(folderPath, options?)（调用 process_folder 命令）、cancelProcessing()（调用 cancel_processing 命令）。SHALL 提供事件监听方法：onProgress(callback)、onCompleted(callback)、onFailed(callback)，使用 `@tauri-apps/api/event` 的 `listen` 函数。
+系统 SHALL 提供 `services/processService.ts` 模块，封装处理流水线 IPC 调用：processFolder(folderPath, options?)（调用 process_folder 命令，返回 `Promise<GroupResult>`）、cancelProcessing()（调用 cancel_processing 命令）。SHALL 提供事件监听方法：onProgress(callback)、onCompleted(callback)、onFailed(callback)，使用 `@tauri-apps/api/event` 的 `listen` 函数。
+
+#### Scenario: processFolder 返回 GroupResult
+- **WHEN** 调用 processService.processFolder("/path")
+- **THEN** 返回 `Promise<GroupResult>`，包含 `groups`、`totalImages`、`totalGroups`、`processedFiles`、`performance`
 
 #### Scenario: processFolder 默认参数
 - **WHEN** 调用 processService.processFolder("/path") 不传 options
@@ -21,6 +25,14 @@
 #### Scenario: onProgress 事件监听
 - **WHEN** 调用 processService.onProgress(callback)
 - **THEN** SHALL 注册 'processing-progress' 事件监听器
+
+#### Scenario: 进度事件包含完整阶段和时间信息
+- **WHEN** 接收 `onProgress` 回调的 `ProcessingProgress` 对象
+- **THEN** `progress.state` 覆盖完整流水线阶段（scanning/processing/analyzing/grouping/completed/cancelling/cancelled/error），`elapsedMs` 和 `estimatedRemainingMs` 字段可用
+
+#### Scenario: 完成事件携带 GroupResult
+- **WHEN** 流水线处理完成
+- **THEN** `onCompleted` 回调被调用，参数为完整的 `GroupResult` 对象
 
 ### Requirement: imageService 图片服务
 系统 SHALL 提供 `services/imageService.ts` 模块，封装图片查询 IPC 调用：getImageUrl(hash, size)（调用 get_image_url 命令 + convertFileSrc 转换）、getMetadata(hash)、getBatchMetadata(hashes)。

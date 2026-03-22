@@ -43,7 +43,7 @@ export const useAppStore = create<AppStoreState>((set, get) => ({
     set({ currentFolder: path, folderInfo }),
 
   setGroups: (groups, totalImages) =>
-    set({ groups, totalImages }),
+    set({ groups, totalImages, processingState: 'completed' }),
 
   selectGroup: (groupId) =>
     set({ selectedGroupId: groupId }),

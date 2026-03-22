@@ -11,13 +11,21 @@
 - **WHEN** 调用 setFolder("/path/to/folder", folderInfo)
 - **THEN** currentFolder SHALL 为 "/path/to/folder"，folderInfo SHALL 为传入的值
 
+#### Scenario: 设置分组数据
+- **WHEN** 调用 `setGroups(groups, totalImages)`
+- **THEN** `groups` 被设为传入的分组数据，`totalImages` 被设为传入值，`processingState` 变为 `completed`
+
 #### Scenario: navigateGroup 循环切换
 - **WHEN** 有 3 个分组且 selectedGroupId 为 2（最后一个），调用 navigateGroup("next")
 - **THEN** selectedGroupId SHALL 回到 0（第一个）
 
+#### Scenario: navigateGroup 上一个循环
+- **WHEN** 当前在第一个分组，调用 navigateGroup('prev')
+- **THEN** 循环到最后一个分组
+
 #### Scenario: reset 恢复初始状态
 - **WHEN** 调用 reset()
-- **THEN** 所有状态 SHALL 恢复为初始值
+- **THEN** 所有状态 SHALL 恢复为初始值，groups 清空，totalImages 置 0，selectedGroupId 置 null
 
 ### Requirement: useCanvasStore 画布状态 Store
 系统 SHALL 提供 `useCanvasStore` Zustand Store，包含状态：zoomLevel (number, 初始 1.0)、viewportX (number, 初始 0)、viewportY (number, 初始 0)。SHALL 提供 actions：setZoom（限制范围 0.1~3.0）、setViewport、zoomIn（+0.1 步进）、zoomOut（-0.1 步进）、fitToWindow、resetZoom（重置为 1.0）。
