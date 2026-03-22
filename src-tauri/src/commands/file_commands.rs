@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::models::AppError;
+use crate::state::SessionState;
 
 /// 文件夹信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,6 +107,15 @@ pub async fn scan_raw_files(path: String) -> Result<ScanResult, String> {
 
     let count = files.len();
     Ok(ScanResult { files, count })
+}
+
+/// 获取当前选中的文件夹路径（从 SessionState 读取）
+#[tauri::command]
+pub async fn get_current_folder(
+    state: tauri::State<'_, Arc<Mutex<SessionState>>>,
+) -> Result<Option<String>, String> {
+    let s = state.lock().map_err(|e| e.to_string())?;
+    Ok(s.current_folder.as_ref().map(|p| p.to_string_lossy().to_string()))
 }
 
 #[cfg(test)]

@@ -1,26 +1,4 @@
-## Requirements
-
-### Requirement: select_folder 命令
-系统 SHALL 提供 `select_folder` IPC 命令，调用 Tauri dialog 插件弹出系统文件夹选择对话框，返回用户选择的文件夹路径（`Option<String>`）。用户取消选择时返回 `None`。
-
-#### Scenario: 用户选择文件夹
-- **WHEN** 前端调用 `invoke('select_folder')`，用户在系统对话框中选择了一个文件夹
-- **THEN** 命令返回该文件夹的绝对路径字符串
-
-#### Scenario: 用户取消选择
-- **WHEN** 前端调用 `invoke('select_folder')`，用户点击取消
-- **THEN** 命令返回 `None`
-
-### Requirement: get_folder_info 命令
-系统 SHALL 提供 `get_folder_info` IPC 命令，接受文件夹路径参数，返回 `FolderInfo`（path, name, file_count, raw_count）。raw_count SHALL 统计 `.nef` 扩展名文件数量（大小写不敏感）。
-
-#### Scenario: 有效文件夹路径
-- **WHEN** 调用 `get_folder_info` 传入一个存在的文件夹路径，该文件夹包含 5 个 .nef 文件和 3 个 .jpg 文件
-- **THEN** 返回 FolderInfo 其中 file_count 为 8，raw_count 为 5
-
-#### Scenario: 不存在的路径
-- **WHEN** 调用 `get_folder_info` 传入一个不存在的路径
-- **THEN** SHALL 返回错误
+## MODIFIED Requirements
 
 ### Requirement: scan_raw_files 命令
 系统 SHALL 提供 `scan_raw_files` IPC 命令，接受文件夹路径参数，扫描该目录下所有 `.nef` 文件（大小写不敏感，非递归），返回文件路径列表。扫描完成后 SHALL 更新 `SessionState.current_folder`。
@@ -32,6 +10,8 @@
 #### Scenario: 空文件夹
 - **WHEN** 调用 `scan_raw_files` 传入一个不包含 NEF 文件的文件夹
 - **THEN** 返回空列表
+
+## ADDED Requirements
 
 ### Requirement: process_folder 命令
 系统 SHALL 提供 `process_folder` IPC 命令，接受文件夹路径和可选参数（similarity_threshold、time_gap_seconds），执行完整的处理流水线：扫描 NEF 文件 → 并发处理每个文件（提取 JPEG + Exif + 缩略图）→ 更新 SessionState 映射 → 推送进度事件 → 返回处理结果。本阶段不执行 pHash 和分组（返回每张图片独立成组的临时结果）。

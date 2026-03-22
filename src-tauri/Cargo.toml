@@ -39,3 +39,13 @@ anyhow = "1"
 [dev-dependencies]
 tempfile = "3"
 
+# ─── 性能关键配置 ────────────────────────────────────
+# image/jpeg-decoder/png 等 crate 在 debug 模式下极慢（10-50x 降速），
+# 开启依赖库优化让 `cargo tauri dev` 也有合理的图像处理速度。
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.release]
+lto = "thin"
+opt-level = 3
+

@@ -1,9 +1,25 @@
+use std::sync::{Arc, Mutex};
+
 use tauri::{AppHandle, Manager};
 use tauri::webview::WebviewWindowBuilder;
 
+use crate::state::SessionState;
+
 /// 动态创建 Main 窗口（1200×900）并关闭 Welcome 窗口
+///
+/// 同时将选定的文件夹路径保存到 SessionState，供 MainPage 读取。
 #[tauri::command]
-pub async fn open_main_window(app: AppHandle, folder_path: String) -> Result<(), String> {
+pub async fn open_main_window(
+    app: AppHandle,
+    state: tauri::State<'_, Arc<Mutex<SessionState>>>,
+    folder_path: String,
+) -> Result<(), String> {
+    // 保存文件夹路径到 SessionState
+    {
+        let mut s = state.lock().map_err(|e| e.to_string())?;
+        s.current_folder = Some(std::path::PathBuf::from(&folder_path));
+    }
+
     // 检查 Main 窗口是否已存在
     if let Some(existing) = app.get_webview_window("main") {
         // 已存在则聚焦
