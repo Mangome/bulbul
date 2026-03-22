@@ -10,26 +10,27 @@
     "tauri": "tauri"
   },
   "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
     "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-dialog": "^2",
     "@tauri-apps/plugin-fs": "^2",
-    "zustand": "^5",
-    "react-router-dom": "^7"
+    "@tauri-apps/plugin-opener": "^2",
+    "pixi.js": "^8.17.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7",
+    "zustand": "^5"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@testing-library/jest-dom": "^6",
+    "@testing-library/react": "^16",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/coverage-v8": "^3",
+    "jsdom": "^25",
     "typescript": "~5.6.2",
     "vite": "^6.0.3",
-    "@tauri-apps/cli": "^2",
-    "vitest": "^3",
-    "@vitest/coverage-v8": "^3",
-    "@testing-library/react": "^16",
-    "@testing-library/jest-dom": "^6",
-    "jsdom": "^25"
+    "vitest": "^3"
   }
 }

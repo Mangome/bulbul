@@ -1,17 +1,18 @@
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback } from 'react';
 import { useAppStore } from '../stores/useAppStore';
 import { useTauriEvents } from './useTauriEvents';
 import * as processService from '../services/processService';
-import type { ProcessingProgress, GroupResult } from '../types';
+import type { ProcessingProgress } from '../types';
 
 /**
  * 处理流水线生命周期 Hook
  *
- * 封装：
- * - startProcessing: 启动处理
- * - cancelProcessing: 取消处理
- * - 自动监听进度事件并同步到 Store
- * - 处理完成/失败回调
+ * 数据流设计：
+ * - 进度信息：通过 Tauri 事件实时推送（processing-progress）
+ * - 最终结果：通过 invoke 返回值同步获取（process_folder 的返回值）
+ *
+ * 不再依赖 processing-completed 事件来设置 groups，
+ * 避免 React StrictMode double-fire 导致的事件监听器竞态。
  */
 export function useProcessing() {
   const {
@@ -21,46 +22,24 @@ export function useProcessing() {
     setGroups,
   } = useAppStore();
 
-  const completedUnlistenRef = useRef<(() => void) | null>(null);
-  const failedUnlistenRef = useRef<(() => void) | null>(null);
-
-  // 监听进度事件
+  // 监听进度事件（仅用于实时进度展示）
   useTauriEvents<ProcessingProgress>('processing-progress', (progress) => {
     updateProgress(progress);
     setProcessingState(progress.state);
   });
 
-  // 监听完成事件
-  useTauriEvents<GroupResult>('processing-completed', (result) => {
-    setGroups(result.groups, result.totalImages);
-    setProcessingState('completed');
-  });
-
-  // 监听失败事件
-  useTauriEvents<string>('processing-failed', (error) => {
-    console.error('处理失败:', error);
-    setProcessingState('error');
-  });
-
-  // 清理
-  useEffect(() => {
-    return () => {
-      completedUnlistenRef.current?.();
-      failedUnlistenRef.current?.();
-    };
-  }, []);
-
   const startProcessing = useCallback(
     async (folderPath: string) => {
       try {
         setProcessingState('scanning');
-        await processService.processFolder(folderPath);
+        const result = await processService.processFolder(folderPath);
+        setGroups(result.groups, result.totalImages);
       } catch (err) {
         console.error('处理失败:', err);
         setProcessingState('error');
       }
     },
-    [setProcessingState],
+    [setProcessingState, setGroups],
   );
 
   const cancelProcessing = useCallback(async () => {

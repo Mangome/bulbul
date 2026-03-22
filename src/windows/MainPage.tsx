@@ -1,27 +1,40 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../stores/useAppStore';
 import { useProcessing } from '../hooks/useProcessing';
 import { ProgressDialog } from '../components/dialogs/ProgressDialog';
+import InfiniteCanvas from '../components/canvas/InfiniteCanvas';
+import { computeWaterfallLayout, type LayoutResult, type ImageDimension } from '../utils/layout';
+import * as imageService from '../services/imageService';
+import type { ImageMetadata } from '../types';
 
 function MainPage() {
   const {
     currentFolder,
     processingState,
     progress,
+    groups,
     setFolder,
   } = useAppStore();
 
   const { startProcessing, cancelProcessing } = useProcessing();
 
-  // 获取当前文件夹并自动触发处理
+  // ── 画布数据状态 ──
+  const [layout, setLayout] = useState<LayoutResult | null>(null);
+  const [fileNames, setFileNames] = useState<Map<string, string>>(new Map());
+  const [metadataMap, setMetadataMap] = useState<Map<string, ImageMetadata>>(new Map());
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
+
+  // 获取当前文件夹并自动触发处理（防 StrictMode double-fire）
+  const initCalledRef = useRef(false);
   useEffect(() => {
-    let cancelled = false;
+    if (initCalledRef.current) return;
+    initCalledRef.current = true;
 
     const init = async () => {
       try {
         const folder = await invoke<string | null>('get_current_folder');
-        if (cancelled || !folder) return;
+        if (!folder) return;
 
         // 获取文件夹信息
         const info = await invoke<{
@@ -31,25 +44,87 @@ function MainPage() {
           rawCount: number;
         }>('get_folder_info', { path: folder });
 
-        if (cancelled) return;
         setFolder(folder, info);
 
         // 自动触发处理
         await startProcessing(folder);
       } catch (err) {
-        if (!cancelled) {
-          console.error('处理初始化失败:', err);
-        }
+        console.error('处理初始化失败:', err);
       }
     };
 
     init();
-    return () => { cancelled = true; };
   }, [setFolder, startProcessing]);
+
+  // ── 处理完成后：获取元数据 + 计算布局 ──
+  useEffect(() => {
+    if (processingState !== 'completed') return;
+    if (groups.length === 0) return;
+
+    let cancelled = false;
+
+    const prepareCanvas = async () => {
+      // 收集所有 hash
+      const allHashes: string[] = [];
+      const nameMap = new Map<string, string>();
+
+      for (const group of groups) {
+        for (let i = 0; i < group.pictureHashes.length; i++) {
+          const hash = group.pictureHashes[i];
+          allHashes.push(hash);
+          nameMap.set(hash, group.pictureNames[i] ?? hash);
+        }
+      }
+
+      if (cancelled) return;
+
+      // 批量获取元数据 — Rust 返回 HashMap<String, ImageMetadata>
+      let metaMap = new Map<string, ImageMetadata>();
+      try {
+        const metaResult = await imageService.getBatchMetadata(allHashes);
+        if (cancelled) return;
+
+        for (const [hash, meta] of Object.entries(metaResult)) {
+          metaMap.set(hash, meta);
+        }
+      } catch (err) {
+        // 元数据获取失败不阻塞画布渲染，使用默认宽高比
+        console.warn('元数据获取失败，将使用默认宽高比:', err);
+      }
+
+      if (cancelled) return;
+
+      // 构建图片尺寸信息
+      const imageDims = new Map<string, ImageDimension>();
+      for (const [hash, meta] of metaMap) {
+        if (meta.imageWidth && meta.imageHeight) {
+          imageDims.set(hash, {
+            width: meta.imageWidth,
+            height: meta.imageHeight,
+          });
+        }
+      }
+
+      // 计算布局
+      const viewportWidth = canvasContainerRef.current?.clientWidth ?? window.innerWidth;
+      const layoutResult = computeWaterfallLayout(groups, imageDims, viewportWidth);
+
+      if (cancelled) return;
+
+      setFileNames(nameMap);
+      setMetadataMap(metaMap);
+      setLayout(layoutResult);
+    };
+
+    prepareCanvas();
+    return () => { cancelled = true; };
+  }, [processingState, groups]);
 
   const handleCancel = useCallback(async () => {
     await cancelProcessing();
   }, [cancelProcessing]);
+
+  const isCanvasReady = processingState === 'completed' && layout !== null;
 
   return (
     <div style={styles.container}>
@@ -78,10 +153,25 @@ function MainPage() {
         onCancel={handleCancel}
       />
 
-      <div style={styles.placeholder}>
-        <p style={styles.placeholderText}>
-          🖼️ PixiJS 画布区域（Stage 4 实现）
-        </p>
+      {/* 画布区域 */}
+      <div ref={canvasContainerRef} style={styles.canvasArea}>
+        {isCanvasReady ? (
+          <InfiniteCanvas
+            layout={layout}
+            fileNames={fileNames}
+            metadataMap={metadataMap}
+          />
+        ) : (
+          <div style={styles.placeholder}>
+            <p style={styles.placeholderText}>
+              {processingState === 'completed' && groups.length === 0
+                ? '📂 该目录下未找到 NEF 文件'
+                : processingState === 'completed'
+                  ? '正在准备画布...'
+                  : '🖼️ 等待处理完成...'}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -122,8 +212,14 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     color: 'var(--color-text-primary)',
   },
-  placeholder: {
+  canvasArea: {
     flex: 1,
+    position: 'relative' as const,
+    overflow: 'hidden',
+  },
+  placeholder: {
+    width: '100%',
+    height: '100%',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',

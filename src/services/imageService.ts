@@ -16,9 +16,9 @@ export async function getMetadata(hash: string): Promise<ImageMetadata> {
   return await invoke<ImageMetadata>('get_metadata', { hash });
 }
 
-/** 批量获取元数据 */
+/** 批量获取元数据（Rust 返回 HashMap<String, ImageMetadata>） */
 export async function getBatchMetadata(
   hashes: string[]
-): Promise<ImageMetadata[]> {
-  return await invoke<ImageMetadata[]>('get_batch_metadata', { hashes });
+): Promise<Record<string, ImageMetadata>> {
+  return await invoke<Record<string, ImageMetadata>>('get_batch_metadata', { hashes });
 }

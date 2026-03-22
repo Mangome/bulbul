@@ -69,7 +69,16 @@ pub async fn process_single_raw(
 
     // 缓存命中时走快速路径：仅读取头部解析 Exif
     if cache::is_cached(cache_base_dir, &hash) {
-        let metadata = read_exif_from_header(file_path).await?;
+        // 先尝试 64KB 头部快速读取；若 EXIF 字段偏移超出头部范围则回退全量读取
+        let metadata = match read_exif_from_header(file_path).await {
+            Ok(m) => m,
+            Err(_) => {
+                let data = tokio::fs::read(file_path).await.map_err(|e| {
+                    AppError::FileNotFound(format!("{}: {}", file_path.display(), e))
+                })?;
+                crate::core::metadata::parse_exif(&data)?
+            }
+        };
         let medium_path =
             crate::utils::paths::get_cache_file_path(cache_base_dir, &hash, "medium");
         let thumbnail_path =

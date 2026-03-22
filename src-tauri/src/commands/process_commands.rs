@@ -68,6 +68,9 @@ pub async fn process_folder(
     let total = nef_files.len();
     let scan_time_ms = scan_start.elapsed().as_secs_f64() * 1000.0;
 
+
+    println!("[process_folder] 扫描到 {} 个 NEF 文件", total);
+
     if total == 0 {
         let empty_result = GroupResult {
             groups: vec![],
@@ -121,8 +124,11 @@ pub async fn process_folder(
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENCY));
     let mut join_set = tokio::task::JoinSet::new();
 
+    println!("[process_folder] 阶段2开始: nef_files={}, cancel_flag={}", nef_files.len(), cancel_flag.load(Ordering::Relaxed));
+
     for file_path in &nef_files {
         if cancel_flag.load(Ordering::Relaxed) {
+            println!("[process_folder] spawn 循环中检测到取消, 已 spawn {} 个任务", join_set.len());
             break;
         }
 
@@ -200,6 +206,12 @@ pub async fn process_folder(
     }
 
     let process_time_ms = process_start.elapsed().as_secs_f64() * 1000.0;
+    println!("[process_folder] 阶段2完成: results={}, failed={}, processed={}, cancel_flag={}", results.len(), failed_files.len(), processed, cancel_flag.load(Ordering::Relaxed));
+    if !failed_files.is_empty() {
+        for (i, f) in failed_files.iter().enumerate().take(3) {
+            println!("[process_folder] failed[{}]: {}", i, f);
+        }
+    }
 
     // 检查取消
     if cancel_flag.load(Ordering::Relaxed) {
@@ -373,6 +385,8 @@ pub async fn process_folder(
         })
         .collect();
 
+    println!("[process_folder] results.len()={}, phash_results.len()={}, image_infos.len()={}", results.len(), phash_results.len(), image_infos.len());
+
     let threshold = similarity_threshold.unwrap_or(90.0);
     let time_gap = time_gap_seconds.map(|t| t as i64).unwrap_or(10);
 
@@ -412,7 +426,7 @@ pub async fn process_folder(
         },
     };
 
-    // 更新 SessionState
+    // 更新 SessionState - 阶段5
     {
         let mut s = state.lock().map_err(|e| e.to_string())?;
         s.group_result = Some(group_result.clone());
