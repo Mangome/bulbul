@@ -8,7 +8,16 @@ export async function getImageUrl(
   size?: string
 ): Promise<string> {
   const filePath = await invoke<string>('get_image_url', { hash, size: size ?? 'thumbnail' });
-  return convertFileSrc(filePath);
+  const assetUrl = convertFileSrc(filePath);
+  
+  console.debug(`[imageService] hash=${hash}, size=${size}, filePath=${filePath}, assetUrl=${assetUrl}`);
+  
+  if (!assetUrl || assetUrl.trim() === '') {
+    console.error(`[imageService] convertFileSrc failed for path: ${filePath}`);
+    throw new Error(`Failed to convert file path to asset URL: ${filePath}`);
+  }
+  
+  return assetUrl;
 }
 
 /** 获取单张图片元数据 */

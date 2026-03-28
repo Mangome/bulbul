@@ -13,6 +13,14 @@ use utils::paths::get_cache_base_dir;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // 初始化日志系统
+    env_logger::Builder::from_default_env()
+        .filter_level(log::LevelFilter::Debug)
+        .format_timestamp_millis()
+        .init();
+    
+    log::info!("Bulbul 应用启动");
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -22,7 +30,18 @@ pub fn run() {
                 .path()
                 .cache_dir()
                 .unwrap_or_else(|_| std::path::PathBuf::from(".cache"));
+            log::info!("系统缓存目录: {}", cache_dir.display());
+            
             let cache_base = get_cache_base_dir(&cache_dir);
+            log::info!("应用缓存基目录: {}", cache_base.display());
+            
+            // 确保缓存目录存在
+            if let Err(e) = std::fs::create_dir_all(&cache_base) {
+                log::warn!("创建缓存目录失败: {}", e);
+            } else {
+                log::info!("缓存目录已确保存在");
+            }
+            
             let session = SessionState::with_cache_dir(cache_base);
             app.manage(Arc::new(Mutex::new(session)));
             Ok(())

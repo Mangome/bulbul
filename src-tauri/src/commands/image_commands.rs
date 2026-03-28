@@ -30,7 +30,12 @@ pub async fn get_image_url(
     };
 
     let path = get_cache_file_path(&cache_dir, &hash, &size);
+    
+    log::debug!("get_image_url: hash={}, size={}, cache_dir={}, path={}", 
+        hash, size, cache_dir.display(), path.display());
+    
     if !path.exists() {
+        log::warn!("缓存文件不存在: {} (cache_dir: {})", path.display(), cache_dir.display());
         return Err(AppError::FileNotFound(format!(
             "缓存文件不存在: {}",
             path.display()
@@ -38,7 +43,9 @@ pub async fn get_image_url(
         .to_string());
     }
 
-    Ok(path.to_string_lossy().to_string())
+    let result = path.to_string_lossy().to_string();
+    log::debug!("get_image_url success: returning path: {}", result);
+    Ok(result)
 }
 
 /// 获取单张图片的元数据
