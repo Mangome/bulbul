@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
-  buildSortedIndex,
   getVisibleItems,
+  getVisibleItemsInPage,
   diffVisibleItems,
   type ViewportRect,
 } from './viewport';
-import type { LayoutItem } from './layout';
+import type { LayoutItem, GroupPageLayout, GroupTitleItem } from './layout';
 
 // ─── 测试工具 ─────────────────────────────────────────
 
@@ -16,40 +16,40 @@ function makeItem(
   width: number,
   height: number,
   groupId: number = 1,
+  groupIndex: number = 0,
 ): LayoutItem {
-  return { hash, groupId, x, y, width, height };
+  return { hash, groupId, groupIndex, x, y, width, height };
 }
 
-// ─── 构建索引 ─────────────────────────────────────────
+function makePage(
+  groupIndex: number,
+  items: LayoutItem[],
+  pageWidth: number = 1000,
+): GroupPageLayout {
+  const sortedItems = [...items].sort((a, b) => a.y - b.y);
+  const maxY = items.length > 0 ? Math.max(...items.map(i => i.y + i.height)) : 0;
+  const titleItem: GroupTitleItem = {
+    groupId: groupIndex + 1,
+    label: `Group ${groupIndex + 1}`,
+    x: groupIndex * pageWidth,
+    y: 0,
+    width: pageWidth,
+    height: 48,
+  };
+  return {
+    groupIndex,
+    groupId: groupIndex + 1,
+    offsetX: groupIndex * pageWidth,
+    contentHeight: maxY,
+    items,
+    groupTitle: titleItem,
+    sortedItems,
+  };
+}
 
-describe('buildSortedIndex', () => {
-  it('按 Y 坐标升序排列', () => {
-    const items = [
-      makeItem('c', 0, 300, 100, 100),
-      makeItem('a', 0, 100, 100, 100),
-      makeItem('b', 0, 200, 100, 100),
-    ];
-    const index = buildSortedIndex(items);
+// ─── getVisibleItemsInPage ─────────────────────────────
 
-    expect(index.items[0].hash).toBe('a');
-    expect(index.items[1].hash).toBe('b');
-    expect(index.items[2].hash).toBe('c');
-  });
-
-  it('不修改原数组', () => {
-    const items = [
-      makeItem('b', 0, 200, 100, 100),
-      makeItem('a', 0, 100, 100, 100),
-    ];
-    buildSortedIndex(items);
-    expect(items[0].hash).toBe('b'); // 原数组不变
-  });
-});
-
-// ─── getVisibleItems ─────────────────────────────────
-
-describe('getVisibleItems', () => {
-  // 创建一列垂直排列的元素：y = 0, 200, 400, 600, 800, 1000
+describe('getVisibleItemsInPage', () => {
   const items = [
     makeItem('a', 0, 0, 100, 100),
     makeItem('b', 0, 200, 100, 100),
@@ -58,14 +58,11 @@ describe('getVisibleItems', () => {
     makeItem('e', 0, 800, 100, 100),
     makeItem('f', 0, 1000, 100, 100),
   ];
-  const index = buildSortedIndex(items);
+  const page = makePage(0, items);
 
   it('视口内元素正确返回', () => {
-    const viewport: ViewportRect = { x: 0, y: 300, width: 500, height: 400 };
     // 视口 y=300~700, 缓冲区 50% → 200px, 有效范围 y=100~900
-    // 可见: b(200-300), c(400-500), d(600-700), e(800-900)
-    const visible = getVisibleItems(index, viewport);
-
+    const visible = getVisibleItemsInPage(page, 300, 400);
     const hashes = visible.map((v) => v.hash);
     expect(hashes).toContain('b');
     expect(hashes).toContain('c');
@@ -74,66 +71,86 @@ describe('getVisibleItems', () => {
   });
 
   it('视口外元素不返回', () => {
-    const viewport: ViewportRect = { x: 0, y: 300, width: 500, height: 400 };
-    const visible = getVisibleItems(index, viewport);
+    const visible = getVisibleItemsInPage(page, 300, 400);
     const hashes = visible.map((v) => v.hash);
-    // f 在 1000-1100, 缓冲区有效范围到 900，不包含 f
     expect(hashes).not.toContain('f');
   });
 
-  it('缓冲区边界判定：刚好在缓冲区内', () => {
-    // 视口 y=500, height=200, 缓冲区 100px → 范围 400~800
-    const viewport: ViewportRect = { x: 0, y: 500, width: 500, height: 200 };
-    const visible = getVisibleItems(index, viewport);
+  it('缓冲区边界判定', () => {
+    const visible = getVisibleItemsInPage(page, 500, 200);
     const hashes = visible.map((v) => v.hash);
-
-    // c 在 400-500, 正好在缓冲区边界
     expect(hashes).toContain('c');
-    // e 在 800-900, 顶边正好在边界
     expect(hashes).toContain('e');
   });
 
   it('无缓冲区模式', () => {
-    const viewport: ViewportRect = { x: 0, y: 350, width: 500, height: 200 };
-    // 无缓冲区范围：350~550
-    const visible = getVisibleItems(index, viewport, 0);
+    const visible = getVisibleItemsInPage(page, 350, 200, 0);
     const hashes = visible.map((v) => v.hash);
-
-    // b(200-300) 底边 300 < 350 → 不可见
     expect(hashes).not.toContain('b');
-    // c(400-500) 在范围内
     expect(hashes).toContain('c');
-    // d(600-700) 顶边 600 > 550 → 不可见
     expect(hashes).not.toContain('d');
   });
 
   it('极端缩放：视口覆盖所有元素', () => {
-    const viewport: ViewportRect = { x: -1000, y: -1000, width: 5000, height: 5000 };
-    const visible = getVisibleItems(index, viewport);
+    const visible = getVisibleItemsInPage(page, -1000, 5000);
     expect(visible).toHaveLength(6);
   });
 
-  it('空列表返回空', () => {
-    const emptyIndex = buildSortedIndex([]);
-    const viewport: ViewportRect = { x: 0, y: 0, width: 500, height: 500 };
-    const visible = getVisibleItems(emptyIndex, viewport);
+  it('空页面返回空', () => {
+    const emptyPage = makePage(0, []);
+    const visible = getVisibleItemsInPage(emptyPage, 0, 500);
     expect(visible).toHaveLength(0);
   });
+});
 
-  it('X 轴范围外的元素不返回', () => {
-    const wideItems = [
-      makeItem('left', -500, 100, 100, 100),   // x: -500 ~ -400
-      makeItem('center', 100, 100, 100, 100),   // x: 100 ~ 200
-      makeItem('right', 1000, 100, 100, 100),  // x: 1000 ~ 1100
-    ];
-    const wideIndex = buildSortedIndex(wideItems);
+// ─── getVisibleItems (多分组) ──────────────────────────
+
+describe('getVisibleItems', () => {
+  const pageWidth = 1000;
+
+  // 3 个分组，每组在不同 X 偏移
+  const page0Items = [
+    makeItem('a0', 0, 0, 100, 100, 1, 0),
+    makeItem('a1', 0, 200, 100, 100, 1, 0),
+  ];
+  const page1Items = [
+    makeItem('b0', 1000, 0, 100, 100, 2, 1),
+    makeItem('b1', 1000, 200, 100, 100, 2, 1),
+  ];
+  const page2Items = [
+    makeItem('c0', 2000, 0, 100, 100, 3, 2),
+  ];
+
+  const pages = [
+    makePage(0, page0Items, pageWidth),
+    makePage(1, page1Items, pageWidth),
+    makePage(2, page2Items, pageWidth),
+  ];
+
+  it('只返回当前可见分组的元素', () => {
+    // 视口完全在第一组范围内 (x=0~800, 不触碰第二组边界)
+    const viewport: ViewportRect = { x: 0, y: 0, width: 800, height: 500 };
+    const visible = getVisibleItems(pages, pageWidth, viewport);
+    const hashes = visible.map(v => v.hash);
+    expect(hashes).toContain('a0');
+    expect(hashes).toContain('a1');
+    expect(hashes).not.toContain('b0');
+  });
+
+  it('视口跨两组时返回两组元素', () => {
+    // 视口在 500~1500 之间，跨第一组和第二组
+    const viewport: ViewportRect = { x: 500, y: 0, width: 1000, height: 500 };
+    const visible = getVisibleItems(pages, pageWidth, viewport);
+    const hashes = visible.map(v => v.hash);
+    expect(hashes).toContain('a0');
+    expect(hashes).toContain('b0');
+    expect(hashes).not.toContain('c0');
+  });
+
+  it('空 pages 返回空', () => {
     const viewport: ViewportRect = { x: 0, y: 0, width: 500, height: 500 };
-
-    const visible = getVisibleItems(wideIndex, viewport);
-    const hashes = visible.map((v) => v.hash);
-    expect(hashes).toContain('center');
-    expect(hashes).not.toContain('left');
-    expect(hashes).not.toContain('right');
+    const visible = getVisibleItems([], pageWidth, viewport);
+    expect(visible).toHaveLength(0);
   });
 });
 
@@ -191,7 +208,6 @@ describe('diffVisibleItems', () => {
   });
 
   it('滚动增量更新', () => {
-    // 模拟向下滚动：a 离开，d 进入
     const prev = [
       makeItem('a', 0, 0, 100, 100),
       makeItem('b', 0, 200, 100, 100),
