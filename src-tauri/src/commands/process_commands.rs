@@ -21,8 +21,12 @@ use crate::models::{GroupResult, PerformanceMetrics, ProcessingProgress, Process
 use crate::state::SessionState;
 use crate::utils::cache;
 
-/// 最大并发处理数
-const MAX_CONCURRENCY: usize = 8;
+/// 获取最大并发处理数（根据 CPU 核数动态调整）
+fn get_max_concurrency() -> usize {
+    let cpu_count = num_cpus::get();
+    // 2x CPU 核数，但不超过 16
+    std::cmp::min(cpu_count * 2, 16)
+}
 
 /// 处理文件夹的返回结果（保留用于兼容，内部使用 GroupResult）
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -121,7 +125,8 @@ pub async fn process_folder(
     };
 
     let process_start = Instant::now();
-    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENCY));
+    let max_concurrency = get_max_concurrency();
+    let semaphore = Arc::new(Semaphore::new(max_concurrency));
     let mut join_set = tokio::task::JoinSet::new();
 
     println!("[process_folder] 阶段2开始: nef_files={}, cancel_flag={}", nef_files.len(), cancel_flag.load(Ordering::Relaxed));
@@ -248,7 +253,7 @@ pub async fn process_folder(
 
     // 并发计算 pHash
     let phash_total = results.len();
-    let phash_semaphore = Arc::new(Semaphore::new(MAX_CONCURRENCY));
+    let phash_semaphore = Arc::new(Semaphore::new(max_concurrency));
     let mut phash_join_set = tokio::task::JoinSet::new();
 
     for (idx, result) in results.iter().enumerate() {
