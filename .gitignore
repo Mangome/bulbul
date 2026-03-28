@@ -84,3 +84,6 @@ coverage/src-tauri/target/debug/build/bulbul-edfaa329f935170f/out/__global-api-s
 coverage/src-tauri/target/debug/build/bulbul-edfaa329f935170f/out/index.html
 coverage/src-tauri/target/debug/build/bulbul-f09fc20a00155c90/out/__global-api-script.js.html
 coverage/src-tauri/target/debug/build/bulbul-f09fc20a00155c90/out/index.html
+
+
+git-commit.bat
