@@ -8,6 +8,7 @@
     "core:window:allow-create",
     "core:window:allow-close",
     "core:window:allow-set-focus",
+    "core:window:allow-show",
     "core:event:default",
     "opener:default",
     "dialog:default",

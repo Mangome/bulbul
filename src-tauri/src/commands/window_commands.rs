@@ -25,7 +25,7 @@ pub async fn open_main_window(
         // 已存在则聚焦
         existing.set_focus().map_err(|e| e.to_string())?;
     } else {
-        // 创建新的 Main 窗口
+        // 创建新的 Main 窗口（初始不可见，由前端渲染完成后调用 show）
         let main_window = WebviewWindowBuilder::new(
             &app,
             "main",
@@ -34,6 +34,7 @@ pub async fn open_main_window(
         .title("Bulbul")
         .inner_size(1200.0, 900.0)
         .center()
+        .visible(false)
         .build()
         .map_err(|e| e.to_string())?;
 

@@ -7,13 +7,29 @@ import MainPage from './windows/MainPage';
 
 function AppContent() {
   const [windowLabel, setWindowLabel] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const label = getCurrentWindow().label;
-    setWindowLabel(label);
+    setWindowLabel(getCurrentWindow().label);
   }, []);
 
-  // 加载中
+  // 页面组件挂载后，标记为就绪
+  useEffect(() => {
+    if (windowLabel !== null) {
+      // 等下一帧确保 DOM 已更新，再显示窗口
+      requestAnimationFrame(() => {
+        setReady(true);
+      });
+    }
+  }, [windowLabel]);
+
+  // ready 后显示窗口（配合 visible: false）
+  useEffect(() => {
+    if (ready) {
+      getCurrentWindow().show();
+    }
+  }, [ready]);
+
   if (windowLabel === null) {
     return null;
   }
