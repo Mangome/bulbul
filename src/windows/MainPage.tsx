@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState, useRef } from 'react';
+import { useEffect, useCallback, useState, useRef, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../stores/useAppStore';
 import { useSelectionStore } from '../stores/useSelectionStore';
@@ -108,6 +108,18 @@ function MainPage() {
     onGroupNavigated: handleGroupNavigated,
   });
 
+  // 创建 memoized fileNames，避免处理完成时频繁重建对象
+  const memoizedFileNames = useMemo(() => {
+    const nameMap = new Map<string, string>();
+    for (const group of groups) {
+      for (let i = 0; i < group.pictureHashes.length; i++) {
+        const hash = group.pictureHashes[i];
+        nameMap.set(hash, group.pictureNames[i] ?? hash);
+      }
+    }
+    return nameMap;
+  }, [groups]);
+
   // 获取当前文件夹并自动触发处理（防 StrictMode double-fire）
   const initCalledRef = useRef(false);
   useEffect(() => {
@@ -190,7 +202,7 @@ function MainPage() {
 
       if (cancelled) return;
 
-      setFileNames(nameMap);
+      setFileNames(memoizedFileNames);
       setMetadataMap(metaMap);
       setLayout(layoutResult);
 
