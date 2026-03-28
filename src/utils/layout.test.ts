@@ -41,9 +41,9 @@ function makeDimensions(
 
 describe('computeColumnWidth', () => {
   it('应按公式计算列宽', () => {
-    // viewportWidth=1000, padding=30*2=60, gapX=20*2=40 → available=900 → 900/3=300
+    // viewportWidth=1000, paddingLeft=280, paddingRight=30, gapX=20*2=40 → available=650 → 650/3≈6.67
     const width = computeColumnWidth(1000);
-    expect(width).toBe(300);
+    expect(width).toBeCloseTo(650 / 3);
   });
 
   it('不应低于最小列宽', () => {
@@ -57,9 +57,10 @@ describe('computeColumnWidth', () => {
       ...DEFAULT_LAYOUT_CONFIG,
       columns: 4,
       gapX: 10,
-      padding: 20,
+      paddingLeft: 20,
+      paddingRight: 20,
     };
-    // available = 1000 - 40 - 30 = 930 → 930/4 = 232.5
+    // available = 1000 - 20 - 20 - 30 = 930 → 930/4 = 232.5
     const width = computeColumnWidth(1000, config);
     expect(width).toBe(232.5);
   });
@@ -88,22 +89,23 @@ describe('computeWaterfallLayout', () => {
     expect(result.items).toHaveLength(6);
     expect(result.groupTitles).toHaveLength(1);
     expect(result.totalHeight).toBeGreaterThan(0);
-    expect(result.columnWidth).toBe(300);
+
+    const colWidth = result.columnWidth;
 
     // 所有图片宽度等于列宽
     for (const item of result.items) {
-      expect(item.width).toBe(300);
+      expect(item.width).toBe(colWidth);
     }
 
     // 第一张图片在第一列, 标题下方
-    expect(result.items[0].x).toBe(30); // padding=30
+    expect(result.items[0].x).toBe(280); // paddingLeft=280
     expect(result.items[0].y).toBe(40); // groupTitleHeight=40
 
     // 第二张图片在第二列
-    expect(result.items[1].x).toBe(30 + 300 + 20); // padding + columnWidth + gapX
+    expect(result.items[1].x).toBe(280 + colWidth + 20); // paddingLeft + columnWidth + gapX
 
     // 第三张图片在第三列
-    expect(result.items[2].x).toBe(30 + (300 + 20) * 2);
+    expect(result.items[2].x).toBe(280 + (colWidth + 20) * 2);
   });
 
   it('最短列分配：图片应分配到高度最短的列', () => {
@@ -133,14 +135,15 @@ describe('computeWaterfallLayout', () => {
   it('不同宽高比：高度按比例计算', () => {
     const groups = [makeGroup(1, ['a', 'b'])];
     const dims = makeDimensions([
-      ['a', 4000, 3000], // 4:3 → h = 300 * 3/4 = 225
-      ['b', 1600, 900], // 16:9 → h = 300 * 900/1600 = 168.75
+      ['a', 4000, 3000], // 4:3
+      ['b', 1600, 900], // 16:9
     ]);
 
     const result = computeWaterfallLayout(groups, dims, viewportWidth);
+    const colWidth = result.columnWidth;
 
-    expect(result.items[0].height).toBeCloseTo(225);
-    expect(result.items[1].height).toBeCloseTo(168.75);
+    expect(result.items[0].height).toBeCloseTo(colWidth * 3 / 4);
+    expect(result.items[1].height).toBeCloseTo(colWidth * 900 / 1600);
   });
 
   it('缺失尺寸：回退到 3:2 默认比例', () => {
@@ -148,9 +151,10 @@ describe('computeWaterfallLayout', () => {
     const dims = new Map<string, ImageDimension>(); // 空：无尺寸信息
 
     const result = computeWaterfallLayout(groups, dims, viewportWidth);
+    const colWidth = result.columnWidth;
 
-    // 默认 3:2 → h = 300 * 2/3 = 200
-    expect(result.items[0].height).toBeCloseTo(200);
+    // 默认 3:2 → h = colWidth * 2/3
+    expect(result.items[0].height).toBeCloseTo(colWidth * 2 / 3);
   });
 
   it('空分组：仅预留标题区域', () => {
@@ -191,17 +195,20 @@ describe('computeWaterfallLayout', () => {
       makeGroup(2, ['b']),
     ];
     const dims = makeDimensions([
-      ['a', 3000, 2000], // h=200
+      ['a', 3000, 2000],
       ['b', 3000, 2000],
     ]);
 
     const result = computeWaterfallLayout(groups, dims, viewportWidth);
+    const colWidth = result.columnWidth;
+    const imgHeight = colWidth * 2 / 3; // 3:2 比例
 
-    // 分组1：标题 y=0, 图片 y=40, 图片底部=40+200=240
-    // 分组2：标题 y = 240 + 20(gapY后的列高) + 60(groupGap) 应该是 
-    // 列高 = 40 + 200 + 20 = 260, 分组2起始 = 260 + 60 = 320
+    // 分组1：标题 y=0, 图片 y=40, 图片底部=40+imgHeight
+    // 列高 = 40 + imgHeight + 20(gapY)
+    // 分组2起始 = 列高 + 60(groupGap)
+    const expectedColHeight = 40 + imgHeight + 20;
     const group2Title = result.groupTitles[1];
-    expect(group2Title.y).toBe(260 + DEFAULT_LAYOUT_CONFIG.groupGap);
+    expect(group2Title.y).toBeCloseTo(expectedColHeight + DEFAULT_LAYOUT_CONFIG.groupGap);
   });
 
   it('没有分组时返回空结果', () => {

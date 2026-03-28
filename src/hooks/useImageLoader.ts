@@ -1,29 +1,45 @@
 // ============================================================
 // 纹理 LRU 缓存 + 图片加载器
 //
-// - TextureLRUCache: 基于 Map 的 LRU 缓存，容量 300
+// - TextureLRUCache: 基于 Map 的 LRU 缓存，支持内存上限
 // - ImageLoader: 异步加载逻辑，支持分级 (thumbnail/medium)
 // ============================================================
 
 import { Assets, Texture } from 'pixi.js';
 import * as imageService from '../services/imageService';
 
+// ─── 常量 ─────────────────────────────────────────────
+
+/** 默认内存上限 300MB（GPU 纹理以 RGBA 4 字节/像素计） */
+const DEFAULT_MEMORY_LIMIT = 300 * 1024 * 1024;
+
+/** 估算单个纹理的 GPU 内存占用（RGBA 4 bytes/pixel） */
+export function estimateTextureBytes(texture: Texture): number {
+  const w = texture.width;
+  const h = texture.height;
+  return w > 0 && h > 0 ? w * h * 4 : 0;
+}
+
 // ─── TextureLRUCache ─────────────────────────────────
 
 /**
- * LRU 纹理缓存
+ * LRU 纹理缓存（内存感知）
  *
  * 利用 Map 的插入顺序特性实现 LRU：
  * - get/set 操作会将条目移到末尾（最近使用）
  * - 淘汰从头部（最久未使用）开始
+ * - 同时跟踪总内存估算，超出上限时触发淘汰
  * - 淘汰时调用 texture.destroy() 释放 GPU 内存
  */
 export class TextureLRUCache {
   private cache = new Map<string, Texture>();
   private readonly capacity: number;
+  private readonly memoryLimit: number;
+  private _currentMemory: number = 0;
 
-  constructor(capacity: number = 300) {
+  constructor(capacity: number = 300, memoryLimit: number = DEFAULT_MEMORY_LIMIT) {
     this.capacity = capacity;
+    this.memoryLimit = memoryLimit;
   }
 
   /** 获取纹理，命中时更新 LRU 顺序 */
@@ -37,23 +53,32 @@ export class TextureLRUCache {
     return texture;
   }
 
-  /** 存入纹理，超出容量时淘汰最久未使用的 */
+  /** 存入纹理，超出容量或内存上限时淘汰最久未使用的 */
   set(key: string, texture: Texture): void {
+    const texBytes = estimateTextureBytes(texture);
+
     // 如果已存在，先删除（重新插入到末尾）
     if (this.cache.has(key)) {
+      const existing = this.cache.get(key)!;
+      this._currentMemory -= estimateTextureBytes(existing);
       this.cache.delete(key);
     }
 
-    // 容量检查，淘汰最久未使用
-    while (this.cache.size >= this.capacity) {
+    // 容量和内存上限检查，淘汰最久未使用
+    while (
+      this.cache.size >= this.capacity ||
+      (this.cache.size > 0 && this._currentMemory + texBytes > this.memoryLimit)
+    ) {
       const firstKey = this.cache.keys().next().value;
       if (firstKey === undefined) break;
       const evicted = this.cache.get(firstKey)!;
+      this._currentMemory -= estimateTextureBytes(evicted);
       this.cache.delete(firstKey);
       evicted.destroy();
     }
 
     this.cache.set(key, texture);
+    this._currentMemory += texBytes;
   }
 
   /** 检查是否存在 */
@@ -66,12 +91,18 @@ export class TextureLRUCache {
     return this.cache.size;
   }
 
+  /** 当前估算内存占用（字节） */
+  get currentMemory(): number {
+    return this._currentMemory;
+  }
+
   /** 清空缓存，销毁所有纹理 */
   clear(): void {
     for (const texture of this.cache.values()) {
       texture.destroy();
     }
     this.cache.clear();
+    this._currentMemory = 0;
   }
 }
 

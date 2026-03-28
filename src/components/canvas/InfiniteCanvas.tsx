@@ -39,7 +39,7 @@ const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 3.0;
 const ZOOM_SENSITIVITY = 0.001;
 const DRAG_DEAD_ZONE = 5;
-const BG_COLOR = 0xF8F9FA;
+const BG_COLOR = 0xFAFAFA;
 
 // ─── Props ────────────────────────────────────────────
 

@@ -1,8 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { GroupListItem } from './GroupListItem';
-import { useSelectionStore } from '../../stores/useSelectionStore';
-import { useAppStore } from '../../stores/useAppStore';
 
 describe('GroupListItem', () => {
   const defaultProps = {

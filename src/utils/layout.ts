@@ -17,8 +17,10 @@ export interface LayoutConfig {
   readonly gapX: number;
   /** 垂直间距 (px) */
   readonly gapY: number;
-  /** 左右边距 (px) */
-  readonly padding: number;
+  /** 左边距 (px) — 为左侧浮动面板预留空间 */
+  readonly paddingLeft: number;
+  /** 右边距 (px) */
+  readonly paddingRight: number;
   /** 最小列宽 (px) */
   readonly minColumnWidth: number;
   /** 分组之间的垂直间距 (px) */
@@ -31,7 +33,8 @@ export const DEFAULT_LAYOUT_CONFIG: LayoutConfig = {
   columns: 3,
   gapX: 20,
   gapY: 20,
-  padding: 30,
+  paddingLeft: 280,
+  paddingRight: 30,
   minColumnWidth: 200,
   groupGap: 60,
   groupTitleHeight: 40,
@@ -96,7 +99,7 @@ export function computeColumnWidth(
   config: LayoutConfig = DEFAULT_LAYOUT_CONFIG,
 ): number {
   const availableWidth =
-    viewportWidth - config.padding * 2 - config.gapX * (config.columns - 1);
+    viewportWidth - config.paddingLeft - config.paddingRight - config.gapX * (config.columns - 1);
   return Math.max(config.minColumnWidth, availableWidth / config.columns);
 }
 
@@ -136,9 +139,9 @@ export function computeWaterfallLayout(
     groupTitles.push({
       groupId: group.id,
       label: `${group.name}（${group.imageCount} 张）`,
-      x: config.padding,
+      x: config.paddingLeft,
       y: titleY,
-      width: viewportWidth - config.padding * 2,
+      width: viewportWidth - config.paddingLeft - config.paddingRight,
       height: config.groupTitleHeight,
     });
 
@@ -168,7 +171,7 @@ export function computeWaterfallLayout(
 
       // 计算绝对坐标
       const x =
-        config.padding + shortestCol * (columnWidth + config.gapX);
+        config.paddingLeft + shortestCol * (columnWidth + config.gapX);
       const y = columnHeights[shortestCol];
 
       items.push({

@@ -16,19 +16,13 @@ import {
 // ─── 配置 ─────────────────────────────────────────────
 
 /** 波点间距 */
-const DOT_SPACING = 20;
-/** 主波点半径 */
-const MAIN_DOT_RADIUS = 3;
-/** 主波点颜色 */
-const MAIN_DOT_COLOR = 0xE1E1E1;
-/** 主波点透明度 */
-const MAIN_DOT_ALPHA = 0.47;
-/** 小波点半径 */
-const SMALL_DOT_RADIUS = 2;
-/** 小波点颜色 */
-const SMALL_DOT_COLOR = 0xC8C8C8;
-/** 小波点透明度 */
-const SMALL_DOT_ALPHA = 0.31;
+const DOT_SPACING = 24;
+/** 波点半径 */
+const DOT_RADIUS = 1.5;
+/** 波点颜色 */
+const DOT_COLOR = 0xD8D8D8;
+/** 波点透明度 */
+const DOT_ALPHA = 0.6;
 
 // ─── DotBackground ───────────────────────────────────
 
@@ -46,15 +40,10 @@ export class DotBackground extends Container {
     // 生成波点纹理
     const dotGraphics = new Graphics();
 
-    // 主波点（tile 中心）
+    // 均匀的单点模式（tile 中心）
     dotGraphics
-      .circle(tileSize / 2, tileSize / 2, MAIN_DOT_RADIUS)
-      .fill({ color: MAIN_DOT_COLOR, alpha: MAIN_DOT_ALPHA });
-
-    // 小波点（tile 左上角，与相邻 tile 的小波点组成交错图案）
-    dotGraphics
-      .circle(0, 0, SMALL_DOT_RADIUS)
-      .fill({ color: SMALL_DOT_COLOR, alpha: SMALL_DOT_ALPHA });
+      .circle(tileSize / 2, tileSize / 2, DOT_RADIUS)
+      .fill({ color: DOT_COLOR, alpha: DOT_ALPHA });
 
     // 生成纹理
     const texture = (app.renderer as Renderer).generateTexture(dotGraphics);

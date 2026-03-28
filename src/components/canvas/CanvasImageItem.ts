@@ -23,6 +23,8 @@ import type { ImageMetadata } from '../../types';
 const PLACEHOLDER_COLOR = 0xE5E7EB;
 /** 信息覆盖层可见的最低缩放级别 */
 const INFO_OVERLAY_MIN_ZOOM = 0.3;
+/** 信息覆盖层从开始淡入到完全可见的缩放区间宽度 */
+const INFO_OVERLAY_FADE_RANGE = 0.1;
 
 /** 选中边框颜色 */
 const SELECTION_COLOR = 0x3B82F6;
@@ -55,6 +57,8 @@ export class CanvasImageItem extends Container {
   private hoverBorder: Graphics | null = null;
   private _isSelected: boolean = false;
   private _isHovered: boolean = false;
+  /** 选中动画帧 ID，用于取消 */
+  private _selAnimFrame: number = 0;
 
   constructor(layoutItem: LayoutItem) {
     super();
@@ -116,23 +120,44 @@ export class CanvasImageItem extends Container {
     this.placeholder.visible = false;
   }
 
-  /** 更新信息覆盖层可见性（低缩放时隐藏） */
+  /** 更新信息覆盖层可见性（低缩放时淡出，平滑过渡） */
   updateZoomVisibility(zoomLevel: number): void {
-    this.infoOverlay.visible = zoomLevel >= INFO_OVERLAY_MIN_ZOOM;
+    if (zoomLevel < INFO_OVERLAY_MIN_ZOOM) {
+      // 低于阈值：完全隐藏
+      this.infoOverlay.visible = false;
+      this.infoOverlay.alpha = 0;
+    } else if (zoomLevel < INFO_OVERLAY_MIN_ZOOM + INFO_OVERLAY_FADE_RANGE) {
+      // 过渡区间 [0.3, 0.4)：alpha 线性从 0 到 1
+      this.infoOverlay.visible = true;
+      this.infoOverlay.alpha =
+        (zoomLevel - INFO_OVERLAY_MIN_ZOOM) / INFO_OVERLAY_FADE_RANGE;
+    } else {
+      // 完全可见
+      this.infoOverlay.visible = true;
+      this.infoOverlay.alpha = 1;
+    }
   }
 
-  /** 设置选中状态视觉 */
+  /** 设置选中状态视觉（带渐入/渐出动画） */
   setSelected(selected: boolean): void {
     if (this._isSelected === selected) return;
     this._isSelected = selected;
+
+    // 取消上一次动画
+    if (this._selAnimFrame) {
+      cancelAnimationFrame(this._selAnimFrame);
+      this._selAnimFrame = 0;
+    }
 
     if (selected) {
       this._ensureSelectionGraphics();
       this.selectionBorder!.visible = true;
       this.checkMark!.visible = true;
+      this._animateSelectionIn();
     } else {
-      if (this.selectionBorder) this.selectionBorder.visible = false;
-      if (this.checkMark) this.checkMark.visible = false;
+      if (this.selectionBorder && this.checkMark) {
+        this._animateSelectionOut();
+      }
     }
   }
 
@@ -155,6 +180,9 @@ export class CanvasImageItem extends Container {
 
   /** 清理资源 */
   override destroy(): void {
+    if (this._selAnimFrame) {
+      cancelAnimationFrame(this._selAnimFrame);
+    }
     this.off('pointerover', this._onPointerOver, this);
     this.off('pointerout', this._onPointerOut, this);
     this.sprite?.destroy();
@@ -244,5 +272,78 @@ export class CanvasImageItem extends Container {
       this.hoverBorder.visible = false;
       this.addChild(this.hoverBorder);
     }
+  }
+
+  // ── 选中动画 ────────────────────────────────────────
+
+  /** 选中动画时长（ms） */
+  private static readonly SEL_ANIM_DURATION = 200;
+
+  /** 选中时渐入动画：边框 alpha 0→1，checkmark scale 0→1（弹性） */
+  private _animateSelectionIn(): void {
+    const border = this.selectionBorder!;
+    const check = this.checkMark!;
+    const cx = this.itemWidth - CHECK_OFFSET - CHECK_RADIUS;
+    const cy = CHECK_OFFSET + CHECK_RADIUS;
+
+    border.alpha = 0;
+    check.scale.set(0);
+    check.pivot.set(cx, cy);
+    check.position.set(cx, cy);
+
+    const start = performance.now();
+    const duration = CanvasImageItem.SEL_ANIM_DURATION;
+
+    const tick = (now: number) => {
+      const elapsed = now - start;
+      const t = Math.min(elapsed / duration, 1);
+
+      // 边框线性渐入
+      border.alpha = t;
+
+      // checkmark 弹性缩放（overshoot）
+      const s = t < 1
+        ? 1 - Math.pow(1 - t, 3) * Math.cos(t * Math.PI * 0.5) // ease-out cubic + slight overshoot
+        : 1;
+      check.scale.set(s);
+
+      if (t < 1) {
+        this._selAnimFrame = requestAnimationFrame(tick);
+      } else {
+        this._selAnimFrame = 0;
+      }
+    };
+
+    this._selAnimFrame = requestAnimationFrame(tick);
+  }
+
+  /** 取消选中时渐出动画：alpha 1→0，完成后隐藏 */
+  private _animateSelectionOut(): void {
+    const border = this.selectionBorder!;
+    const check = this.checkMark!;
+    const start = performance.now();
+    const duration = CanvasImageItem.SEL_ANIM_DURATION * 0.6; // 渐出更快
+
+    const tick = (now: number) => {
+      const elapsed = now - start;
+      const t = Math.min(elapsed / duration, 1);
+      const alpha = 1 - t;
+
+      border.alpha = alpha;
+      check.alpha = alpha;
+
+      if (t < 1) {
+        this._selAnimFrame = requestAnimationFrame(tick);
+      } else {
+        border.visible = false;
+        check.visible = false;
+        border.alpha = 1;
+        check.alpha = 1;
+        check.scale.set(1);
+        this._selAnimFrame = 0;
+      }
+    };
+
+    this._selAnimFrame = requestAnimationFrame(tick);
   }
 }
