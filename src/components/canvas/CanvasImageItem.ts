@@ -106,7 +106,7 @@ export class CanvasImageItem extends Container {
     );
   }
 
-  /** 纹理加载完成，替换占位色块 */
+  /** 纹理加载完成，替换占位色块，并根据 EXIF Orientation 旋转 */
   setTexture(texture: Texture): void {
     if (this.sprite) {
       this.removeChild(this.sprite);
@@ -114,14 +114,90 @@ export class CanvasImageItem extends Container {
     }
 
     this.sprite = new Sprite(texture);
-    this.sprite.width = this.itemWidth;
-    this.sprite.height = this.itemHeight;
+    this._applySpriteTransform();
 
     // 插入到占位色块和覆盖层之间
     this.addChildAt(this.sprite, 1);
 
     // 隐藏占位色块
     this.placeholder.visible = false;
+  }
+
+  /**
+   * 根据 EXIF Orientation 对 sprite 应用旋转/镜像变换
+   *
+   * EXIF Orientation 标准：
+   *   1 = 正常, 2 = 水平镜像, 3 = 旋转180°,
+   *   4 = 垂直镜像, 5 = 转置(镜像+270°), 6 = 旋转90°CW,
+   *   7 = 转置(镜像+90°), 8 = 旋转270°CW(即90°CCW)
+   */
+  private _applySpriteTransform(): void {
+    const sprite = this.sprite!;
+    const orientation = this.metadata?.orientation ?? 1;
+
+    // 重置变换
+    sprite.rotation = 0;
+    sprite.scale.set(1);
+    sprite.position.set(0, 0);
+
+    switch (orientation) {
+      case 2: // 水平镜像
+        sprite.width = this.itemWidth;
+        sprite.height = this.itemHeight;
+        sprite.scale.x *= -1;
+        sprite.x = this.itemWidth;
+        break;
+
+      case 3: // 旋转 180°
+        sprite.width = this.itemWidth;
+        sprite.height = this.itemHeight;
+        sprite.rotation = Math.PI;
+        sprite.x = this.itemWidth;
+        sprite.y = this.itemHeight;
+        break;
+
+      case 4: // 垂直镜像
+        sprite.width = this.itemWidth;
+        sprite.height = this.itemHeight;
+        sprite.scale.y *= -1;
+        sprite.y = this.itemHeight;
+        break;
+
+      case 5: // 转置：水平镜像 + 270°
+        sprite.width = this.itemHeight;
+        sprite.height = this.itemWidth;
+        sprite.rotation = -Math.PI / 2;
+        sprite.scale.x *= -1;
+        sprite.x = this.itemWidth;
+        break;
+
+      case 6: // 旋转 90° 顺时针
+        sprite.width = this.itemHeight;
+        sprite.height = this.itemWidth;
+        sprite.rotation = Math.PI / 2;
+        sprite.x = this.itemWidth;
+        break;
+
+      case 7: // 转置：水平镜像 + 90°
+        sprite.width = this.itemHeight;
+        sprite.height = this.itemWidth;
+        sprite.rotation = Math.PI / 2;
+        sprite.scale.x *= -1;
+        sprite.y = this.itemHeight;
+        break;
+
+      case 8: // 旋转 270° 顺时针 (90° 逆时针)
+        sprite.width = this.itemHeight;
+        sprite.height = this.itemWidth;
+        sprite.rotation = -Math.PI / 2;
+        sprite.y = this.itemHeight;
+        break;
+
+      default: // orientation = 1 或缺失
+        sprite.width = this.itemWidth;
+        sprite.height = this.itemHeight;
+        break;
+    }
   }
 
   /** 更新信息覆盖层可见性（低缩放时淡出，平滑过渡；文字大小不随缩放变化） */
