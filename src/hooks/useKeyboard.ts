@@ -2,7 +2,7 @@
 // 键盘快捷键 Hook (useKeyboard)
 //
 // 在 MainPage 挂载时注册 window keydown 监听，卸载时移除。
-// 支持 W/S/↑/↓ 分组切换、Ctrl 组合键、Escape 多功能。
+// 支持 Left/Right 分组切换、W/S 组内滚动、Ctrl 组合键、Escape 多功能。
 // 输入框聚焦时跳过所有快捷键。
 // ============================================================
 
@@ -61,9 +61,10 @@ export function useKeyboard({
             return;
           case 'a': {
             e.preventDefault();
-            const { selectedGroupId, groups } = useAppStore.getState();
-            if (selectedGroupId == null) return;
-            const group = groups.find((g) => g.id === selectedGroupId);
+            // 全选当前分组所有图片
+            const { currentGroupIndex } = useCanvasStore.getState();
+            const { groups } = useAppStore.getState();
+            const group = groups[currentGroupIndex];
             if (group) {
               useSelectionStore.getState().selectAllInGroup(group.pictureHashes);
             }
@@ -91,20 +92,27 @@ export function useKeyboard({
       }
 
       // ── 单键 ──
-      switch (e.key.toLowerCase()) {
-        case 'w':
-        case 'arrowup':
+      switch (e.key) {
+        // 左右箭头 / A/D → 水平分组切换
+        case 'ArrowLeft':
+        case 'a':
+        case 'A':
           e.preventDefault();
+          useCanvasStore.getState().prevGroup();
           useAppStore.getState().navigateGroup('prev');
           onGroupNavigated?.();
           return;
-        case 's':
-        case 'arrowdown':
+        case 'ArrowRight':
+        case 'd':
+        case 'D':
           e.preventDefault();
+          useCanvasStore.getState().nextGroup();
           useAppStore.getState().navigateGroup('next');
           onGroupNavigated?.();
           return;
-        case 'escape': {
+
+        // W/S/上下箭头不再切组，预留给组内滚动（画布层面通过滚轮处理）
+        case 'Escape': {
           e.preventDefault();
           const selectionStore = useSelectionStore.getState();
           if (selectionStore.selectedCount > 0) {
@@ -115,7 +123,6 @@ export function useKeyboard({
           const { processingState } = useAppStore.getState();
           const cancelableStates = ['scanning', 'processing', 'analyzing', 'grouping'];
           if (cancelableStates.includes(processingState)) {
-            // 取消处理通过外部机制，这里仅设置状态
             useAppStore.getState().setProcessingState('cancelling');
           }
           return;

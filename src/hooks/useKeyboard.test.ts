@@ -17,6 +17,16 @@ const mockGroup: GroupData = {
   picturePaths: ['/a.nef', '/b.nef', '/c.nef'],
 };
 
+const mockGroup2: GroupData = {
+  ...mockGroup,
+  id: 2,
+  name: '分组2',
+  pictureHashes: ['h4', 'h5'],
+  pictureNames: ['d.nef', 'e.nef'],
+  picturePaths: ['/d.nef', '/e.nef'],
+  imageCount: 2,
+};
+
 function fireKey(key: string, opts: Partial<KeyboardEventInit> = {}) {
   window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...opts }));
 }
@@ -32,7 +42,7 @@ describe('useKeyboard', () => {
     onGroupNavigated.mockClear();
 
     useAppStore.setState({
-      groups: [mockGroup, { ...mockGroup, id: 2, name: '分组2' }],
+      groups: [mockGroup, mockGroup2],
       selectedGroupId: 1,
       processingState: 'completed',
     });
@@ -40,7 +50,11 @@ describe('useKeyboard', () => {
       selectedHashes: new Set<string>(),
       selectedCount: 0,
     });
-    useCanvasStore.setState({ zoomLevel: 1.0 });
+    useCanvasStore.setState({
+      zoomLevel: 1.0,
+      currentGroupIndex: 0,
+      groupCount: 2,
+    });
   });
 
   afterEach(() => {
@@ -53,18 +67,43 @@ describe('useKeyboard', () => {
     );
   }
 
-  it('S 键触发 navigateGroup("next")', () => {
+  it('ArrowRight 触发 nextGroup 和 navigateGroup("next")', () => {
     mount();
-    fireKey('s');
+    fireKey('ArrowRight');
+    expect(useCanvasStore.getState().currentGroupIndex).toBe(1);
     expect(useAppStore.getState().selectedGroupId).toBe(2);
     expect(onGroupNavigated).toHaveBeenCalledOnce();
   });
 
-  it('W 键触发 navigateGroup("prev")', () => {
+  it('ArrowLeft 触发 prevGroup 和 navigateGroup("prev")', () => {
+    useCanvasStore.setState({ currentGroupIndex: 1 });
     useAppStore.setState({ selectedGroupId: 2 });
     mount();
-    fireKey('w');
+    fireKey('ArrowLeft');
+    expect(useCanvasStore.getState().currentGroupIndex).toBe(0);
     expect(useAppStore.getState().selectedGroupId).toBe(1);
+  });
+
+  it('D 键触发 nextGroup', () => {
+    mount();
+    fireKey('d');
+    expect(useCanvasStore.getState().currentGroupIndex).toBe(1);
+    expect(onGroupNavigated).toHaveBeenCalledOnce();
+  });
+
+  it('A 键触发 prevGroup', () => {
+    useCanvasStore.setState({ currentGroupIndex: 1 });
+    mount();
+    fireKey('a');
+    expect(useCanvasStore.getState().currentGroupIndex).toBe(0);
+  });
+
+  it('W/S 键不再触发分组导航', () => {
+    mount();
+    fireKey('s');
+    // 分组不应改变
+    expect(useCanvasStore.getState().currentGroupIndex).toBe(0);
+    expect(onGroupNavigated).not.toHaveBeenCalled();
   });
 
   it('Ctrl+O 触发 onOpenFolder', () => {
@@ -79,7 +118,8 @@ describe('useKeyboard', () => {
     expect(onExport).toHaveBeenCalledOnce();
   });
 
-  it('Ctrl+A 全选当前分组', () => {
+  it('Ctrl+A 全选当前分组 (基于 currentGroupIndex)', () => {
+    useCanvasStore.setState({ currentGroupIndex: 0 });
     mount();
     fireKey('a', { ctrlKey: true });
     const state = useSelectionStore.getState();
@@ -114,9 +154,8 @@ describe('useKeyboard', () => {
     const input = document.createElement('input');
     document.body.appendChild(input);
     input.focus();
-    fireKey('s');
-    // selectedGroupId 不应改变
-    expect(useAppStore.getState().selectedGroupId).toBe(1);
+    fireKey('ArrowRight');
+    expect(useCanvasStore.getState().currentGroupIndex).toBe(0);
     document.body.removeChild(input);
   });
 });
