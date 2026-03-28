@@ -1,0 +1,148 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   Toast 组件 - 通知/反馈消息
+   
+   支持 success/error/warning/info 四种类型
+   设计目标：清晰的类型区分、精致的视觉表现、流畅的动画
+════════════════════════════════════════════════════════════════════════════ */
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-radius: 6px;
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-normal);
+  min-width: 300px;
+  max-width: 420px;
+  pointer-events: auto;
+  transition: all var(--transition-normal);
+}
+
+.toast:hover {
+  box-shadow: var(--shadow-elevated);
+  border-color: var(--color-border-light);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   图标区
+──────────────────────────────────────────────────────────────── */
+
+.icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-lg);
+  line-height: 1;
+  font-weight: var(--font-weight-bold);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   内容区
+──────────────────────────────────────────────────────────────── */
+
+.content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.message {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   关闭按钮
+──────────────────────────────────────────────────────────────── */
+
+.closeBtn {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: var(--font-size-md);
+  transition: all var(--transition-fast);
+}
+
+.closeBtn:hover {
+  color: var(--color-text-secondary);
+  background: var(--color-bg-secondary);
+}
+
+.closeBtn:active {
+  transform: scale(0.95);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   类型变体 - 使用左边框 + 图标颜色
+════════════════════════════════════════════════════════════════════════════ */
+
+/* Success - 绿色 */
+.success {
+  border-left: 3px solid var(--color-success);
+}
+
+.success .icon {
+  color: var(--color-success);
+}
+
+/* Error - 红色 */
+.error {
+  border-left: 3px solid var(--color-danger);
+}
+
+.error .icon {
+  color: var(--color-danger);
+}
+
+/* Warning - 琥珀色 */
+.warning {
+  border-left: 3px solid var(--color-warning);
+}
+
+.warning .icon {
+  color: var(--color-warning);
+}
+
+/* Info - 主色 */
+.info {
+  border-left: 3px solid var(--color-info);
+}
+
+.info .icon {
+  color: var(--color-info);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   深色主题调整
+──────────────────────────────────────────────────────────────── */
+
+[data-theme="dark"] .toast {
+  background: var(--color-bg-secondary);
+  border-color: var(--color-border);
+}
+
+[data-theme="dark"] .toast:hover {
+  border-color: var(--color-border-light);
+}
+
+[data-theme="dark"] .closeBtn:hover {
+  background: var(--color-bg-tertiary);
+}

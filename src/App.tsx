@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { ErrorBoundary } from './components/feedback/ErrorBoundary';
+import { ToastContainer } from './components/feedback/ToastContainer';
 import WelcomePage from './windows/WelcomePage';
 import MainPage from './windows/MainPage';
 
-function App() {
+function AppContent() {
   const [windowLabel, setWindowLabel] = useState<string | null>(null);
 
   useEffect(() => {
@@ -30,6 +32,15 @@ function App() {
         </div>
       );
   }
+}
+
+function App() {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+      <ToastContainer />
+    </ErrorBoundary>
+  );
 }
 
 export default App;
