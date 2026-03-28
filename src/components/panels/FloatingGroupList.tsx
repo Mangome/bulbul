@@ -1,13 +1,14 @@
 // ============================================================
 // 悬浮分组列表面板 (FloatingGroupList)
 //
-// 左侧悬浮面板，白色半透明毛玻璃容器。
-// Header: "相似度分组" + 分组总数
+// 左侧浮动毛玻璃面板。
+// Header: 文件夹信息 + 收叠按钮
 // Body: 可滚动分组列表
+// 支持收叠为小图标按钮
 // ============================================================
 
-import { useMemo } from 'react';
-import { motion } from 'motion/react';
+import { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { GroupListItem } from './GroupListItem';
 import { useAppStore } from '../../stores/useAppStore';
 import { useSelectionStore } from '../../stores/useSelectionStore';
@@ -21,6 +22,10 @@ export interface FloatingGroupListProps {
   /** hash → 缩略图 URL */
   thumbnailUrls: Map<string, string>;
   onGroupClick: (groupId: number) => void;
+  /** 文件夹显示名 */
+  folderName: string | null;
+  /** 图片总数 */
+  imageTotal: number;
 }
 
 // ─── 组件 ─────────────────────────────────────────────
@@ -29,9 +34,12 @@ export function FloatingGroupList({
   groups,
   thumbnailUrls,
   onGroupClick,
+  folderName,
+  imageTotal,
 }: FloatingGroupListProps) {
   const selectedGroupId = useAppStore((s) => s.selectedGroupId);
   const selectedHashes = useSelectionStore((s) => s.selectedHashes);
+  const [collapsed, setCollapsed] = useState(false);
 
   // 过滤空分组
   const visibleGroups = useMemo(
@@ -41,41 +49,76 @@ export function FloatingGroupList({
 
   return (
     <motion.div
-      className={cls.container}
+      className={`${cls.container} ${collapsed ? cls.collapsed : ''}`}
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.3, ease: 'easeOut' }}
+      transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+      layout
     >
-      {/* Header */}
-      <div className={cls.header}>
-        <div className={cls.title}>相似度分组</div>
-        <div className={cls.subtitle}>共 {visibleGroups.length} 个分组</div>
-      </div>
+      {/* 收叠态：仅显示展开按钮 */}
+      {collapsed && (
+        <button
+          className={cls.toggleBtn}
+          onClick={() => setCollapsed(false)}
+          title="展开面板"
+        >
+          ▶
+        </button>
+      )}
 
-      {/* 列表区 */}
-      <div className={cls.list}>
-        {visibleGroups.map((group) => {
-          const selCount = group.pictureHashes.filter((h) =>
-            selectedHashes.has(h),
-          ).length;
+      {/* 展开态内容 */}
+      <AnimatePresence>
+        {!collapsed && (
+          <>
+            {/* Header - 文件夹信息 */}
+            <div className={cls.header}>
+              <div className={cls.headerTop}>
+                <span className={cls.folderName}>
+                  {folderName ?? '未选择文件夹'}
+                </span>
+                <button
+                  className={cls.toggleBtn}
+                  onClick={() => setCollapsed(true)}
+                  title="收叠面板"
+                >
+                  ◀
+                </button>
+              </div>
+              {imageTotal > 0 && (
+                <div className={cls.folderMeta}>
+                  {imageTotal} 张图片 · {visibleGroups.length} 个分组
+                </div>
+              )}
+              <div className={cls.sectionLabel}>分组</div>
+            </div>
 
-          return (
-            <GroupListItem
-              key={group.id}
-              groupId={group.id}
-              name={group.name}
-              imageCount={group.imageCount}
-              avgSimilarity={group.avgSimilarity}
-              selectedCount={selCount}
-              thumbnailUrl={
-                thumbnailUrls.get(group.representativeHash) ?? null
-              }
-              isActive={selectedGroupId === group.id}
-              onClick={onGroupClick}
-            />
-          );
-        })}
-      </div>
+            {/* 列表区 */}
+            <div className={cls.list}>
+              {visibleGroups.map((group) => {
+                const selCount = group.pictureHashes.filter((h) =>
+                  selectedHashes.has(h),
+                ).length;
+
+                return (
+                  <GroupListItem
+                    key={group.id}
+                    groupId={group.id}
+                    name={group.name}
+                    imageCount={group.imageCount}
+                    avgSimilarity={group.avgSimilarity}
+                    selectedCount={selCount}
+                    thumbnailUrl={
+                      thumbnailUrls.get(group.representativeHash) ?? null
+                    }
+                    isActive={selectedGroupId === group.id}
+                    onClick={onGroupClick}
+                  />
+                );
+              })}
+            </div>
+          </>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

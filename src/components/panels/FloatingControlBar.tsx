@@ -1,7 +1,7 @@
 // ============================================================
 // 悬浮控制栏 (FloatingControlBar)
 //
-// 底部居中 pill 形状毛玻璃容器。
+// 底部居中毛玻璃面板，与左侧面板统一视觉语言
 // 包含：缩放控件 | 视图控制 | 导出入口 | 主题切换
 // ============================================================
 
@@ -55,7 +55,7 @@ export function FloatingControlBar({ onExport }: FloatingControlBarProps) {
       className={cls.container}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease: 'easeOut' }}
+      transition={{ duration: 0.3, delay: 0.05, ease: [0.4, 0, 0.2, 1] }}
     >
       {/* 缩放控件区 */}
       <div className={cls.section}>

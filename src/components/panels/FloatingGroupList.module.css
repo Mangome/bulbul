@@ -1,32 +1,34 @@
 /* ════════════════════════════════════════════════════════════════════════════
    FloatingGroupList 组件 - 左侧分组导航面板
    
-   左侧悬浮毛玻璃面板，显示所有分组的快速导航
-   包含：标题区 | 可滚动的分组列表
+   左侧浮动毛玻璃面板，统一视觉语言
+   包含：文件夹信息 | 分组列表 | 收叠/展开
 ════════════════════════════════════════════════════════════════════════════ */
 
 .container {
-  position: fixed;
+  position: absolute;
   left: 20px;
-  top: 80px;
-  bottom: 80px;
+  top: 20px;
+  bottom: 72px;
   width: 240px;
   
-  /* 毛玻璃效果 */
+  /* 统一面板样式 */
   background: var(--panel-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--panel-border);
-  border-radius: 8px;
+  border-radius: var(--panel-radius);
   box-shadow: var(--panel-shadow);
   
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  z-index: 100;
   pointer-events: auto;
   
-  transition: all var(--transition-normal);
+  transition:
+    width var(--transition-normal) cubic-bezier(0.4, 0, 0.2, 1),
+    opacity var(--transition-normal),
+    box-shadow var(--transition-normal);
 }
 
 .container:hover {
@@ -34,27 +36,97 @@
 }
 
 /* ────────────────────────────────────────────────────────────────
-   头部区域
+   收叠状态 - 仅显示一个小图标按钮
+──────────────────────────────────────────────────────────────── */
+
+.collapsed {
+  width: 40px;
+  bottom: auto;
+  cursor: default;
+}
+
+.collapsed .header,
+.collapsed .list {
+  display: none;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   收叠/展开按钮
+──────────────────────────────────────────────────────────────── */
+
+.toggleBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: none;
+  padding: 0;
+  flex-shrink: 0;
+  
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.toggleBtn:hover {
+  background-color: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+/* 收叠态下的按钮居中 */
+.collapsed .toggleBtn {
+  margin: 6px auto;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   头部区域 - 文件夹信息 + 分组标题
 ──────────────────────────────────────────────────────────────── */
 
 .header {
-  padding: var(--spacing-lg) var(--spacing-lg) var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg) var(--spacing-md);
   border-bottom: 1px solid var(--panel-border);
   flex-shrink: 0;
 }
 
-.title {
-  font-size: var(--font-size-md);
+.headerTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+.folderName {
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
   letter-spacing: -0.3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
 }
 
-.subtitle {
+.folderMeta {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
   margin-top: var(--spacing-xs);
   font-weight: var(--font-weight-normal);
+}
+
+.sectionLabel {
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: var(--spacing-md);
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -72,7 +144,7 @@
 
 /* 自定义滚动条样式 */
 .list::-webkit-scrollbar {
-  width: 6px;
+  width: 4px;
 }
 
 .list::-webkit-scrollbar-track {
@@ -81,8 +153,7 @@
 
 .list::-webkit-scrollbar-thumb {
   background-color: var(--color-border);
-  border-radius: 3px;
-  transition: background-color var(--transition-fast);
+  border-radius: 2px;
 }
 
 .list::-webkit-scrollbar-thumb:hover {
@@ -90,13 +161,13 @@
 }
 
 /* ────────────────────────────────────────────────────────────────
-   深色主题调整
+   深色主题
 ──────────────────────────────────────────────────────────────── */
-
-[data-theme="dark"] .container {
-  border-color: rgba(255, 255, 255, 0.1);
-}
 
 [data-theme="dark"] .header {
   border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .toggleBtn:hover {
+  background-color: rgba(95, 168, 157, 0.2);
 }

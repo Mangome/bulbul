@@ -233,26 +233,14 @@ function MainPage() {
 
   const isCanvasReady = processingState === 'completed' && layout !== null;
 
+  // 文件夹显示名（从路径中提取目录名）
+  const folderName = currentFolder
+    ? currentFolder.split(/[\\/]/).filter(Boolean).pop() ?? currentFolder
+    : null;
+  const imageTotal = progress?.total ?? 0;
+
   return (
     <div className={cls.container}>
-      <div className={cls.header}>
-        <h1 className={cls.title}>Bulbul 主工作区</h1>
-        <p className={cls.subtitle}>
-          {currentFolder
-            ? `文件夹: ${currentFolder}`
-            : '等待加载文件夹...'}
-        </p>
-      </div>
-
-      {/* 完成状态摘要 */}
-      {processingState === 'completed' && progress && (
-        <div className={cls.statusBar}>
-          <span className={cls.statusText}>
-            ✅ 处理完成 — 共 {progress.total} 张
-          </span>
-        </div>
-      )}
-
       {/* 进度对话框（模态） */}
       <ProgressDialog
         processingState={processingState}
@@ -260,7 +248,7 @@ function MainPage() {
         onCancel={handleCancel}
       />
 
-      {/* 画布区域 */}
+      {/* 画布区域 — 全屏 */}
       <div ref={canvasContainerRef} className={cls.canvasArea}>
         {isCanvasReady ? (
           <>
@@ -277,6 +265,8 @@ function MainPage() {
                 groups={groups}
                 thumbnailUrls={thumbnailUrls}
                 onGroupClick={handleGroupClick}
+                folderName={folderName}
+                imageTotal={imageTotal}
               />
               <FloatingControlBar onExport={handleExport} />
             </div>
@@ -285,10 +275,10 @@ function MainPage() {
           <div className={cls.placeholder}>
             <p className={cls.placeholderText}>
               {processingState === 'completed' && groups.length === 0
-                ? '📂 该目录下未找到 NEF 文件'
+                ? '该目录下未找到 NEF 文件'
                 : processingState === 'completed'
                   ? '正在准备画布...'
-                  : '🖼️ 等待处理完成...'}
+                  : '等待处理完成...'}
             </p>
           </div>
         )}

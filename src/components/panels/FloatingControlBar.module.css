@@ -1,31 +1,30 @@
 /* ════════════════════════════════════════════════════════════════════════════
-   FloatingControlBar 组件 - 重新设计的悬浮控制栏
+   FloatingControlBar 组件 - 底部浮动控制栏
    
-   底部居中 pill 形状的毛玻璃面板
+   底部居中毛玻璃面板，与左侧面板统一视觉语言
    包含：缩放控件 | 视图控制 | 导出 | 主题切换
-   
-   设计目标：精致毛玻璃效果、清晰的视觉分组、流畅的交互
 ════════════════════════════════════════════════════════════════════════════ */
 
 .container {
   position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
+  bottom: 20px;
+  left: 0;
+  right: 0;
+  width: fit-content;
+  margin: 0 auto;
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
   padding: var(--spacing-sm) var(--spacing-lg);
   
-  /* 毛玻璃效果 */
+  /* 统一面板样式 */
   background: var(--panel-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--panel-border);
-  border-radius: 999px;
+  border-radius: var(--panel-radius);
   box-shadow: var(--panel-shadow);
   
-  z-index: 100;
   pointer-events: auto;
   
   transition: 
@@ -34,11 +33,8 @@
     border-color var(--transition-normal);
 }
 
-/* 悬停时增强 */
 .container:hover {
-  background: var(--panel-bg);
   box-shadow: var(--shadow-normal);
-  border-color: rgba(0, 0, 0, 0.12);
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -82,12 +78,6 @@
   background: var(--color-border);
   margin: 0;
   opacity: 0.5;
-  transition: opacity var(--transition-fast);
-}
-
-.section:hover ~ .divider,
-.divider:has(~ .section:hover) {
-  opacity: 0.8;
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -128,10 +118,6 @@
 /* ────────────────────────────────────────────────────────────────
    深色主题调整
 ──────────────────────────────────────────────────────────────── */
-
-[data-theme="dark"] .container {
-  border-color: rgba(255, 255, 255, 0.1);
-}
 
 [data-theme="dark"] .themeBtn:hover {
   background-color: rgba(95, 168, 157, 0.2);
