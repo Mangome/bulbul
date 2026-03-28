@@ -43,8 +43,8 @@ export const DEFAULT_LAYOUT_CONFIG: LayoutConfig = {
   minColumnWidth: 200,
   maxSingleColumnWidth: Infinity,
   groupGap: 80,
-  paddingTop: 24,
-  paddingBottom: 24,
+  paddingTop: 80,     // 为顶部浮动栏预留空间 (16px top + 56px height + 8px margin)
+  paddingBottom: 88,  // 为底部浮动栏预留空间 (20px bottom + 56px height + 12px margin)
 };
 
 // ─── 类型定义 ─────────────────────────────────────────
