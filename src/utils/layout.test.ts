@@ -41,9 +41,9 @@ function makeDimensions(
 
 describe('computeColumnWidth', () => {
   it('应按公式计算列宽', () => {
-    // viewportWidth=1000, paddingLeft=280, paddingRight=30, gapX=20*2=40 → available=650 → 650/3≈6.67
+    // viewportWidth=1000, paddingLeft=280, paddingRight=30, gapX=32*1=32 → available=658 → 658/2=329
     const width = computeColumnWidth(1000);
-    expect(width).toBeCloseTo(650 / 3);
+    expect(width).toBeCloseTo(658 / 2);
   });
 
   it('不应低于最小列宽', () => {
@@ -99,40 +99,37 @@ describe('computeWaterfallLayout', () => {
 
     // 第一张图片在第一列, 标题下方
     expect(result.items[0].x).toBe(280); // paddingLeft=280
-    expect(result.items[0].y).toBe(40); // groupTitleHeight=40
+    expect(result.items[0].y).toBe(48); // groupTitleHeight=48
 
     // 第二张图片在第二列
-    expect(result.items[1].x).toBe(280 + colWidth + 20); // paddingLeft + columnWidth + gapX
-
-    // 第三张图片在第三列
-    expect(result.items[2].x).toBe(280 + (colWidth + 20) * 2);
+    expect(result.items[1].x).toBe(280 + colWidth + 32); // paddingLeft + columnWidth + gapX
   });
 
   it('最短列分配：图片应分配到高度最短的列', () => {
-    // 3 张不同高度的图片填满 3 列后，第 4 张应落在最短列
+    // 2 列模式（默认列数=2），4 张图片交替分配
+    // 前 2 张各占 1 列，第 3、4 张分配到较短列
     const groups = [
       makeGroup(1, ['a', 'b', 'c', 'd']),
     ];
-    // a: 3:2 → h=200, b: 1:1 → h=300, c: 2:3 → h=450
-    // 第4张 d 应该落在 a 所在列(最短，高度 200+20=220)
     const dims = makeDimensions([
-      ['a', 3000, 2000], // h = 300 * (2000/3000) = 200
-      ['b', 1000, 1000], // h = 300
-      ['c', 2000, 3000], // h = 450
-      ['d', 3000, 2000], // h = 200
+      ['a', 3000, 2000], // 3:2 → 较矮
+      ['b', 1000, 1000], // 1:1 → 较高
+      ['c', 3000, 2000], // 3:2
+      ['d', 3000, 2000], // 3:2
     ]);
 
     const result = computeWaterfallLayout(groups, dims, viewportWidth);
 
-    // d 应在第一列 (与 a 同列)
-    expect(result.items[3].x).toBe(result.items[0].x);
-    // d 的 y 应在 a 的底部 + gapY
-    expect(result.items[3].y).toBe(
+    // c 应在第一列 (与 a 同列，a 较矮)
+    expect(result.items[2].x).toBe(result.items[0].x);
+    // c 的 y 应在 a 的底部 + gapY
+    expect(result.items[2].y).toBe(
       result.items[0].y + result.items[0].height + DEFAULT_LAYOUT_CONFIG.gapY,
     );
   });
 
   it('不同宽高比：高度按比例计算', () => {
+    // 2 张图片 → 2 列模式
     const groups = [makeGroup(1, ['a', 'b'])];
     const dims = makeDimensions([
       ['a', 4000, 3000], // 4:3
@@ -140,10 +137,11 @@ describe('computeWaterfallLayout', () => {
     ]);
 
     const result = computeWaterfallLayout(groups, dims, viewportWidth);
-    const colWidth = result.columnWidth;
+    // 2 列模式下的实际列宽
+    const actualColWidth = result.items[0].width;
 
-    expect(result.items[0].height).toBeCloseTo(colWidth * 3 / 4);
-    expect(result.items[1].height).toBeCloseTo(colWidth * 900 / 1600);
+    expect(result.items[0].height).toBeCloseTo(actualColWidth * 3 / 4);
+    expect(result.items[1].height).toBeCloseTo(actualColWidth * 900 / 1600);
   });
 
   it('缺失尺寸：回退到 3:2 默认比例', () => {
@@ -151,10 +149,11 @@ describe('computeWaterfallLayout', () => {
     const dims = new Map<string, ImageDimension>(); // 空：无尺寸信息
 
     const result = computeWaterfallLayout(groups, dims, viewportWidth);
-    const colWidth = result.columnWidth;
+    // 单图分组 → 1 列模式，实际列宽可能受 maxSingleColumnWidth 限制
+    const actualColWidth = result.items[0].width;
 
     // 默认 3:2 → h = colWidth * 2/3
-    expect(result.items[0].height).toBeCloseTo(colWidth * 2 / 3);
+    expect(result.items[0].height).toBeCloseTo(actualColWidth * 2 / 3);
   });
 
   it('空分组：仅预留标题区域', () => {
@@ -172,7 +171,7 @@ describe('computeWaterfallLayout', () => {
     // 第二个分组的标题 y 应在第一个分组标题之后 + 标题高度 + 分组间距
     const title1 = result.groupTitles[0];
     const title2 = result.groupTitles[1];
-    expect(title2.y).toBe(
+    expect(title2.y).toBeCloseTo(
       title1.y + DEFAULT_LAYOUT_CONFIG.groupTitleHeight + DEFAULT_LAYOUT_CONFIG.groupGap,
     );
   });
@@ -200,13 +199,14 @@ describe('computeWaterfallLayout', () => {
     ]);
 
     const result = computeWaterfallLayout(groups, dims, viewportWidth);
-    const colWidth = result.columnWidth;
-    const imgHeight = colWidth * 2 / 3; // 3:2 比例
+    // 单图分组 → 1 列模式
+    const actualColWidth = result.items[0].width;
+    const imgHeight = actualColWidth * 2 / 3; // 3:2 比例
 
-    // 分组1：标题 y=0, 图片 y=40, 图片底部=40+imgHeight
-    // 列高 = 40 + imgHeight + 20(gapY)
-    // 分组2起始 = 列高 + 60(groupGap)
-    const expectedColHeight = 40 + imgHeight + 20;
+    // 分组1：标题 y=0, 图片 y=48, 图片底部=48+imgHeight
+    // 列高 = 48 + imgHeight + 28(gapY)
+    // 分组2起始 = 列高 + 80(groupGap)
+    const expectedColHeight = 48 + imgHeight + 28;
     const group2Title = result.groupTitles[1];
     expect(group2Title.y).toBeCloseTo(expectedColHeight + DEFAULT_LAYOUT_CONFIG.groupGap);
   });

@@ -3,6 +3,11 @@
 //
 // 接收分组数据 + 图片尺寸信息 + 视口宽度，
 // 一次性预计算所有图片的绝对坐标，供画布渲染和视口裁剪使用。
+//
+// 每个分组根据图片数量动态决定列数：
+// - 1 张 → 1 列（大图展示）
+// - 2 张 → 2 列
+// - 3+ 张 → 使用配置的最大列数
 // ============================================================
 
 import type { GroupData } from '../types';
@@ -11,7 +16,7 @@ import type { GroupData } from '../types';
 
 /** 布局固定配置参数 */
 export interface LayoutConfig {
-  /** 列数 */
+  /** 最大列数 */
   readonly columns: number;
   /** 水平间距 (px) */
   readonly gapX: number;
@@ -23,6 +28,8 @@ export interface LayoutConfig {
   readonly paddingRight: number;
   /** 最小列宽 (px) */
   readonly minColumnWidth: number;
+  /** 单图最大宽度 (px) — 防止 1 列模式下图片过大 */
+  readonly maxSingleColumnWidth: number;
   /** 分组之间的垂直间距 (px) */
   readonly groupGap: number;
   /** 分组标题区域高度 (px) */
@@ -30,14 +37,15 @@ export interface LayoutConfig {
 }
 
 export const DEFAULT_LAYOUT_CONFIG: LayoutConfig = {
-  columns: 3,
-  gapX: 20,
-  gapY: 20,
+  columns: 2,
+  gapX: 32,
+  gapY: 28,
   paddingLeft: 280,
   paddingRight: 30,
   minColumnWidth: 200,
-  groupGap: 60,
-  groupTitleHeight: 40,
+  maxSingleColumnWidth: Infinity,
+  groupGap: 80,
+  groupTitleHeight: 48,
 };
 
 // ─── 类型定义 ─────────────────────────────────────────
@@ -90,23 +98,40 @@ const DEFAULT_ASPECT_RATIO = 3 / 2;
 // ─── 核心算法 ─────────────────────────────────────────
 
 /**
- * 计算列宽
- *
- * columnWidth = max(minColumnWidth, (viewportWidth - padding*2 - gapX*(columns-1)) / columns)
+ * 计算指定列数下的列宽
  */
 export function computeColumnWidth(
   viewportWidth: number,
   config: LayoutConfig = DEFAULT_LAYOUT_CONFIG,
 ): number {
+  return computeColumnWidthForColumns(viewportWidth, config.columns, config);
+}
+
+/**
+ * 针对指定列数计算列宽
+ */
+function computeColumnWidthForColumns(
+  viewportWidth: number,
+  columns: number,
+  config: LayoutConfig,
+): number {
   const availableWidth =
-    viewportWidth - config.paddingLeft - config.paddingRight - config.gapX * (config.columns - 1);
-  return Math.max(config.minColumnWidth, availableWidth / config.columns);
+    viewportWidth - config.paddingLeft - config.paddingRight - config.gapX * (columns - 1);
+  const rawWidth = availableWidth / columns;
+
+  // 单列模式下限制最大宽度，防止图片过大
+  if (columns === 1) {
+    return Math.max(config.minColumnWidth, Math.min(rawWidth, config.maxSingleColumnWidth));
+  }
+
+  return Math.max(config.minColumnWidth, rawWidth);
 }
 
 /**
  * 一次性全量计算瀑布流布局
  *
- * 算法复杂度: O(n) — 逐图片遍历，每次选择最短列 (列数固定为常数)
+ * 每个分组根据图片数量动态决定列数，充分利用可视区域。
+ * 算法复杂度: O(n)
  */
 export function computeWaterfallLayout(
   groups: GroupData[],
@@ -114,39 +139,44 @@ export function computeWaterfallLayout(
   viewportWidth: number,
   config: LayoutConfig = DEFAULT_LAYOUT_CONFIG,
 ): LayoutResult {
-  const columnWidth = computeColumnWidth(viewportWidth, config);
+  const defaultColumnWidth = computeColumnWidth(viewportWidth, config);
   const items: LayoutItem[] = [];
   const groupTitles: GroupTitleItem[] = [];
 
   // 各列当前高度 (从 0 开始)
-  const columnHeights = new Array<number>(config.columns).fill(0);
-
-  // 用于跟踪是否为第一个分组
+  let columnHeights = new Array<number>(config.columns).fill(0);
+  let prevColumns = config.columns;
   let isFirstGroup = true;
 
   for (const group of groups) {
+    // 根据分组图片数量动态调整列数
+    const groupColumns = Math.min(group.pictureHashes.length || 1, config.columns);
+    const groupColumnWidth = computeColumnWidthForColumns(viewportWidth, groupColumns, config);
+
     // ── 分组间距 ──
-    const maxColumnHeight = Math.max(...columnHeights);
+    const maxColumnHeight = Math.max(...columnHeights.slice(0, prevColumns));
     if (!isFirstGroup) {
-      // 非第一个分组：所有列对齐到最高列 + 分组间距
       const groupStartY = maxColumnHeight + config.groupGap;
-      columnHeights.fill(groupStartY);
+      columnHeights = new Array<number>(groupColumns).fill(groupStartY);
+    } else {
+      columnHeights = new Array<number>(groupColumns).fill(0);
     }
     isFirstGroup = false;
+    prevColumns = groupColumns;
 
     // ── 分组标题 ──
-    const titleY = columnHeights[0]; // 所有列此时等高
+    const titleY = columnHeights[0];
     groupTitles.push({
       groupId: group.id,
       label: `${group.name}（${group.imageCount} 张）`,
       x: config.paddingLeft,
       y: titleY,
-      width: viewportWidth - config.paddingLeft - config.paddingRight,
+      width: groupColumns * groupColumnWidth + (groupColumns - 1) * config.gapX,
       height: config.groupTitleHeight,
     });
 
     // 标题区域下移
-    for (let c = 0; c < config.columns; c++) {
+    for (let c = 0; c < groupColumns; c++) {
       columnHeights[c] += config.groupTitleHeight;
     }
 
@@ -157,21 +187,17 @@ export function computeWaterfallLayout(
 
     // ── 瀑布流分配图片 ──
     for (const hash of group.pictureHashes) {
-      // 查找最短列
       const shortestCol = findShortestColumn(columnHeights);
 
-      // 获取图片宽高比
       const dim = imageDimensions.get(hash);
       const aspectRatio = dim
         ? dim.width / dim.height
         : DEFAULT_ASPECT_RATIO;
 
-      // 计算渲染高度
-      const renderHeight = columnWidth / aspectRatio;
+      const renderHeight = groupColumnWidth / aspectRatio;
 
-      // 计算绝对坐标
       const x =
-        config.paddingLeft + shortestCol * (columnWidth + config.gapX);
+        config.paddingLeft + shortestCol * (groupColumnWidth + config.gapX);
       const y = columnHeights[shortestCol];
 
       items.push({
@@ -179,18 +205,17 @@ export function computeWaterfallLayout(
         groupId: group.id,
         x,
         y,
-        width: columnWidth,
+        width: groupColumnWidth,
         height: renderHeight,
       });
 
-      // 更新列高度 (图片高度 + 垂直间距)
       columnHeights[shortestCol] += renderHeight + config.gapY;
     }
   }
 
   const totalHeight = Math.max(...columnHeights, 0);
 
-  return { items, groupTitles, totalHeight, columnWidth };
+  return { items, groupTitles, totalHeight, columnWidth: defaultColumnWidth };
 }
 
 // ─── 内部辅助 ─────────────────────────────────────────
