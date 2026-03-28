@@ -13,22 +13,16 @@ pub async fn ensure_cache_dirs(cache_base_dir: &Path) -> Result<(), AppError> {
     let thumbnail_dir = cache_base_dir.join("thumbnail");
 
     tokio::fs::create_dir_all(&medium_dir).await.map_err(|e| {
-        AppError::IoError(std::io::Error::new(
-            e.kind(),
-            format!("无法创建 medium 缓存目录 '{}': {}", medium_dir.display(), e),
-        ))
+        AppError::CacheError(format!("无法创建 medium 缓存目录 '{}': {}", medium_dir.display(), e))
     })?;
 
     tokio::fs::create_dir_all(&thumbnail_dir)
         .await
         .map_err(|e| {
-            AppError::IoError(std::io::Error::new(
-                e.kind(),
-                format!(
-                    "无法创建 thumbnail 缓存目录 '{}': {}",
-                    thumbnail_dir.display(),
-                    e
-                ),
+            AppError::CacheError(format!(
+                "无法创建 thumbnail 缓存目录 '{}': {}",
+                thumbnail_dir.display(),
+                e
             ))
         })?;
 
@@ -50,10 +44,7 @@ pub async fn write_medium(
 ) -> Result<PathBuf, AppError> {
     let path = get_cache_file_path(cache_base_dir, hash, "medium");
     tokio::fs::write(&path, data).await.map_err(|e| {
-        AppError::IoError(std::io::Error::new(
-            e.kind(),
-            format!("写入 medium 缓存失败 '{}': {}", path.display(), e),
-        ))
+        AppError::CacheError(format!("写入 medium 缓存失败 '{}': {}", path.display(), e))
     })?;
     Ok(path)
 }
@@ -66,10 +57,7 @@ pub async fn write_thumbnail(
 ) -> Result<PathBuf, AppError> {
     let path = get_cache_file_path(cache_base_dir, hash, "thumbnail");
     tokio::fs::write(&path, data).await.map_err(|e| {
-        AppError::IoError(std::io::Error::new(
-            e.kind(),
-            format!("写入 thumbnail 缓存失败 '{}': {}", path.display(), e),
-        ))
+        AppError::CacheError(format!("写入 thumbnail 缓存失败 '{}': {}", path.display(), e))
     })?;
     Ok(path)
 }

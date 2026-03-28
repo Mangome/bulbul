@@ -9,10 +9,7 @@ use crate::models::AppError;
 /// 规范化文件路径为绝对路径，消除 `..`、`.`、符号链接等
 pub fn canonicalize_path(path: &Path) -> Result<PathBuf, AppError> {
     std::fs::canonicalize(path).map_err(|e| {
-        AppError::IoError(std::io::Error::new(
-            e.kind(),
-            format!("无法规范化路径 '{}': {}", path.display(), e),
-        ))
+        AppError::HashError(format!("无法规范化路径 '{}': {}", path.display(), e))
     })
 }
 

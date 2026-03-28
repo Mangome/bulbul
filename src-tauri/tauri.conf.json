@@ -5,7 +5,7 @@
   "identifier": "com.bulbul.app",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://localhost:1620",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
@@ -41,6 +41,19 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "copyright": "Copyright © 2025 Bulbul",
+    "shortDescription": "RAW 图像智能筛选与管理工具",
+    "longDescription": "Bulbul 是一款桌面端 RAW 图像筛选与管理工具，支持 NEF 格式的智能分组、画布浏览和批量导出。",
+    "category": "Photography",
+    "windows": {
+      "nsis": {
+        "displayLanguageSelector": true,
+        "languages": ["SimpChinese", "English"],
+        "installerIcon": "icons/icon.ico",
+        "headerImage": null,
+        "sidebarImage": null
+      }
+    }
   }
 }
