@@ -21,7 +21,7 @@ import { useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 
 import { Application, Container } from 'pixi.js';
 import { DotBackground } from './DotBackground';
 import { CanvasImageItem } from './CanvasImageItem';
-import { ImageLoader, getSizeForZoom } from '../../hooks/useImageLoader';
+import { ImageLoader, getSizeForDisplay } from '../../hooks/useImageLoader';
 import {
   getVisibleItems,
   diffVisibleItems,
@@ -34,6 +34,7 @@ import type {
 import type { ImageMetadata } from '../../types';
 import { useCanvasStore } from '../../stores/useCanvasStore';
 import { useSelectionStore } from '../../stores/useSelectionStore';
+import { useThemeStore } from '../../stores/useThemeStore';
 
 // ─── 常量 ─────────────────────────────────────────────
 
@@ -41,7 +42,8 @@ const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 3.0;
 const ZOOM_SENSITIVITY = 0.001;
 const DRAG_DEAD_ZONE = 5;
-const BG_COLOR = 0xFAFAFA;
+const BG_COLOR_LIGHT = 0xFAFAFA;
+const BG_COLOR_DARK = 0x0F0F0F;
 const GROUP_TRANSITION_MS =
   typeof window !== 'undefined' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -82,7 +84,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
   const visibleItemsRef = useRef<LayoutItem[]>([]);
   const canvasItemsRef = useRef<Map<string, CanvasImageItem>>(new Map());
   const zoomLevelRef = useRef(1.0);
-  const prevZoomSizeRef = useRef<string>('medium');
+  /** 上次质量判断对应的 size（基于 displayWidth） */
+  const prevSizeRef = useRef<string>('medium');
 
   // ── 选中状态同步 fn ref（在 effect 内赋值） ──
   const syncSelectionVisualsRef = useRef<(() => void) | null>(null);
@@ -98,6 +101,10 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
   const transitionAnimRef = useRef<number | null>(null);
   /** 动画开始前的分组索引 */
   const prevGroupIndexRef = useRef(0);
+
+  // ── wheel 事件 throttle ──
+  const lastWheelUpdateTimeRef = useRef<number>(0);
+  const WHEEL_THROTTLE_MS = 16; // ~60fps
 
   // Store sync
   const storeZoomLevel = useCanvasStore((s) => s.zoomLevel);
@@ -173,7 +180,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
       if (imageLoader) {
         imageLoader
-          .loadTexture(item.hash, zoomLevelRef.current)
+          .loadTexture(item.hash, item.width * zoomLevelRef.current)
           .then((texture) => {
             if (texture && canvasItemsRef.current.has(item.hash)) {
               canvasItemsRef.current.get(item.hash)!.setTexture(texture);
@@ -188,17 +195,25 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
   // ── 缩放阈值切换 ──
   const handleZoomThresholdChange = useCallback(
     (newZoom: number) => {
-      const newSize = getSizeForZoom(newZoom);
-      if (newSize === prevZoomSizeRef.current) return;
-      prevZoomSizeRef.current = newSize;
+      const visibleItems = visibleItemsRef.current;
+      if (visibleItems.length === 0) return;
+
+      // 在等宽列布局下所有图片宽度相同，取第一个即可
+      const representativeWidth = visibleItems[0].width;
+      const displayWidth = representativeWidth * newZoom;
+      const newSize = getSizeForDisplay(displayWidth);
+      if (newSize === prevSizeRef.current) return;
+      prevSizeRef.current = newSize;
 
       const imageLoader = imageLoaderRef.current;
       if (!imageLoader) return;
 
-      const visibleHashes = visibleItemsRef.current.map((i) => i.hash);
+      const entries = visibleItems.map((item) => ({
+        hash: item.hash,
+        displayWidth: item.width * newZoom,
+      }));
       imageLoader.reloadForZoomChange(
-        visibleHashes,
-        newZoom,
+        entries,
         (hash, texture) => {
           const canvasItem = canvasItemsRef.current.get(hash);
           if (canvasItem) {
@@ -325,8 +340,11 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     const app = new Application();
 
     const initApp = async () => {
+      const theme = useThemeStore.getState().theme;
+      const bgColor = theme === 'light' ? BG_COLOR_LIGHT : BG_COLOR_DARK;
+
       await app.init({
-        background: BG_COLOR,
+        background: bgColor,
         resizeTo: container,
         antialias: true,
         autoDensity: true,
@@ -344,6 +362,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       // ── 背景层 ──
       const bgLayer = new DotBackground();
       await bgLayer.init(app);
+      bgLayer.updateTheme(theme);
       app.stage.addChild(bgLayer);
       bgLayerRef.current = bgLayer;
 
@@ -427,7 +446,12 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         }
 
         handleZoomThresholdChange(newZoom);
-        updateViewport();
+        // throttle updateViewport 调用
+        const now = performance.now();
+        if (now - lastWheelUpdateTimeRef.current >= WHEEL_THROTTLE_MS) {
+          updateViewport();
+          lastWheelUpdateTimeRef.current = now;
+        }
       } else {
         // ── 普通滚轮：组内纵向滚动（锁定范围） ──
         const { currentGroupIndex } = useCanvasStore.getState();
@@ -444,7 +468,12 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         contentLayer.y = -scrollYRef.current * zoom + vertOffset;
         contentLayer.x = computeGroupX(currentGroupIndex, zoom);
 
-        updateViewport();
+        // throttle updateViewport 调用
+        const now = performance.now();
+        if (now - lastWheelUpdateTimeRef.current >= WHEEL_THROTTLE_MS) {
+          updateViewport();
+          lastWheelUpdateTimeRef.current = now;
+        }
       }
     };
 
@@ -668,6 +697,18 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
   // ── 选中数量播报（屏幕阅读器） ──
   const selectedCount = useSelectionStore((s) => s.selectedCount);
+  const themeValue = useThemeStore((s) => s.theme);
+
+  // 订阅主题变化
+  useEffect(() => {
+    const app = appRef.current;
+    const bgLayer = bgLayerRef.current;
+    if (!app || !bgLayer) return;
+
+    const bgColor = themeValue === 'light' ? BG_COLOR_LIGHT : BG_COLOR_DARK;
+    app.renderer.background.color = bgColor;
+    bgLayer.updateTheme(themeValue);
+  }, [themeValue]);
 
   return (
     <div

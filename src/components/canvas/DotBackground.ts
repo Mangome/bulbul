@@ -15,19 +15,22 @@ import {
 
 // ─── 配置 ─────────────────────────────────────────────
 
-/** 波点间距 */
-const DOT_SPACING = 24;
-/** 波点半径 */
-const DOT_RADIUS = 1.5;
-/** 波点颜色 */
-const DOT_COLOR = 0xD8D8D8;
+/** 波点间距（单位 px） */
+const DOT_SPACING = 40;
+/** 波点半径（单位 px） */
+const DOT_RADIUS = 1.0;
+/** 亮色主题波点颜色 */
+const DOT_COLOR_LIGHT = 0xE0E0E0;
+/** 暗色主题波点颜色 */
+const DOT_COLOR_DARK = 0x4A4A4A;
 /** 波点透明度 */
-const DOT_ALPHA = 0.6;
+const DOT_ALPHA = 0.5;
 
 // ─── DotBackground ───────────────────────────────────
 
 export class DotBackground extends Container {
   private tilingSprite: TilingSprite | null = null;
+  private app: Application | null = null;
 
   /**
    * 初始化波点底纹
@@ -35,28 +38,50 @@ export class DotBackground extends Container {
    * 生成一个 tile 大小的纹理，然后用 TilingSprite 铺满视口。
    */
   async init(app: Application): Promise<void> {
+    this.app = app;
+    this.renderDots('light');
+  }
+
+  /**
+   * 根据主题重新渲染波点
+   */
+  private renderDots(theme: 'light' | 'dark'): void {
+    if (!this.app) return;
+
+    // 清理旧的 TilingSprite
+    if (this.tilingSprite) {
+      this.removeChild(this.tilingSprite);
+      this.tilingSprite.destroy({ texture: true });
+    }
+
     const tileSize = DOT_SPACING;
+    const dotColor = theme === 'light' ? DOT_COLOR_LIGHT : DOT_COLOR_DARK;
 
     // 生成波点纹理
     const dotGraphics = new Graphics();
-
-    // 均匀的单点模式（tile 中心）
     dotGraphics
       .circle(tileSize / 2, tileSize / 2, DOT_RADIUS)
-      .fill({ color: DOT_COLOR, alpha: DOT_ALPHA });
+      .fill({ color: dotColor, alpha: DOT_ALPHA });
 
     // 生成纹理
-    const texture = (app.renderer as Renderer).generateTexture(dotGraphics);
+    const texture = (this.app.renderer as Renderer).generateTexture(dotGraphics);
     dotGraphics.destroy();
 
     // 创建 TilingSprite
     this.tilingSprite = new TilingSprite({
       texture,
-      width: app.screen.width,
-      height: app.screen.height,
+      width: this.app.screen.width,
+      height: this.app.screen.height,
     });
 
     this.addChild(this.tilingSprite);
+  }
+
+  /**
+   * 更新主题
+   */
+  updateTheme(theme: 'light' | 'dark'): void {
+    this.renderDots(theme);
   }
 
   /** 窗口 resize 时更新 TilingSprite 尺寸 */

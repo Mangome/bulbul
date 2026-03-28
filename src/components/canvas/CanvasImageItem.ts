@@ -51,6 +51,9 @@ export class CanvasImageItem extends Container {
   private fileName: string = '';
   private metadata: ImageMetadata | null = null;
 
+  /** 上一次缩放级别，用于反向补偿覆盖层文字大小 */
+  private lastZoom: number = 1;
+
   // 选中/悬停视觉对象（延迟创建）
   private selectionBorder: Graphics | null = null;
   private checkMark: Graphics | null = null;
@@ -99,6 +102,7 @@ export class CanvasImageItem extends Container {
       this.itemHeight,
       this.fileName,
       this.metadata,
+      this.lastZoom,
     );
   }
 
@@ -120,7 +124,7 @@ export class CanvasImageItem extends Container {
     this.placeholder.visible = false;
   }
 
-  /** 更新信息覆盖层可见性（低缩放时淡出，平滑过渡） */
+  /** 更新信息覆盖层可见性（低缩放时淡出，平滑过渡；文字大小不随缩放变化） */
   updateZoomVisibility(zoomLevel: number): void {
     if (zoomLevel < INFO_OVERLAY_MIN_ZOOM) {
       // 低于阈值：完全隐藏
@@ -135,6 +139,18 @@ export class CanvasImageItem extends Container {
       // 完全可见
       this.infoOverlay.visible = true;
       this.infoOverlay.alpha = 1;
+    }
+
+    // 缩放变化时重新布局覆盖层，使文字大小保持恒定
+    this.lastZoom = zoomLevel;
+    if (this.fileName) {
+      this.infoOverlay.update(
+        this.itemWidth,
+        this.itemHeight,
+        this.fileName,
+        this.metadata,
+        zoomLevel,
+      );
     }
   }
 

@@ -3,22 +3,22 @@
 //
 // 底部渐变 + 文件名 Badge + 拍摄参数 Badge
 // 纯 PixiJS 对象（非 React 组件）
+//
+// 文字大小通过 zoomLevel 反向补偿，保证屏幕上始终恒定。
+// 渐变背景始终覆盖图片底部，不受缩放影响。
 // ============================================================
 
 import {
   Container,
+  FillGradient,
   Graphics,
   Text,
-  type TextStyleOptions,
+  TextStyle,
 } from 'pixi.js';
 import type { ImageMetadata } from '../../types';
 
-// ─── 样式常量 ─────────────────────────────────────────
+// ─── 样式常量（屏幕像素，不随缩放变化） ─────────────
 
-/** 覆盖层占图片高度的比例 */
-const OVERLAY_HEIGHT_RATIO = 0.15;
-/** 最小覆盖层高度 */
-const MIN_OVERLAY_HEIGHT = 40;
 /** Badge 内边距 */
 const BADGE_PADDING_X = 6;
 const BADGE_PADDING_Y = 3;
@@ -26,94 +26,124 @@ const BADGE_PADDING_Y = 3;
 const BADGE_RADIUS = 8;
 /** Badge 间距 */
 const BADGE_GAP = 4;
-/** 底部内边距 */
-const BOTTOM_PADDING = 6;
+/** 文件名与 Badge 行之间的间距 */
+const ROW_GAP = 3;
 /** 左内边距 */
 const LEFT_PADDING = 8;
+/** 上下内边距（内容区域到渐变边缘） */
+const VERTICAL_PADDING = 8;
 
-// ─── 文本样式 ─────────────────────────────────────────
-
-const FILE_NAME_STYLE: TextStyleOptions = {
-  fontSize: 11,
-  fontFamily: 'system-ui, -apple-system, sans-serif',
-  fill: 0xFFFFFF,
-  fontWeight: '600',
-};
-
-const PARAM_STYLE: TextStyleOptions = {
-  fontSize: 10,
-  fontFamily: 'system-ui, -apple-system, sans-serif',
-  fill: 0xFFFFFF,
-};
+/** 文件名基础字号 */
+const FILE_NAME_FONT_SIZE = 11;
+/** 参数基础字号 */
+const PARAM_FONT_SIZE = 10;
 
 // ─── ImageInfoOverlay ────────────────────────────────
 
 export class ImageInfoOverlay extends Container {
   private gradientBg: Graphics;
-  private nameText: Text;
-  private paramContainer: Container;
+  private contentContainer: Container;
 
   constructor() {
     super();
     this.gradientBg = new Graphics();
-    this.nameText = new Text({ text: '', style: FILE_NAME_STYLE });
-    this.paramContainer = new Container();
+    this.contentContainer = new Container();
 
     this.addChild(this.gradientBg);
-    this.addChild(this.nameText);
-    this.addChild(this.paramContainer);
+    this.addChild(this.contentContainer);
   }
 
   /**
    * 更新覆盖层内容和位置
+   *
+   * @param itemWidth   图片宽度（内容坐标）
+   * @param itemHeight  图片高度（内容坐标）
+   * @param fileName    文件名
+   * @param metadata    拍摄参数
+   * @param zoomLevel   当前画布缩放级别（默认 1）
    */
   update(
     itemWidth: number,
     itemHeight: number,
     fileName: string,
     metadata?: ImageMetadata | null,
+    zoomLevel: number = 1,
   ): void {
-    const overlayHeight = Math.max(
-      MIN_OVERLAY_HEIGHT,
-      itemHeight * OVERLAY_HEIGHT_RATIO,
-    );
-    const overlayY = itemHeight - overlayHeight;
+    const s = 1 / zoomLevel; // 反向缩放因子
+    const z = zoomLevel;
 
-    // ── 渐变背景 ──
-    this.gradientBg.clear();
-    // 使用两层半透明矩形模拟渐变效果
-    this.gradientBg
-      .rect(0, overlayY, itemWidth, overlayHeight * 0.4)
-      .fill({ color: 0x000000, alpha: 0.2 });
-    this.gradientBg
-      .rect(0, overlayY + overlayHeight * 0.4, itemWidth, overlayHeight * 0.6)
-      .fill({ color: 0x000000, alpha: 0.7 });
+    // ── 1. 先创建文字对象，测量实际高度（屏幕像素） ──
+    const nameStyle = new TextStyle({
+      fontSize: FILE_NAME_FONT_SIZE,
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+      fill: 0xFFFFFF,
+      fontWeight: '600',
+    });
+    const maxChars = maxCharsForWidth(itemWidth, zoomLevel);
+    const nameText = new Text({ text: truncateFileName(fileName, maxChars), style: nameStyle });
 
-    // ── 文件名（根据宽度自适应截断） ──
-    const maxChars = maxCharsForWidth(itemWidth);
-    this.nameText.text = truncateFileName(fileName, maxChars);
-    this.nameText.x = LEFT_PADDING;
-    this.nameText.y = overlayY + BOTTOM_PADDING;
-
-    // ── 参数 Badge ──
-    this.paramContainer.removeChildren();
+    const badgeObjects: Container[] = [];
     if (metadata) {
       const badges = buildParamBadges(metadata);
-      let offsetX = LEFT_PADDING;
-      const badgeY = this.nameText.y + this.nameText.height + 3;
-
+      const maxX = (itemWidth - LEFT_PADDING) * z;
+      let testX = LEFT_PADDING * z;
       for (const label of badges) {
         const badge = createBadge(label);
-        badge.x = offsetX;
-        badge.y = badgeY;
-        this.paramContainer.addChild(badge);
-        offsetX += badge.width + BADGE_GAP;
-
-        // 超出宽度时移除刚添加的 badge 并停止
-        if (offsetX > itemWidth - LEFT_PADDING) {
-          this.paramContainer.removeChild(badge);
+        testX += badge.width + BADGE_GAP;
+        if (testX - BADGE_GAP > maxX) {
+          badge.destroy();
           break;
         }
+        badgeObjects.push(badge);
+      }
+    }
+
+    const nameH = nameText.height;
+    const badgeH = badgeObjects.length > 0 ? badgeObjects[0].height : 0;
+    const gap = badgeObjects.length > 0 ? ROW_GAP : 0;
+    const totalContentH = nameH + gap + badgeH; // 屏幕像素
+
+    // ── 2. 覆盖层高度 = 内容高度 + 上下 padding，换算到内容坐标 ──
+    const overlayScreenH = totalContentH + VERTICAL_PADDING * 2;
+    const overlayHeight = overlayScreenH * s; // 内容坐标
+    const overlayY = itemHeight - overlayHeight;
+
+    // ── 3. 渐变背景（从透明到半透明黑色，真线性渐变） ──
+    this.gradientBg.clear();
+    const gradient = new FillGradient({
+      type: 'linear',
+      start: { x: 0, y: 0 },
+      end: { x: 0, y: 1 },
+      colorStops: [
+        { offset: 0, color: 'rgba(0,0,0,0)' },
+        { offset: 1, color: 'rgba(0,0,0,0.6)' },
+      ],
+    });
+    this.gradientBg
+      .rect(0, overlayY, itemWidth, overlayHeight)
+      .fill(gradient);
+
+    // ── 4. 文字内容（反向缩放容器） ──
+    this.contentContainer.removeChildren();
+    this.contentContainer.scale.set(s);
+
+    // 文字固定贴底：距离图片底边 VERTICAL_PADDING 屏幕像素
+    const bottomY = itemHeight * z; // 图片底边在容器坐标中的位置
+    const contentBottomY = bottomY - VERTICAL_PADDING;
+    const startY = contentBottomY - totalContentH;
+
+    nameText.x = LEFT_PADDING * z;
+    nameText.y = startY;
+    this.contentContainer.addChild(nameText);
+
+    if (badgeObjects.length > 0) {
+      let offsetX = LEFT_PADDING * z;
+      const badgeY = startY + nameH + gap;
+      for (const badge of badgeObjects) {
+        badge.x = offsetX;
+        badge.y = badgeY;
+        this.contentContainer.addChild(badge);
+        offsetX += badge.width + BADGE_GAP;
       }
     }
   }
@@ -124,7 +154,12 @@ export class ImageInfoOverlay extends Container {
 /** 创建 pill 圆角 Badge */
 function createBadge(label: string): Container {
   const container = new Container();
-  const text = new Text({ text: label, style: PARAM_STYLE });
+  const style = new TextStyle({
+    fontSize: PARAM_FONT_SIZE,
+    fontFamily: 'system-ui, -apple-system, sans-serif',
+    fill: 0xFFFFFF,
+  });
+  const text = new Text({ text: label, style });
   const bg = new Graphics();
 
   const width = text.width + BADGE_PADDING_X * 2;
@@ -182,12 +217,13 @@ function truncateFileName(name: string, maxChars: number): string {
 
 /**
  * 根据图片项宽度估算合理的最大字符数。
- * 宽图显示更多字符，窄图少显示。
+ * 考虑缩放级别：缩放越大，图片在屏幕上越大，可显示更多字符。
  */
-function maxCharsForWidth(itemWidth: number): number {
-  // 约 6px / 字符 (fontSize 11，系统字体)
-  const availableWidth = itemWidth - LEFT_PADDING * 2;
-  const estimated = Math.floor(availableWidth / 6.5);
+function maxCharsForWidth(itemWidth: number, zoomLevel: number = 1): number {
+  // 屏幕上可用像素 = 内容宽度 * zoomLevel
+  const screenWidth = (itemWidth - LEFT_PADDING * 2) * zoomLevel;
+  // 约 6.5px / 字符 (fontSize 11，系统字体)
+  const estimated = Math.floor(screenWidth / 6.5);
   // 下限 12 字符（至少显示「abc...xyz.nef」），上限 80
   return Math.max(12, Math.min(80, estimated));
 }
