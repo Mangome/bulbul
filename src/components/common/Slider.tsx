@@ -23,7 +23,6 @@ export interface SliderProps {
 
 // ─── 常量 ─────────────────────────────────────────────
 
-const TRACK_HEIGHT = 4;
 const THUMB_SIZE = 14;
 
 // ─── 组件 ─────────────────────────────────────────────
