@@ -4,6 +4,7 @@
 // 展示代表图缩略图、分组名、图片数量、平均相似度、已选中数 Badge
 // ============================================================
 
+import { memo } from 'react';
 import { Badge } from '../common/Badge';
 import cls from './GroupListItem.module.css';
 
@@ -23,7 +24,7 @@ export interface GroupListItemProps {
 
 // ─── 组件 ─────────────────────────────────────────────
 
-export function GroupListItem({
+export const GroupListItem = memo(function GroupListItem({
   groupId,
   name,
   imageCount,
@@ -80,4 +81,4 @@ export function GroupListItem({
       )}
     </div>
   );
-}
+});

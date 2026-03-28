@@ -48,6 +48,18 @@ export function FloatingGroupList({
     [groups],
   );
 
+  // 预计算每个分组的选中数，避免在每次 render 时重新计算
+  const groupSelectionCounts = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const group of visibleGroups) {
+      const selCount = group.pictureHashes.filter((h) =>
+        selectedHashes.has(h),
+      ).length;
+      counts.set(group.id, selCount);
+    }
+    return counts;
+  }, [visibleGroups, selectedHashes]);
+
   // 当选中分组改变时，滚动列表使其聚焦
   useEffect(() => {
     if (!selectedGroupId || !listRef.current) return;
@@ -116,9 +128,7 @@ export function FloatingGroupList({
             {/* 列表区 */}
             <div className={cls.list} ref={listRef}>
               {visibleGroups.map((group) => {
-                const selCount = group.pictureHashes.filter((h) =>
-                  selectedHashes.has(h),
-                ).length;
+                const selCount = groupSelectionCounts.get(group.id) ?? 0;
 
                 return (
                   <GroupListItem
