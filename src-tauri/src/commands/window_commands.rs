@@ -26,7 +26,7 @@ pub async fn open_main_window(
         existing.set_focus().map_err(|e| e.to_string())?;
     } else {
         // 创建新的 Main 窗口
-        let _main_window = WebviewWindowBuilder::new(
+        let main_window = WebviewWindowBuilder::new(
             &app,
             "main",
             tauri::WebviewUrl::App("index.html".into()),
@@ -36,6 +36,9 @@ pub async fn open_main_window(
         .center()
         .build()
         .map_err(|e| e.to_string())?;
+
+        // 默认最大化
+        main_window.maximize().map_err(|e| e.to_string())?;
     }
 
     // 关闭 Welcome 窗口

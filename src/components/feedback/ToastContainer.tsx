@@ -17,7 +17,7 @@ export function ToastContainer() {
   const toasts = useToastStore((s) => s.toasts);
 
   return (
-    <div style={containerStyle}>
+    <div style={containerStyle} aria-live="polite" aria-relevant="additions removals">
       <AnimatePresence mode="popLayout">
         {toasts.map((toast) => (
           <motion.div

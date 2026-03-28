@@ -18,6 +18,7 @@ export interface SliderProps {
   step?: number;
   onChange: (value: number) => void;
   style?: CSSProperties;
+  'aria-label'?: string;
 }
 
 // ─── 常量 ─────────────────────────────────────────────
@@ -34,6 +35,7 @@ export function Slider({
   step = 1,
   onChange,
   style,
+  'aria-label': ariaLabel,
 }: SliderProps) {
   const trackRef = useRef<HTMLDivElement>(null);
 
@@ -75,6 +77,12 @@ export function Slider({
       className={cls.container}
       style={style}
       onPointerDown={handlePointerDown}
+      role="slider"
+      aria-label={ariaLabel}
+      aria-valuemin={min}
+      aria-valuemax={max}
+      aria-valuenow={value}
+      tabIndex={0}
     >
       {/* 轨道背景 */}
       <div className={cls.trackBg} />

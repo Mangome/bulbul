@@ -54,7 +54,8 @@ export function Toast({ toast }: ToastProps) {
       className={`${styles.toast} ${styles[toast.type]}`}
       onMouseEnter={pauseTimer}
       onMouseLeave={startTimer}
-      role="alert"
+      role={toast.type === 'error' ? 'alert' : 'status'}
+      aria-atomic="true"
     >
       <span className={styles.icon}>{ICONS[toast.type]}</span>
       <div className={styles.content}>

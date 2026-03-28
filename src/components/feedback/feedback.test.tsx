@@ -70,7 +70,7 @@ describe('Toast', () => {
     act(() => {
       vi.advanceTimersByTime(1000);
     });
-    fireEvent.mouseEnter(screen.getByRole('alert'));
+    fireEvent.mouseEnter(screen.getByRole('status'));
 
     // 再过 5 秒，不应移除（因为暂停了）
     act(() => {
