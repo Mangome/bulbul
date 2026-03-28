@@ -2,7 +2,7 @@
 // 键盘快捷键 Hook (useKeyboard)
 //
 // 在 MainPage 挂载时注册 window keydown 监听，卸载时移除。
-// 支持 W/S 分组切换、Ctrl 组合键、Escape 多功能。
+// 支持 W/S/↑/↓ 分组切换、Ctrl 组合键、Escape 多功能。
 // 输入框聚焦时跳过所有快捷键。
 // ============================================================
 
@@ -93,11 +93,13 @@ export function useKeyboard({
       // ── 单键 ──
       switch (e.key.toLowerCase()) {
         case 'w':
+        case 'arrowup':
           e.preventDefault();
           useAppStore.getState().navigateGroup('prev');
           onGroupNavigated?.();
           return;
         case 's':
+        case 'arrowdown':
           e.preventDefault();
           useAppStore.getState().navigateGroup('next');
           onGroupNavigated?.();

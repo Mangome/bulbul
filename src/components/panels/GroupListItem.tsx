@@ -37,6 +37,7 @@ export function GroupListItem({
     <div
       className={`${cls.container} ${isActive ? cls.active : ''}`}
       onClick={() => onClick(groupId)}
+      data-group-id={groupId}
     >
       {/* 缩略图 */}
       <div className={cls.thumbnail}>

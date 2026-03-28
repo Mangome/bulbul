@@ -7,7 +7,7 @@
 // 支持收叠为小图标按钮
 // ============================================================
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GroupListItem } from './GroupListItem';
 import { useAppStore } from '../../stores/useAppStore';
@@ -40,12 +40,27 @@ export function FloatingGroupList({
   const selectedGroupId = useAppStore((s) => s.selectedGroupId);
   const selectedHashes = useSelectionStore((s) => s.selectedHashes);
   const [collapsed, setCollapsed] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
 
   // 过滤空分组
   const visibleGroups = useMemo(
     () => groups.filter((g) => g.imageCount > 0),
     [groups],
   );
+
+  // 当选中分组改变时，滚动列表使其聚焦
+  useEffect(() => {
+    if (!selectedGroupId || !listRef.current) return;
+
+    const activeElement = listRef.current.querySelector(
+      `[data-group-id="${selectedGroupId}"]`,
+    ) as HTMLElement | null;
+
+    if (activeElement) {
+      // 滚动使元素在可视区域中央
+      activeElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [selectedGroupId]);
 
   return (
     <motion.div
@@ -93,7 +108,7 @@ export function FloatingGroupList({
             </div>
 
             {/* 列表区 */}
-            <div className={cls.list}>
+            <div className={cls.list} ref={listRef}>
               {visibleGroups.map((group) => {
                 const selCount = group.pictureHashes.filter((h) =>
                   selectedHashes.has(h),
