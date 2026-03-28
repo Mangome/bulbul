@@ -1,25 +1,17 @@
 // ============================================================
 // 悬浮控制栏 (FloatingControlBar)
 //
-// 底部居中毛玻璃面板，与左侧面板统一视觉语言
-// 包含：缩放控件 | 视图控制 | 导出入口 | 主题切换
+// 底部居中毛玻璃面板
+// 包含：缩放控件 | 视图控制 | 进度圆点 | 主题切换
 // ============================================================
 
 import { useCallback } from 'react';
 import { motion } from 'motion/react';
 import { Button } from '../common/Button';
 import { Slider } from '../common/Slider';
-import { Badge } from '../common/Badge';
 import { useCanvasStore } from '../../stores/useCanvasStore';
-import { useSelectionStore } from '../../stores/useSelectionStore';
 import { useThemeStore } from '../../stores/useThemeStore';
 import cls from './FloatingControlBar.module.css';
-
-// ─── 类型 ─────────────────────────────────────────────
-
-export interface FloatingControlBarProps {
-  onExport: () => void;
-}
 
 // ─── 常量 ─────────────────────────────────────────────
 
@@ -28,15 +20,16 @@ const MAX_ZOOM_PERCENT = 300;
 
 // ─── 组件 ─────────────────────────────────────────────
 
-export function FloatingControlBar({ onExport }: FloatingControlBarProps) {
+export function FloatingControlBar() {
   const zoomLevel = useCanvasStore((s) => s.zoomLevel);
   const setZoom = useCanvasStore((s) => s.setZoom);
   const zoomIn = useCanvasStore((s) => s.zoomIn);
   const zoomOut = useCanvasStore((s) => s.zoomOut);
   const fitToWindow = useCanvasStore((s) => s.fitToWindow);
   const resetZoom = useCanvasStore((s) => s.resetZoom);
-
-  const selectedCount = useSelectionStore((s) => s.selectedCount);
+  const currentGroupIndex = useCanvasStore((s) => s.currentGroupIndex);
+  const groupCount = useCanvasStore((s) => s.groupCount);
+  const goToGroup = useCanvasStore((s) => s.goToGroup);
 
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
@@ -56,6 +49,8 @@ export function FloatingControlBar({ onExport }: FloatingControlBarProps) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: 0.05, ease: [0.4, 0, 0.2, 1] }}
+      role="toolbar"
+      aria-label="画布控制栏"
     >
       {/* 缩放控件区 */}
       <div className={cls.section}>
@@ -69,6 +64,7 @@ export function FloatingControlBar({ onExport }: FloatingControlBarProps) {
             value={zoomPercent}
             step={5}
             onChange={handleSliderChange}
+            aria-label="缩放比例"
           />
         </div>
         <Button variant="ghost" size="sm" onClick={zoomIn}>
@@ -93,38 +89,31 @@ export function FloatingControlBar({ onExport }: FloatingControlBarProps) {
       {/* 分隔线 */}
       <div className={cls.divider} />
 
-      {/* 导出区 */}
-      <div className={cls.section}>
-        <Button
-          variant="primary"
-          size="sm"
-          disabled={selectedCount === 0}
-          onClick={onExport}
-        >
-          导出
-          {selectedCount > 0 && (
-            <Badge
-              variant="primary"
-              style={{
-                background: 'rgba(255,255,255,0.3)',
-                color: '#FFFFFF',
-                marginLeft: '4px',
-              }}
-            >
-              {selectedCount}
-            </Badge>
-          )}
-        </Button>
-      </div>
-
-      {/* 分隔线 */}
-      <div className={cls.divider} />
+      {/* 分组进度圆点 */}
+      {groupCount > 0 && (
+        <>
+          <div className={cls.progressDots}>
+            {Array.from({ length: groupCount }, (_, i) => (
+              <button
+                key={i}
+                className={`${cls.dot} ${i === currentGroupIndex ? cls.dotActive : ''}`}
+                onClick={() => goToGroup(i)}
+                title={`第 ${i + 1} 组`}
+                aria-label={`切换到第 ${i + 1} 组`}
+                aria-current={i === currentGroupIndex ? 'true' : undefined}
+              />
+            ))}
+          </div>
+          <div className={cls.divider} />
+        </>
+      )}
 
       {/* 主题切换 */}
       <button
         className={cls.themeBtn}
         onClick={toggleTheme}
         title={theme === 'light' ? '切换暗色主题' : '切换亮色主题'}
+        aria-label={theme === 'light' ? '切换暗色主题' : '切换亮色主题'}
       >
         {theme === 'light' ? '\u263E' : '\u2600'}
       </button>

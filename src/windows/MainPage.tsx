@@ -2,14 +2,15 @@ import { useEffect, useCallback, useState, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../stores/useAppStore';
 import { useSelectionStore } from '../stores/useSelectionStore';
+import { useCanvasStore } from '../stores/useCanvasStore';
 import { useToastStore } from '../stores/useToastStore';
 import { useProcessing } from '../hooks/useProcessing';
 import { useKeyboard } from '../hooks/useKeyboard';
 import { ProgressDialog } from '../components/dialogs/ProgressDialog';
 import InfiniteCanvas, { type InfiniteCanvasHandle } from '../components/canvas/InfiniteCanvas';
-import { FloatingGroupList } from '../components/panels/FloatingGroupList';
+import { FloatingGroupNav } from '../components/panels/FloatingGroupNav';
 import { FloatingControlBar } from '../components/panels/FloatingControlBar';
-import { computeWaterfallLayout, type LayoutResult, type ImageDimension } from '../utils/layout';
+import { computeHorizontalLayout, type LayoutResult, type ImageDimension } from '../utils/layout';
 import * as imageService from '../services/imageService';
 import { runExportFlow } from '../services/exportService';
 import type { ImageMetadata } from '../types';
@@ -17,7 +18,6 @@ import cls from './MainPage.module.css';
 
 function MainPage() {
   const {
-    currentFolder,
     processingState,
     progress,
     groups,
@@ -30,7 +30,6 @@ function MainPage() {
   const [layout, setLayout] = useState<LayoutResult | null>(null);
   const [fileNames, setFileNames] = useState<Map<string, string>>(new Map());
   const [metadataMap, setMetadataMap] = useState<Map<string, ImageMetadata>>(new Map());
-  const [thumbnailUrls, setThumbnailUrls] = useState<Map<string, string>>(new Map());
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<InfiniteCanvasHandle>(null);
 
@@ -81,35 +80,26 @@ function MainPage() {
     }
   }, [setFolder, startProcessing]);
 
-  // ── 分组跳转回调 ──
-  const handleGroupClick = useCallback(
-    (groupId: number) => {
-      useAppStore.getState().selectGroup(groupId);
-      // 计算目标分组在布局中的 Y 坐标
-      if (layout) {
-        const titleItem = layout.groupTitles.find(
-          (t) => t.groupId === groupId,
-        );
-        if (titleItem && canvasRef.current) {
-          canvasRef.current.scrollToY(titleItem.y);
-        }
-      }
-    },
-    [layout],
-  );
-
-  // ── 键盘快捷键分组导航后滚动 ──
-  const handleGroupNavigated = useCallback(() => {
-    if (!layout) return;
-    const { selectedGroupId } = useAppStore.getState();
-    if (selectedGroupId == null) return;
-    const titleItem = layout.groupTitles.find(
-      (t) => t.groupId === selectedGroupId,
-    );
-    if (titleItem && canvasRef.current) {
-      canvasRef.current.scrollToY(titleItem.y);
+  // ── 全选当前分组 ──
+  const handleSelectAll = useCallback(() => {
+    const { currentGroupIndex } = useCanvasStore.getState();
+    const { groups } = useAppStore.getState();
+    const group = groups[currentGroupIndex];
+    if (group) {
+      useSelectionStore.getState().selectAllInGroup(group.pictureHashes);
+      canvasRef.current?.syncSelectionVisuals();
     }
-  }, [layout]);
+  }, []);
+
+  // ── 分组导航回调（左右切换后同步 AppStore） ──
+  const handleGroupNavigated = useCallback(() => {
+    const { currentGroupIndex } = useCanvasStore.getState();
+    const { groups } = useAppStore.getState();
+    if (groups[currentGroupIndex]) {
+      useAppStore.getState().selectGroup(groups[currentGroupIndex].id);
+    }
+    canvasRef.current?.syncSelectionVisuals();
+  }, []);
 
   // ── 键盘快捷键 ──
   useKeyboard({
@@ -129,7 +119,6 @@ function MainPage() {
         const folder = await invoke<string | null>('get_current_folder');
         if (!folder) return;
 
-        // 获取文件夹信息
         const info = await invoke<{
           path: string;
           name: string;
@@ -138,8 +127,6 @@ function MainPage() {
         }>('get_folder_info', { path: folder });
 
         setFolder(folder, info);
-
-        // 自动触发处理
         await startProcessing(folder);
       } catch (err) {
         console.error('处理初始化失败:', err);
@@ -171,7 +158,7 @@ function MainPage() {
 
       if (cancelled) return;
 
-      // 批量获取元数据 — Rust 返回 HashMap<String, ImageMetadata>
+      // 批量获取元数据
       let metaMap = new Map<string, ImageMetadata>();
       try {
         const metaResult = await imageService.getBatchMetadata(allHashes);
@@ -181,7 +168,6 @@ function MainPage() {
           metaMap.set(hash, meta);
         }
       } catch (err) {
-        // 元数据获取失败不阻塞画布渲染，使用默认宽高比
         console.warn('元数据获取失败，将使用默认宽高比:', err);
       }
 
@@ -198,9 +184,9 @@ function MainPage() {
         }
       }
 
-      // 计算布局
+      // 计算水平分组布局
       const viewportWidth = canvasContainerRef.current?.clientWidth ?? window.innerWidth;
-      const layoutResult = computeWaterfallLayout(groups, imageDims, viewportWidth);
+      const layoutResult = computeHorizontalLayout(groups, imageDims, viewportWidth);
 
       if (cancelled) return;
 
@@ -208,18 +194,10 @@ function MainPage() {
       setMetadataMap(metaMap);
       setLayout(layoutResult);
 
-      // 为分组代表图构建缩略图 URL
-      const thumbUrls = new Map<string, string>();
-      for (const group of groups) {
-        try {
-          const url = await imageService.getImageUrl(group.representativeHash, 'thumbnail');
-          if (url) thumbUrls.set(group.representativeHash, url);
-        } catch {
-          // 缩略图加载失败不阻塞
-        }
-      }
-      if (!cancelled) {
-        setThumbnailUrls(thumbUrls);
+      // 初始化分组导航状态
+      useCanvasStore.getState().setGroupCount(groups.length);
+      if (groups.length > 0) {
+        useAppStore.getState().selectGroup(groups[0].id);
       }
     };
 
@@ -232,12 +210,6 @@ function MainPage() {
   }, [cancelProcessing]);
 
   const isCanvasReady = processingState === 'completed' && layout !== null;
-
-  // 文件夹显示名（从路径中提取目录名）
-  const folderName = currentFolder
-    ? currentFolder.split(/[\\/]/).filter(Boolean).pop() ?? currentFolder
-    : null;
-  const imageTotal = progress?.total ?? 0;
 
   return (
     <div className={cls.container}>
@@ -261,14 +233,12 @@ function MainPage() {
 
             {/* 悬浮面板层 — pointer-events: none 防止拦截画布事件 */}
             <div className={cls.panelLayer}>
-              <FloatingGroupList
+              <FloatingGroupNav
                 groups={groups}
-                thumbnailUrls={thumbnailUrls}
-                onGroupClick={handleGroupClick}
-                folderName={folderName}
-                imageTotal={imageTotal}
+                onExport={handleExport}
+                onSelectAll={handleSelectAll}
               />
-              <FloatingControlBar onExport={handleExport} />
+              <FloatingControlBar />
             </div>
           </>
         ) : (

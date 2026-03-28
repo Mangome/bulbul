@@ -69,6 +69,8 @@ export function FloatingGroupList({
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
       layout
+      role="complementary"
+      aria-label="分组列表面板"
     >
       {/* 收叠态：仅显示展开按钮 */}
       {collapsed && (
@@ -76,6 +78,8 @@ export function FloatingGroupList({
           className={cls.toggleBtn}
           onClick={() => setCollapsed(false)}
           title="展开面板"
+          aria-label="展开分组列表面板"
+          aria-expanded={false}
         >
           ▶
         </button>
@@ -95,6 +99,8 @@ export function FloatingGroupList({
                   className={cls.toggleBtn}
                   onClick={() => setCollapsed(true)}
                   title="收叠面板"
+                  aria-label="收叠分组列表面板"
+                  aria-expanded={true}
                 >
                   ◀
                 </button>

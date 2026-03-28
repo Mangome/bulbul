@@ -37,7 +37,17 @@ export function GroupListItem({
     <div
       className={`${cls.container} ${isActive ? cls.active : ''}`}
       onClick={() => onClick(groupId)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick(groupId);
+        }
+      }}
       data-group-id={groupId}
+      role="button"
+      tabIndex={0}
+      aria-pressed={isActive}
+      aria-label={`${name}，${imageCount} 张图片，${Math.round(avgSimilarity)}% 相似度${selectedCount > 0 ? `，已选 ${selectedCount} 张` : ''}`}
     >
       {/* 缩略图 */}
       <div className={cls.thumbnail}>

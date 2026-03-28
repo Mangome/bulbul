@@ -2,7 +2,7 @@
    FloatingControlBar 组件 - 底部浮动控制栏
    
    底部居中毛玻璃面板，与左侧面板统一视觉语言
-   包含：缩放控件 | 视图控制 | 导出 | 主题切换
+   包含：缩放控件 | 视图控制 | 进度圆点 | 导出 | 主题切换
 ════════════════════════════════════════════════════════════════════════════ */
 
 .container {
@@ -78,6 +78,45 @@
   background: var(--color-border);
   margin: 0;
   opacity: 0.5;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   进度圆点
+──────────────────────────────────────────────────────────────── */
+
+.progressDots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  background: var(--color-border);
+  transition: 
+    background-color var(--transition-fast),
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.dot:hover {
+  background: var(--color-text-muted);
+  transform: scale(1.25);
+}
+
+.dotActive {
+  background: var(--color-primary);
+  transform: scale(1.25);
+  box-shadow: 0 0 0 2px var(--color-primary-light);
+}
+
+.dotActive:hover {
+  background: var(--color-primary);
 }
 
 /* ────────────────────────────────────────────────────────────────
