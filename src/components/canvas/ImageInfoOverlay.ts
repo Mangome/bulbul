@@ -89,8 +89,9 @@ export class ImageInfoOverlay extends Container {
       .rect(0, overlayY + overlayHeight * 0.4, itemWidth, overlayHeight * 0.6)
       .fill({ color: 0x000000, alpha: 0.7 });
 
-    // ── 文件名 ──
-    this.nameText.text = truncateFileName(fileName, 30);
+    // ── 文件名（根据宽度自适应截断） ──
+    const maxChars = maxCharsForWidth(itemWidth);
+    this.nameText.text = truncateFileName(fileName, maxChars);
     this.nameText.x = LEFT_PADDING;
     this.nameText.y = overlayY + BOTTOM_PADDING;
 
@@ -108,8 +109,11 @@ export class ImageInfoOverlay extends Container {
         this.paramContainer.addChild(badge);
         offsetX += badge.width + BADGE_GAP;
 
-        // 超出宽度时不再添加
-        if (offsetX > itemWidth - LEFT_PADDING) break;
+        // 超出宽度时移除刚添加的 badge 并停止
+        if (offsetX > itemWidth - LEFT_PADDING) {
+          this.paramContainer.removeChild(badge);
+          break;
+        }
       }
     }
   }
@@ -157,17 +161,33 @@ function buildParamBadges(meta: ImageMetadata): string[] {
   return badges;
 }
 
-/** 截断文件名 */
-function truncateFileName(name: string, maxLen: number): string {
-  if (name.length <= maxLen) return name;
+/**
+ * 根据可用像素宽度截断文件名。
+ * 保留扩展名，中间用 '...' 省略。
+ * maxChars 是上限防止极端长字符串进入 PixiJS Text。
+ */
+function truncateFileName(name: string, maxChars: number): string {
+  if (name.length <= maxChars) return name;
   const ext = name.lastIndexOf('.');
-  if (ext > 0 && name.length - ext <= 5) {
+  if (ext > 0 && name.length - ext <= 6) {
     const namepart = name.substring(0, ext);
     const extpart = name.substring(ext);
-    const truncLen = maxLen - 3 - extpart.length;
+    const truncLen = maxChars - 3 - extpart.length;
     if (truncLen > 0) {
       return namepart.substring(0, truncLen) + '...' + extpart;
     }
   }
-  return name.substring(0, maxLen - 3) + '...';
+  return name.substring(0, maxChars - 3) + '...';
+}
+
+/**
+ * 根据图片项宽度估算合理的最大字符数。
+ * 宽图显示更多字符，窄图少显示。
+ */
+function maxCharsForWidth(itemWidth: number): number {
+  // 约 6px / 字符 (fontSize 11，系统字体)
+  const availableWidth = itemWidth - LEFT_PADDING * 2;
+  const estimated = Math.floor(availableWidth / 6.5);
+  // 下限 12 字符（至少显示「abc...xyz.nef」），上限 80
+  return Math.max(12, Math.min(80, estimated));
 }

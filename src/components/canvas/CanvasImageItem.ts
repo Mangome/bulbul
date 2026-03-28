@@ -276,8 +276,12 @@ export class CanvasImageItem extends Container {
 
   // ── 选中动画 ────────────────────────────────────────
 
-  /** 选中动画时长（ms） */
-  private static readonly SEL_ANIM_DURATION = 200;
+  /** 选中动画时长（ms）— 尊重 prefers-reduced-motion */
+  private static readonly SEL_ANIM_DURATION =
+    typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      ? 0
+      : 200;
 
   /** 选中时渐入动画：边框 alpha 0→1，checkmark scale 0→1（弹性） */
   private _animateSelectionIn(): void {
