@@ -13,6 +13,9 @@ import * as imageService from '../services/imageService';
 /** 默认内存上限 300MB（GPU 纹理以 RGBA 4 字节/像素计） */
 const DEFAULT_MEMORY_LIMIT = 300 * 1024 * 1024;
 
+/** 缩略图的原始像素宽度（与后端 THUMBNAIL_WIDTH 保持一致） */
+const THUMBNAIL_PIXEL_WIDTH = 200;
+
 /** 估算单个纹理的 GPU 内存占用（RGBA 4 bytes/pixel） */
 export function estimateTextureBytes(texture: Texture): number {
   const w = texture.width;
@@ -113,9 +116,13 @@ function cacheKey(hash: string, size: string): string {
   return `${hash}:${size}`;
 }
 
-/** 根据缩放级别决定加载的图片尺寸 */
-export function getSizeForZoom(zoomLevel: number): string {
-  return zoomLevel < 0.5 ? 'thumbnail' : 'medium';
+/**
+ * 根据图片实际显示像素宽度决定加载质量
+ *
+ * @param displayWidth 图片在屏幕上的实际像素宽度 = layoutItem.width × zoomLevel
+ */
+export function getSizeForDisplay(displayWidth: number): string {
+  return displayWidth > THUMBNAIL_PIXEL_WIDTH ? 'medium' : 'thumbnail';
 }
 
 /**
@@ -138,13 +145,14 @@ export class ImageLoader {
   /**
    * 加载图片纹理
    *
+   * @param displayWidth 图片在屏幕上的实际像素宽度
    * @returns Texture 或 null（加载失败）
    */
   async loadTexture(
     hash: string,
-    zoomLevel: number,
+    displayWidth: number,
   ): Promise<Texture | null> {
-    const size = getSizeForZoom(zoomLevel);
+    const size = getSizeForDisplay(displayWidth);
     const key = cacheKey(hash, size);
 
     // 缓存命中
@@ -167,20 +175,17 @@ export class ImageLoader {
   }
 
   /**
-   * 缩放阈值切换时，重新加载视口内图片
+   * 显示分辨率变化时，重新加载视口内图片
    *
-   * @param visibleHashes 当前视口内的 hash 列表
-   * @param newZoomLevel 新的缩放级别
+   * @param entries 当前视口内的图片及其显示宽度
    * @param onTextureReady 纹理加载完成的回调
    */
   async reloadForZoomChange(
-    visibleHashes: string[],
-    newZoomLevel: number,
+    entries: Array<{ hash: string; displayWidth: number }>,
     onTextureReady: (hash: string, texture: Texture) => void,
   ): Promise<void> {
-    const size = getSizeForZoom(newZoomLevel);
-
-    const promises = visibleHashes.map(async (hash) => {
+    const promises = entries.map(async ({ hash, displayWidth }) => {
+      const size = getSizeForDisplay(displayWidth);
       const key = cacheKey(hash, size);
       // 跳过已有正确尺寸的纹理
       if (this.textureCache.has(key)) {
@@ -189,7 +194,7 @@ export class ImageLoader {
         return;
       }
 
-      const texture = await this.loadTexture(hash, newZoomLevel);
+      const texture = await this.loadTexture(hash, displayWidth);
       if (texture) {
         onTextureReady(hash, texture);
       }

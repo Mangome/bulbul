@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { TextureLRUCache, getSizeForZoom, estimateTextureBytes } from './useImageLoader';
+import { TextureLRUCache, getSizeForDisplay, estimateTextureBytes } from './useImageLoader';
 
 // ─── Mock Texture ────────────────────────────────────
 
@@ -131,19 +131,19 @@ describe('TextureLRUCache', () => {
   });
 });
 
-// ─── getSizeForZoom ──────────────────────────────────
+// ─── getSizeForDisplay ───────────────────────────────
 
-describe('getSizeForZoom', () => {
-  it('缩放 < 50% 返回 thumbnail', () => {
-    expect(getSizeForZoom(0.1)).toBe('thumbnail');
-    expect(getSizeForZoom(0.3)).toBe('thumbnail');
-    expect(getSizeForZoom(0.49)).toBe('thumbnail');
+describe('getSizeForDisplay', () => {
+  it('显示宽度 ≤ 200px 返回 thumbnail', () => {
+    expect(getSizeForDisplay(50)).toBe('thumbnail');
+    expect(getSizeForDisplay(100)).toBe('thumbnail');
+    expect(getSizeForDisplay(200)).toBe('thumbnail');
   });
 
-  it('缩放 ≥ 50% 返回 medium', () => {
-    expect(getSizeForZoom(0.5)).toBe('medium');
-    expect(getSizeForZoom(1.0)).toBe('medium');
-    expect(getSizeForZoom(3.0)).toBe('medium');
+  it('显示宽度 > 200px 返回 medium', () => {
+    expect(getSizeForDisplay(201)).toBe('medium');
+    expect(getSizeForDisplay(500)).toBe('medium');
+    expect(getSizeForDisplay(900)).toBe('medium');
   });
 });
 
