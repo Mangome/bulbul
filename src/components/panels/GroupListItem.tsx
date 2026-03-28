@@ -4,8 +4,8 @@
 // 展示代表图缩略图、分组名、图片数量、平均相似度、已选中数 Badge
 // ============================================================
 
-import type { CSSProperties } from 'react';
 import { Badge } from '../common/Badge';
+import cls from './GroupListItem.module.css';
 
 // ─── 类型 ─────────────────────────────────────────────
 
@@ -35,31 +35,28 @@ export function GroupListItem({
 }: GroupListItemProps) {
   return (
     <div
-      style={{
-        ...styles.container,
-        ...(isActive ? styles.active : {}),
-      }}
+      className={`${cls.container} ${isActive ? cls.active : ''}`}
       onClick={() => onClick(groupId)}
     >
       {/* 缩略图 */}
-      <div style={styles.thumbnail}>
+      <div className={cls.thumbnail}>
         {thumbnailUrl ? (
           <img
             src={thumbnailUrl}
             alt={name}
-            style={styles.thumbnailImg}
+            className={cls.thumbnailImg}
           />
         ) : (
-          <div style={styles.thumbnailPlaceholder} />
+          <div className={cls.thumbnailPlaceholder} />
         )}
       </div>
 
       {/* 信息区 */}
-      <div style={styles.info}>
-        <div style={styles.name}>{name}</div>
-        <div style={styles.meta}>
+      <div className={cls.info}>
+        <div className={cls.name}>{name}</div>
+        <div className={cls.meta}>
           <span>{imageCount} 张</span>
-          <span style={styles.dot}>·</span>
+          <span className={cls.dot}>·</span>
           <span>{Math.round(avgSimilarity)}% 相似</span>
         </div>
       </div>
@@ -73,63 +70,3 @@ export function GroupListItem({
     </div>
   );
 }
-
-// ─── 样式 ─────────────────────────────────────────────
-
-const styles: Record<string, CSSProperties> = {
-  container: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    padding: '8px 12px',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    transition: 'background 0.15s',
-    userSelect: 'none',
-  },
-  active: {
-    background: 'rgba(59, 130, 246, 0.1)',
-  },
-  thumbnail: {
-    width: '50px',
-    height: '50px',
-    borderRadius: '6px',
-    overflow: 'hidden',
-    flexShrink: 0,
-    background: '#E5E7EB',
-  },
-  thumbnailImg: {
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-  },
-  thumbnailPlaceholder: {
-    width: '100%',
-    height: '100%',
-    background: '#E5E7EB',
-  },
-  info: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '2px',
-    minWidth: 0,
-  },
-  name: {
-    fontSize: '13px',
-    fontWeight: 600,
-    color: '#1F2937',
-    whiteSpace: 'nowrap' as const,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-  },
-  meta: {
-    fontSize: '11px',
-    color: '#6B7280',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '2px',
-  },
-  dot: {
-    margin: '0 2px',
-  },
-};

@@ -32,25 +32,34 @@ describe('Button', () => {
     expect(btn).toHaveProperty('disabled', true);
   });
 
-  it('primary variant 渲染蓝色背景', () => {
+  it('primary variant 应用 primary className', () => {
     render(<Button variant="primary">主要</Button>);
     const btn = screen.getByRole('button');
-    const styleAttr = btn.getAttribute('style') ?? '';
-    // jsdom 将 #3B82F6 转为 rgb(59, 130, 246)
-    expect(styleAttr).toContain('rgb(59, 130, 246)');
+    expect(btn.className).toContain('primary');
   });
 
-  it('ghost variant 渲染透明背景', () => {
+  it('ghost variant 应用 ghost className', () => {
     render(<Button variant="ghost">幽灵</Button>);
     const btn = screen.getByRole('button');
-    const styleAttr = btn.getAttribute('style') ?? '';
-    expect(styleAttr).toContain('transparent');
+    expect(btn.className).toContain('ghost');
   });
 
-  it('sm size 使用更小的 padding', () => {
+  it('sm size 应用 sm className', () => {
     render(<Button size="sm">小按钮</Button>);
     const btn = screen.getByRole('button');
-    expect(btn.style.padding).toBe('4px 10px');
+    expect(btn.className).toContain('sm');
+  });
+
+  it('disabled 应用 disabled className', () => {
+    render(<Button disabled>禁用</Button>);
+    const btn = screen.getByRole('button');
+    expect(btn.className).toContain('disabled');
+  });
+
+  it('支持自定义 style prop', () => {
+    render(<Button style={{ marginLeft: '8px' }}>按钮</Button>);
+    const btn = screen.getByRole('button');
+    expect(btn.style.marginLeft).toBe('8px');
   });
 });
 
@@ -71,7 +80,6 @@ describe('Slider', () => {
     );
 
     const track = container.firstChild as HTMLElement;
-    // jsdom 中 getBoundingClientRect 返回零尺寸，但仍会触发 onChange
     fireEvent.pointerDown(track, { clientX: 50 });
     expect(onChange).toHaveBeenCalledOnce();
   });
@@ -102,19 +110,16 @@ describe('Badge', () => {
     expect(screen.getByText('3')).toBeDefined();
   });
 
-  it('primary variant 设置蓝色背景', () => {
+  it('primary variant 应用 primary className', () => {
     render(<Badge variant="primary">5</Badge>);
     const badge = screen.getByText('5');
-    const styleAttr = badge.getAttribute('style') ?? '';
-    // jsdom 将 #3B82F6 转为 rgb(59, 130, 246)
-    expect(styleAttr).toContain('rgb(59, 130, 246)');
+    expect(badge.className).toContain('primary');
   });
 
-  it('default variant 设置灰色背景', () => {
+  it('default variant 应用 default className', () => {
     render(<Badge variant="default">0</Badge>);
     const badge = screen.getByText('0');
-    const styleAttr = badge.getAttribute('style') ?? '';
-    expect(styleAttr).toContain('rgba');
+    expect(badge.className).toContain('default');
   });
 
   it('渲染文本内容', () => {

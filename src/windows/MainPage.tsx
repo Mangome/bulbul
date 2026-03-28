@@ -2,6 +2,7 @@ import { useEffect, useCallback, useState, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../stores/useAppStore';
 import { useSelectionStore } from '../stores/useSelectionStore';
+import { useToastStore } from '../stores/useToastStore';
 import { useProcessing } from '../hooks/useProcessing';
 import { useKeyboard } from '../hooks/useKeyboard';
 import { ProgressDialog } from '../components/dialogs/ProgressDialog';
@@ -12,6 +13,7 @@ import { computeWaterfallLayout, type LayoutResult, type ImageDimension } from '
 import * as imageService from '../services/imageService';
 import { runExportFlow } from '../services/exportService';
 import type { ImageMetadata } from '../types';
+import cls from './MainPage.module.css';
 
 function MainPage() {
   const {
@@ -32,6 +34,8 @@ function MainPage() {
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<InfiniteCanvasHandle>(null);
 
+  const { addToast } = useToastStore();
+
   // ── 导出流程 ──
   const handleExport = useCallback(async () => {
     const { selectedHashes } = useSelectionStore.getState();
@@ -44,17 +48,23 @@ function MainPage() {
 
     if (result.success && result.result) {
       const r = result.result;
-      const msg =
-        r.failedFiles.length > 0
-          ? `导出完成：成功 ${r.exportedCount}/${r.totalCount}，失败 ${r.failedFiles.length}`
-          : `导出完成：成功导出 ${r.exportedCount} 张图片到 ${r.targetDir}`;
-      alert(msg);
+      if (r.failedFiles.length > 0) {
+        addToast({
+          type: 'warning',
+          message: `导出完成：成功 ${r.exportedCount}/${r.totalCount}，失败 ${r.failedFiles.length}`,
+        });
+      } else {
+        addToast({
+          type: 'success',
+          message: `导出完成：成功导出 ${r.exportedCount} 张图片到 ${r.targetDir}`,
+        });
+      }
       useSelectionStore.getState().clearSelection();
       canvasRef.current?.syncSelectionVisuals();
     } else if (result.error) {
-      alert(`导出失败：${result.error}`);
+      addToast({ type: 'error', message: `导出失败：${result.error}` });
     }
-  }, []);
+  }, [addToast]);
 
   // ── 打开文件夹（键盘快捷键回调） ──
   const handleOpenFolder = useCallback(async () => {
@@ -224,10 +234,10 @@ function MainPage() {
   const isCanvasReady = processingState === 'completed' && layout !== null;
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <h1 style={styles.title}>Bulbul 主工作区</h1>
-        <p style={styles.subtitle}>
+    <div className={cls.container}>
+      <div className={cls.header}>
+        <h1 className={cls.title}>Bulbul 主工作区</h1>
+        <p className={cls.subtitle}>
           {currentFolder
             ? `文件夹: ${currentFolder}`
             : '等待加载文件夹...'}
@@ -236,8 +246,8 @@ function MainPage() {
 
       {/* 完成状态摘要 */}
       {processingState === 'completed' && progress && (
-        <div style={styles.statusBar}>
-          <span style={styles.statusText}>
+        <div className={cls.statusBar}>
+          <span className={cls.statusText}>
             ✅ 处理完成 — 共 {progress.total} 张
           </span>
         </div>
@@ -251,7 +261,7 @@ function MainPage() {
       />
 
       {/* 画布区域 */}
-      <div ref={canvasContainerRef} style={styles.canvasArea}>
+      <div ref={canvasContainerRef} className={cls.canvasArea}>
         {isCanvasReady ? (
           <>
             <InfiniteCanvas
@@ -262,7 +272,7 @@ function MainPage() {
             />
 
             {/* 悬浮面板层 — pointer-events: none 防止拦截画布事件 */}
-            <div style={styles.panelLayer}>
+            <div className={cls.panelLayer}>
               <FloatingGroupList
                 groups={groups}
                 thumbnailUrls={thumbnailUrls}
@@ -272,8 +282,8 @@ function MainPage() {
             </div>
           </>
         ) : (
-          <div style={styles.placeholder}>
-            <p style={styles.placeholderText}>
+          <div className={cls.placeholder}>
+            <p className={cls.placeholderText}>
               {processingState === 'completed' && groups.length === 0
                 ? '📂 该目录下未找到 NEF 文件'
                 : processingState === 'completed'
@@ -286,65 +296,5 @@ function MainPage() {
     </div>
   );
 }
-
-// ─── 样式 ─────────────────────────────────────────────
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100vh',
-    background: 'var(--color-bg-primary)',
-  },
-  header: {
-    padding: 'var(--spacing-md) var(--spacing-lg)',
-    borderBottom: '1px solid var(--color-border)',
-  },
-  title: {
-    fontSize: 'var(--font-size-xl)',
-    fontWeight: 700,
-    color: 'var(--color-text-primary)',
-    margin: 0,
-  },
-  subtitle: {
-    fontSize: 'var(--font-size-sm)',
-    color: 'var(--color-text-muted)',
-    margin: '4px 0 0',
-    wordBreak: 'break-all' as const,
-  },
-  statusBar: {
-    padding: '12px var(--spacing-lg)',
-    borderBottom: '1px solid var(--color-border)',
-    background: 'var(--color-bg-secondary)',
-  },
-  statusText: {
-    fontSize: 'var(--font-size-sm)',
-    fontWeight: 600,
-    color: 'var(--color-text-primary)',
-  },
-  canvasArea: {
-    flex: 1,
-    position: 'relative' as const,
-    overflow: 'hidden',
-  },
-  panelLayer: {
-    position: 'absolute' as const,
-    inset: 0,
-    pointerEvents: 'none' as const,
-    zIndex: 10,
-  },
-  placeholder: {
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: 'var(--color-bg-secondary)',
-  },
-  placeholderText: {
-    fontSize: 'var(--font-size-lg)',
-    color: 'var(--color-text-muted)',
-  },
-};
 
 export default MainPage;

@@ -1,0 +1,77 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   Badge 组件 - 精致的数字标签
+   
+   Pill 形状的数字/文本标签，支持多种颜色变体
+   用于计数、状态指示等
+════════════════════════════════════════════════════════════════════════════ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  font-family: inherit;
+  border-radius: 999px;
+  line-height: 1.4;
+  min-width: 20px;
+  white-space: nowrap;
+  user-select: none;
+  height: 20px;
+  transition: all var(--transition-fast);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   变体: Default
+──────────────────────────────────────────────────────────────── */
+
+.default {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-light);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   变体: Primary
+──────────────────────────────────────────────────────────────── */
+
+.primary {
+  background: var(--color-primary);
+  color: #FFFFFF;
+  border: none;
+  box-shadow: var(--shadow-subtle);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   变体: Success
+──────────────────────────────────────────────────────────────── */
+
+.success {
+  background: var(--color-success);
+  color: #FFFFFF;
+  border: none;
+  box-shadow: var(--shadow-subtle);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   变体: Warning
+──────────────────────────────────────────────────────────────── */
+
+.warning {
+  background: var(--color-warning);
+  color: #FFFFFF;
+  border: none;
+  box-shadow: var(--shadow-subtle);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   变体: Danger
+──────────────────────────────────────────────────────────────── */
+
+.danger {
+  background: var(--color-danger);
+  color: #FFFFFF;
+  border: none;
+  box-shadow: var(--shadow-subtle);
+}

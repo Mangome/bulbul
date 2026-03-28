@@ -6,11 +6,13 @@
 // Body: 可滚动分组列表
 // ============================================================
 
-import { type CSSProperties, useMemo } from 'react';
+import { useMemo } from 'react';
+import { motion } from 'motion/react';
 import { GroupListItem } from './GroupListItem';
 import { useAppStore } from '../../stores/useAppStore';
 import { useSelectionStore } from '../../stores/useSelectionStore';
 import type { GroupData } from '../../types';
+import cls from './FloatingGroupList.module.css';
 
 // ─── 类型 ─────────────────────────────────────────────
 
@@ -38,15 +40,20 @@ export function FloatingGroupList({
   );
 
   return (
-    <div style={styles.container}>
+    <motion.div
+      className={cls.container}
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.3, ease: 'easeOut' }}
+    >
       {/* Header */}
-      <div style={styles.header}>
-        <div style={styles.title}>相似度分组</div>
-        <div style={styles.subtitle}>共 {visibleGroups.length} 个分组</div>
+      <div className={cls.header}>
+        <div className={cls.title}>相似度分组</div>
+        <div className={cls.subtitle}>共 {visibleGroups.length} 个分组</div>
       </div>
 
       {/* 列表区 */}
-      <div style={styles.list}>
+      <div className={cls.list}>
         {visibleGroups.map((group) => {
           const selCount = group.pictureHashes.filter((h) =>
             selectedHashes.has(h),
@@ -69,48 +76,6 @@ export function FloatingGroupList({
           );
         })}
       </div>
-    </div>
+    </motion.div>
   );
 }
-
-// ─── 样式 ─────────────────────────────────────────────
-
-const styles: Record<string, CSSProperties> = {
-  container: {
-    position: 'fixed' as const,
-    left: '16px',
-    top: '50%',
-    transform: 'translateY(-50%)',
-    width: '240px',
-    maxHeight: 'calc(100vh - 180px)',
-    background: 'rgba(255, 255, 255, 0.94)',
-    backdropFilter: 'blur(20px)',
-    WebkitBackdropFilter: 'blur(20px)',
-    borderRadius: '12px',
-    boxShadow: '0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.04)',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    overflow: 'hidden',
-    zIndex: 100,
-    pointerEvents: 'auto' as const,
-  },
-  header: {
-    padding: '14px 16px 10px',
-    borderBottom: '1px solid rgba(0, 0, 0, 0.06)',
-  },
-  title: {
-    fontSize: '14px',
-    fontWeight: 700,
-    color: '#1F2937',
-  },
-  subtitle: {
-    fontSize: '11px',
-    color: '#9CA3AF',
-    marginTop: '2px',
-  },
-  list: {
-    flex: 1,
-    overflowY: 'auto' as const,
-    padding: '6px',
-  },
-};

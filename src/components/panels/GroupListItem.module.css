@@ -1,0 +1,106 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   GroupListItem 组件 - 分组列表项
+   
+   显示代表图缩略图、分组名、数量、相似度、选中状态
+   可点击、可悬停、可选中
+════════════════════════════════════════════════════════════════════════════ */
+
+.container {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: 
+    background-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+  user-select: none;
+}
+
+.container:hover:not(.active) {
+  background-color: var(--color-bg-secondary);
+}
+
+/* 选中状态 */
+.active {
+  background-color: var(--color-selected-bg);
+  border: 1px solid var(--color-selected-border);
+  box-shadow: inset 0 0 0 1px var(--color-selected-border);
+}
+
+.active:hover {
+  background-color: rgba(45, 90, 79, 0.12);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   缩略图
+──────────────────────────────────────────────────────────────── */
+
+.thumbnail {
+  width: 48px;
+  height: 48px;
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.thumbnailImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.thumbnailPlaceholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, var(--color-bg-secondary) 0%, var(--color-bg-tertiary) 100%);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   信息区
+──────────────────────────────────────────────────────────────── */
+
+.info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  min-width: 0;
+  flex: 1;
+}
+
+/* 分组名 */
+.name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 元数据 */
+.meta {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.dot {
+  opacity: 0.6;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   徽章 (选中计数)
+──────────────────────────────────────────────────────────────── */
+
+.badge {
+  flex-shrink: 0;
+}

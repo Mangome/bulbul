@@ -1,0 +1,165 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   Button 组件 - 重新设计的按钮系统
+   
+   变体: primary / secondary / ghost
+   尺寸: sm / md
+   
+   设计目标：精致、清晰、响应式、满足所有交互状态
+════════════════════════════════════════════════════════════════════════════ */
+
+/* ────────────────────────────────────────────────────────────────
+   基础样式 - 所有按钮共有
+──────────────────────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  font-weight: var(--font-weight-medium);
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  line-height: 1;
+  border: none;
+  border-radius: 4px;
+  
+  /* 过渡效果 */
+  transition: 
+    background-color var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+/* 按下状态 - 收缩反馈 */
+.btn:active:not(.disabled) {
+  transform: scale(0.98);
+  transition: transform 80ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* 焦点状态 - 通过全局 :focus-visible 处理 */
+.btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   变体 1: Primary Button - 主要行动
+──────────────────────────────────────────────────────────────── */
+
+.primary {
+  background-color: var(--color-primary);
+  color: #FFFFFF;
+  border: 1px solid var(--color-primary);
+  box-shadow: var(--shadow-subtle);
+}
+
+.primary:hover:not(.disabled) {
+  background-color: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+  box-shadow: var(--shadow-normal);
+}
+
+.primary:active:not(.disabled) {
+  background-color: var(--color-primary-active);
+  border-color: var(--color-primary-active);
+  box-shadow: var(--shadow-subtle);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   变体 2: Secondary Button - 次要行动
+──────────────────────────────────────────────────────────────── */
+
+.secondary {
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+}
+
+.secondary:hover:not(.disabled) {
+  background-color: var(--color-bg-tertiary);
+  border-color: var(--color-border);
+  box-shadow: var(--shadow-subtle);
+}
+
+.secondary:active:not(.disabled) {
+  background-color: var(--color-border);
+  border-color: var(--color-text-muted);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   变体 3: Ghost Button - 轻微行动
+──────────────────────────────────────────────────────────────── */
+
+.ghost {
+  background-color: transparent;
+  color: var(--color-primary);
+  border: 1px solid transparent;
+}
+
+.ghost:hover:not(.disabled) {
+  background-color: var(--color-primary-light);
+  color: var(--color-primary-hover);
+  border-color: transparent;
+}
+
+.ghost:active:not(.disabled) {
+  background-color: rgba(45, 90, 79, 0.15);
+  color: var(--color-primary-active);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   尺寸: Small (sm)
+──────────────────────────────────────────────────────────────── */
+
+.sm {
+  padding: 6px 12px;
+  font-size: var(--font-size-xs);
+  min-height: 28px;
+  gap: var(--spacing-xs);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   尺寸: Medium (md)
+──────────────────────────────────────────────────────────────── */
+
+.md {
+  padding: 8px 16px;
+  font-size: var(--font-size-sm);
+  min-height: 36px;
+  gap: var(--spacing-sm);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   禁用状态 - 所有变体通用
+──────────────────────────────────────────────────────────────── */
+
+.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+  transform: none !important;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   深色主题调整 (自动通过 CSS 变量)
+──────────────────────────────────────────────────────────────── */
+
+[data-theme="dark"] .primary {
+  box-shadow: var(--shadow-normal);
+}
+
+[data-theme="dark"] .secondary {
+  background-color: var(--color-bg-secondary);
+}
+
+[data-theme="dark"] .ghost {
+  color: var(--color-primary);
+}
+
+[data-theme="dark"] .ghost:hover:not(.disabled) {
+  color: var(--color-primary-hover);
+}
