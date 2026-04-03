@@ -8,18 +8,37 @@ import MainPage from './windows/MainPage';
 
 function AppContent() {
   const [windowLabel, setWindowLabel] = useState<string | null>(null);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [ready, setReady] = useState(false);
 
-  // 加载持久化设置（主题、缩放等）
+  // 初始化顺序：1. 加载设置 2. 获取窗口 label 3. 标记就绪 4. 显示窗口
   useEffect(() => {
-    initSettings();
+    let isMounted = true;
+    const init = async () => {
+      // 第一步：加载持久化设置（主题、缩放等）
+      try {
+        await initSettings();
+      } catch (err) {
+        console.error('初始化设置失败:', err);
+      }
+      if (isMounted) {
+        setSettingsLoaded(true);
+      }
+    };
+    init();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
+  // 第二步：获取窗口 label（只在设置加载完成后）
   useEffect(() => {
-    setWindowLabel(getCurrentWindow().label);
-  }, []);
+    if (settingsLoaded) {
+      setWindowLabel(getCurrentWindow().label);
+    }
+  }, [settingsLoaded]);
 
-  // 页面组件挂载后，标记为就绪
+  // 第三步：标记就绪
   useEffect(() => {
     if (windowLabel !== null) {
       // 等下一帧确保 DOM 已更新，再显示窗口
@@ -29,7 +48,7 @@ function AppContent() {
     }
   }, [windowLabel]);
 
-  // ready 后显示窗口（配合 visible: false）
+  // 第四步：显示窗口（配合 visible: false）
   useEffect(() => {
     if (ready) {
       getCurrentWindow().show();
