@@ -154,6 +154,16 @@ fn parse_datetime(exif: &Exif, tag: Tag) -> Option<String> {
     }
 }
 
+/// 求最大公约数
+fn gcd(mut a: u32, mut b: u32) -> u32 {
+    while b != 0 {
+        let t = b;
+        b = a % b;
+        a = t;
+    }
+    a
+}
+
 /// 获取快门速度的字符串表示
 fn get_exposure_time_string(exif: &Exif) -> Option<String> {
     let field = exif.get_field(Tag::ExposureTime, In::PRIMARY)?;
@@ -163,10 +173,14 @@ fn get_exposure_time_string(exif: &Exif) -> Option<String> {
             if r.num == 0 {
                 return Some("0".to_string());
             }
-            if r.denom == 1 {
-                Some(format!("{}", r.num))
+            // 约分：EXIF Rational 不保证是最简分数（如 10/20000 应显示为 1/2000）
+            let g = gcd(r.num, r.denom);
+            let num = r.num / g;
+            let denom = r.denom / g;
+            if denom == 1 {
+                Some(format!("{}", num))
             } else {
-                Some(format!("{}/{}", r.num, r.denom))
+                Some(format!("{}/{}", num, denom))
             }
         }
         _ => Some(field.display_value().to_string().trim_matches('"').to_string()),
