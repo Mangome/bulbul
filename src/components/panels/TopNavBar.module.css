@@ -40,7 +40,7 @@
 .navSection {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: 2px;
   flex-shrink: 0;
 }
 
@@ -48,63 +48,72 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: var(--font-size-lg);
+  font-size: 14px;
   line-height: 1;
-  color: var(--color-text-secondary);
+  color: var(--color-text-muted);
   background: transparent;
-  border: 1px solid var(--color-border);
+  border: none;
   padding: 0;
   margin: 0;
   
   transition:
     background-color var(--transition-fast),
-    color var(--transition-fast),
-    border-color var(--transition-fast);
+    color var(--transition-fast);
 }
 
 .navBtn:hover {
   background-color: var(--color-bg-tertiary);
   color: var(--color-text-primary);
-  border-color: var(--color-text-muted);
 }
 
 .navBtn:active {
-  transform: scale(0.95);
+  transform: scale(0.92);
 }
 
 .navBtnDisabled {
-  opacity: 0.3;
+  opacity: 0.25;
   pointer-events: none;
 }
 
 .groupName {
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
   white-space: nowrap;
   max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
+  padding: 0 4px;
+  user-select: none;
 }
 
 /* ────────────────────────────────────────────────────────────────
    路径显示
 ──────────────────────────────────────────────────────────────── */
 
+.pathDivider {
+  width: 1px;
+  height: 14px;
+  background: var(--color-border);
+  margin: 0 var(--spacing-sm);
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
 .folderPath {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 4px;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
   cursor: pointer;
   background: transparent;
   border: none;
-  max-width: 280px;
+  max-width: 300px;
   flex-shrink: 1;
   min-width: 0;
 
@@ -121,25 +130,49 @@
   background-color: var(--color-primary-light);
 }
 
+.pathIcon {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
 .pathText {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--color-text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace);
-  letter-spacing: -0.2px;
+  letter-spacing: -0.1px;
+}
+
+.folderPath:hover .pathIcon {
+  opacity: 1;
 }
 
 .folderPath:hover .pathText {
   color: var(--color-text-secondary);
 }
 
-.copyHint {
-  font-size: 10px;
+.folderPathCopied {
+  background-color: color-mix(in srgb, var(--color-success) 12%, transparent);
+}
+
+.pathContent {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.copiedContent {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   color: var(--color-success);
-  flex-shrink: 0;
-  font-weight: var(--font-weight-semibold);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
 }
 
 /* ────────────────────────────────────────────────────────────────

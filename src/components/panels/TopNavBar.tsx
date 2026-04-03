@@ -6,7 +6,7 @@
 // ============================================================
 
 import { useState, useCallback, useMemo } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Button } from '../common/Button';
 import { Badge } from '../common/Badge';
 import { useCanvasStore } from '../../stores/useCanvasStore';
@@ -82,7 +82,7 @@ export function TopNavBar({ groups, folderPath, onExport, onSelectAll }: TopNavB
           title="上一组 (←)"
           aria-label="上一组"
         >
-          ‹
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
         </button>
 
         <span className={cls.groupName}>{group.name}</span>
@@ -94,21 +94,49 @@ export function TopNavBar({ groups, folderPath, onExport, onSelectAll }: TopNavB
           title="下一组 (→)"
           aria-label="下一组"
         >
-          ›
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
         </button>
       </div>
 
       {/* 路径显示 */}
       {displayPath && (
-        <button
-          className={cls.folderPath}
-          onClick={handleCopyPath}
-          title={copied ? '已复制' : folderPath!}
-          aria-label={`当前目录: ${folderPath}`}
-        >
-          <span className={cls.pathText}>{displayPath}</span>
-          {copied && <span className={cls.copyHint}>✓</span>}
-        </button>
+        <>
+          <span className={cls.pathDivider} />
+          <button
+            className={`${cls.folderPath} ${copied ? cls.folderPathCopied : ''}`}
+            onClick={handleCopyPath}
+            title={copied ? '已复制' : folderPath!}
+            aria-label={`当前目录: ${folderPath}`}
+          >
+            <AnimatePresence mode="wait">
+              {copied ? (
+                <motion.span
+                  key="copied"
+                  className={cls.copiedContent}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  transition={{ duration: 0.15 }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                  <span>已复制</span>
+                </motion.span>
+              ) : (
+                <motion.span
+                  key="path"
+                  className={cls.pathContent}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                >
+                  <svg className={cls.pathIcon} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg>
+                  <span className={cls.pathText}>{displayPath}</span>
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </button>
+        </>
       )}
 
       {/* 中区：进度条 */}
