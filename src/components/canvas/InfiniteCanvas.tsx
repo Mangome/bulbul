@@ -27,9 +27,10 @@ import {
   diffVisibleItems,
   type ViewportRect,
 } from '../../utils/viewport';
-import type {
-  LayoutResult,
-  LayoutItem,
+import {
+  DEFAULT_LAYOUT_CONFIG,
+  type LayoutResult,
+  type LayoutItem,
 } from '../../utils/layout';
 import type { ImageMetadata } from '../../types';
 import { useCanvasStore } from '../../stores/useCanvasStore';
@@ -264,11 +265,13 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
     const page = layout.pages[groupIndex];
     const screenHeight = app.screen.height;
-    const contentHeight = page.contentHeight * zoom;
+    const { paddingTop, paddingBottom } = DEFAULT_LAYOUT_CONFIG;
+    const pureContentHeight = (page.contentHeight - paddingTop - paddingBottom) * zoom;
 
-    // 内容比视口矮时，向下偏移使其居中
-    if (contentHeight < screenHeight) {
-      return (screenHeight - contentHeight) / 2;
+    // 用纯内容高度（去掉布局 padding）判断是否需要居中
+    if (pureContentHeight < screenHeight) {
+      // 居中纯内容区域，减去 paddingTop 补偿图片起始 Y 偏移
+      return (screenHeight - pureContentHeight) / 2 - paddingTop * zoom;
     }
     return 0;
   }, [layout]);
@@ -624,6 +627,19 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     }
   }, [currentGroupIndex, isTransitioning, positionToGroup]);
 
+  // ── layout 变化时重置到第一组（目录切换时触发） ──
+  useEffect(() => {
+    if (!layout.pages || layout.pages.length === 0) return;
+
+    // 重置分组索引到 0，不执行动画
+    useCanvasStore.setState({
+      currentGroupIndex: 0,
+      isTransitioning: false,
+    });
+    // 立即定位到第一组
+    positionToGroup(0, false);
+  }, [layout, positionToGroup]);
+
   // ── 暴露 handle ──
   useImperativeHandle(ref, () => ({
     syncSelectionVisuals: () => {
@@ -692,16 +708,21 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     const page = layout.pages[currentGroupIndex];
 
     // 根据视口和内容尺寸计算适应窗口的缩放比例
-    const FIT_PADDING = 40; // px 留白
+    const FIT_PADDING_X = 40; // px 左右留白
+    const FIT_PADDING_Y = 20; // px 上下留白
     const screenWidth = app.screen.width;
     const screenHeight = app.screen.height;
-    const effectiveWidth = screenWidth - FIT_PADDING * 2;
-    const effectiveHeight = screenHeight - FIT_PADDING * 2;
+    const effectiveWidth = screenWidth - FIT_PADDING_X * 2;
+    const effectiveHeight = screenHeight - FIT_PADDING_Y * 2;
 
     let newZoom = 1.0;
     if (page && layout.pageWidth > 0 && page.contentHeight > 0) {
+      // 使用不含布局 padding 的纯内容高度来计算缩放，避免上下留白过大
+      const pureContentHeight = page.contentHeight
+        - DEFAULT_LAYOUT_CONFIG.paddingTop
+        - DEFAULT_LAYOUT_CONFIG.paddingBottom;
       const zoomX = effectiveWidth / layout.pageWidth;
-      const zoomY = effectiveHeight / page.contentHeight;
+      const zoomY = effectiveHeight / (pureContentHeight > 0 ? pureContentHeight : page.contentHeight);
       newZoom = Math.max(MIN_ZOOM, Math.min(Math.min(zoomX, zoomY), MAX_ZOOM));
     }
 
