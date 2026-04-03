@@ -72,6 +72,14 @@ function MainPage() {
     try {
       const folder = await invoke<string | null>('select_folder');
       if (!folder) return;
+
+      // 与当前目录相同时仅弹提示，不重复加载
+      const { currentFolder } = useAppStore.getState();
+      if (currentFolder && folder.replace(/[\\/]+$/g, '') === currentFolder.replace(/[\\/]+$/g, '')) {
+        addToast({ type: 'info', message: '当前已打开该目录' });
+        return;
+      }
+
       const info = await invoke<{
         path: string; name: string; fileCount: number; rawCount: number;
       }>('get_folder_info', { path: folder });
@@ -80,7 +88,7 @@ function MainPage() {
     } catch (err) {
       console.error('打开文件夹失败:', err);
     }
-  }, [setFolder, startProcessing]);
+  }, [setFolder, startProcessing, addToast]);
 
   // ── 全选当前分组 ──
   const handleSelectAll = useCallback(() => {
