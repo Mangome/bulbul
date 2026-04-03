@@ -2,12 +2,18 @@ import { useEffect, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ErrorBoundary } from './components/feedback/ErrorBoundary';
 import { ToastContainer } from './components/feedback/ToastContainer';
+import { initSettings } from './stores/initSettings';
 import WelcomePage from './windows/WelcomePage';
 import MainPage from './windows/MainPage';
 
 function AppContent() {
   const [windowLabel, setWindowLabel] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+
+  // 加载持久化设置（主题、缩放等）
+  useEffect(() => {
+    initSettings();
+  }, []);
 
   useEffect(() => {
     setWindowLabel(getCurrentWindow().label);
