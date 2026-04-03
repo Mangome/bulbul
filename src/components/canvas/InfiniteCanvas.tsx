@@ -67,6 +67,8 @@ export interface InfiniteCanvasHandle {
   syncSelectionVisuals: () => void;
   /** 将画布视口滚动到指定 Y 坐标 */
   scrollToY: (y: number) => void;
+  /** 更新指定 hash 的 item 元数据（合焦评分逐张到达时调用） */
+  updateItemMetadata: (hash: string) => void;
 }
 
 // ─── Component ────────────────────────────────────────
@@ -89,6 +91,12 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
   // ── 选中状态同步 fn ref（在 effect 内赋值） ──
   const syncSelectionVisualsRef = useRef<(() => void) | null>(null);
+
+  // ── 用 ref 持有最新的 fileNames / metadataMap（避免引用变化传导到初始化 effect） ──
+  const fileNamesRef = useRef(fileNames);
+  fileNamesRef.current = fileNames;
+  const metadataMapRef = useRef(metadataMap);
+  metadataMapRef.current = metadataMap;
 
   // ── Drag state ──
   const isDraggingRef = useRef(false);
@@ -162,8 +170,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       if (canvasItemsRef.current.has(item.hash)) continue;
 
       const canvasItem = new CanvasImageItem(item);
-      const fileName = fileNames.get(item.hash) ?? item.hash;
-      const meta = metadataMap.get(item.hash);
+      const fileName = fileNamesRef.current.get(item.hash) ?? item.hash;
+      const meta = metadataMapRef.current.get(item.hash);
       canvasItem.setImageInfo(fileName, meta);
       canvasItem.updateZoomVisibility(zoomLevelRef.current);
 
@@ -190,7 +198,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     }
 
     visibleItemsRef.current = newVisible;
-  }, [layout, fileNames, metadataMap, setViewport, setViewportRect]);
+  }, [layout, setViewport, setViewportRect]);
 
   // ── 缩放阈值切换 ──
   const handleZoomThresholdChange = useCallback(
@@ -373,6 +381,11 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
       // ── 图片加载器 ──
       imageLoaderRef.current = new ImageLoader(300);
+
+      // ── 从 store 读取已加载的缩放级别（可能从持久化配置恢复） ──
+      const savedZoom = useCanvasStore.getState().zoomLevel;
+      zoomLevelRef.current = savedZoom;
+      contentLayer.scale.set(savedZoom);
 
       // ── 设置分组总数 ──
       useCanvasStore.getState().setGroupCount(layout.pages.length);
@@ -623,6 +636,13 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       scrollYRef.current = y;
       contentLayer.y = -y * zoom;
       updateViewport();
+    },
+    updateItemMetadata: (hash: string) => {
+      const canvasItem = canvasItemsRef.current.get(hash);
+      if (!canvasItem) return;
+      const meta = metadataMapRef.current.get(hash);
+      const fileName = fileNamesRef.current.get(hash) ?? hash;
+      canvasItem.setImageInfo(fileName, meta);
     },
   }), [updateViewport]);
 

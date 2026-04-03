@@ -6,6 +6,7 @@ import { useCanvasStore } from '../stores/useCanvasStore';
 import { useToastStore } from '../stores/useToastStore';
 import { useProcessing } from '../hooks/useProcessing';
 import { useKeyboard } from '../hooks/useKeyboard';
+import { useTauriEvents } from '../hooks/useTauriEvents';
 import { ProgressDialog } from '../components/dialogs/ProgressDialog';
 import InfiniteCanvas, { type InfiniteCanvasHandle } from '../components/canvas/InfiniteCanvas';
 import { FloatingGroupNav } from '../components/panels/FloatingGroupNav';
@@ -106,6 +107,17 @@ function MainPage() {
     onOpenFolder: handleOpenFolder,
     onExport: handleExport,
     onGroupNavigated: handleGroupNavigated,
+  });
+
+  // ── 监听后台合焦评分（逐张更新） ──
+  // 更新 metadataMap 供后续新进入视口的 item 使用
+  useTauriEvents<[string, number]>('focus-score-update', ([hash, score]) => {
+    const meta = metadataMap.get(hash);
+    if (meta) {
+      metadataMap.set(hash, { ...meta, focusScore: score });
+    }
+    // 通知画布直接更新对应 item（绕过 React re-render）
+    canvasRef.current?.updateItemMetadata(hash);
   });
 
   // 创建 memoized fileNames，避免处理完成时频繁重建对象

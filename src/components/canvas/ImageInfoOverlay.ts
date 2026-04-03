@@ -38,6 +38,15 @@ const FILE_NAME_FONT_SIZE = 11;
 /** 参数基础字号 */
 const PARAM_FONT_SIZE = 10;
 
+/** 合焦评分星级颜色 */
+const FOCUS_SCORE_COLORS: Record<number, number> = {
+  5: 0x4CAF50,  // 绿色
+  4: 0x2196F3,  // 蓝色
+  3: 0xFF9800,  // 橙色
+  2: 0xF44336,  // 红色
+  1: 0xF44336,  // 红色
+};
+
 // ─── ImageInfoOverlay ────────────────────────────────
 
 export class ImageInfoOverlay extends Container {
@@ -95,6 +104,17 @@ export class ImageInfoOverlay extends Container {
           break;
         }
         badgeObjects.push(badge);
+      }
+
+      // 合焦评分 Badge（特殊颜色）
+      if (metadata.focusScore != null) {
+        const focusBadge = createFocusScoreBadge(metadata.focusScore);
+        testX += focusBadge.width + BADGE_GAP;
+        if (testX - BADGE_GAP <= maxX) {
+          badgeObjects.push(focusBadge);
+        } else {
+          focusBadge.destroy();
+        }
       }
     }
 
@@ -167,6 +187,34 @@ function createBadge(label: string): Container {
 
   bg.roundRect(0, 0, width, height, BADGE_RADIUS)
     .fill({ color: 0x000000, alpha: 0.5 });
+
+  text.x = BADGE_PADDING_X;
+  text.y = BADGE_PADDING_Y;
+
+  container.addChild(bg);
+  container.addChild(text);
+  return container;
+}
+
+/** 创建合焦评分 Badge（带颜色编码） */
+function createFocusScoreBadge(score: number): Container {
+  const container = new Container();
+  const stars = '\u2605'.repeat(score) + '\u2606'.repeat(5 - score);
+  const bgColor = FOCUS_SCORE_COLORS[score] ?? 0x666666;
+
+  const style = new TextStyle({
+    fontSize: PARAM_FONT_SIZE,
+    fontFamily: 'system-ui, -apple-system, sans-serif',
+    fill: 0xFFFFFF,
+  });
+  const text = new Text({ text: stars, style });
+  const bg = new Graphics();
+
+  const width = text.width + BADGE_PADDING_X * 2;
+  const height = text.height + BADGE_PADDING_Y * 2;
+
+  bg.roundRect(0, 0, width, height, BADGE_RADIUS)
+    .fill({ color: bgColor, alpha: 0.75 });
 
   text.x = BADGE_PADDING_X;
   text.y = BADGE_PADDING_Y;

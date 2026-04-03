@@ -23,7 +23,9 @@ export function useProcessing() {
   } = useAppStore();
 
   // 监听进度事件（仅用于实时进度展示）
+  // focus_scoring 是后台异步阶段，不更新主 processingState（避免重新弹出进度对话框）
   useTauriEvents<ProcessingProgress>('processing-progress', (progress) => {
+    if (progress.state === 'focus_scoring') return;
     updateProgress(progress);
     setProcessingState(progress.state);
   });

@@ -50,6 +50,9 @@ export interface ImageMetadata {
   // 文件信息
   fileSize: number | null;
   compression: string | null;
+
+  // 合焦程度评分（1-5 星）
+  focusScore: number | null;
 }
 
 /** 单个分组的数据 */
@@ -89,6 +92,7 @@ export type ProcessingState =
   | "processing"
   | "analyzing"
   | "grouping"
+  | "focus_scoring"
   | "completed"
   | "cancelling"
   | "cancelled"

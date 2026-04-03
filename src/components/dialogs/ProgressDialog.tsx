@@ -9,6 +9,7 @@ const stateLabels: Record<string, string> = {
   processing: '处理图片中...',
   analyzing: '分析相似度中...',
   grouping: '分组中...',
+  focus_scoring: '计算合焦程度中...',
   cancelling: '正在取消...',
   cancelled: '已取消',
   error: '处理出错',
