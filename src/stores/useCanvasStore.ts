@@ -72,7 +72,6 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
 
   fitToWindow: () =>
     set((state) => ({
-      zoomLevel: 1.0,
       viewportX: 0,
       viewportY: 0,
       viewportRect: null,

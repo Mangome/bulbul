@@ -86,7 +86,7 @@ describe('useCanvasStore', () => {
   });
 
   describe('fitToWindow', () => {
-    it('应重置缩放和视口，并递增 fitCounter', () => {
+    it('应重置视口并递增 fitCounter，不改变 zoomLevel', () => {
       useCanvasStore.getState().setZoom(2.0);
       useCanvasStore.getState().setViewport(100, 200);
       useCanvasStore.getState().setViewportRect({ x: 10, y: 20, width: 800, height: 600 });
@@ -94,7 +94,7 @@ describe('useCanvasStore', () => {
       useCanvasStore.getState().fitToWindow();
 
       const state = useCanvasStore.getState();
-      expect(state.zoomLevel).toBe(1.0);
+      expect(state.zoomLevel).toBe(2.0); // zoomLevel 不由 store 重置，由画布计算
       expect(state.viewportX).toBe(0);
       expect(state.viewportY).toBe(0);
       expect(state.viewportRect).toBeNull();

@@ -676,14 +676,31 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     if (fitCounter === 0) return;
 
     const contentLayer = contentLayerRef.current;
-    if (!contentLayer) return;
+    const app = appRef.current;
+    if (!contentLayer || !app) return;
 
-    const newZoom = 1.0;
+    const { currentGroupIndex } = useCanvasStore.getState();
+    const page = layout.pages[currentGroupIndex];
+
+    // 根据视口和内容尺寸计算适应窗口的缩放比例
+    const FIT_PADDING = 40; // px 留白
+    const screenWidth = app.screen.width;
+    const screenHeight = app.screen.height;
+    const effectiveWidth = screenWidth - FIT_PADDING * 2;
+    const effectiveHeight = screenHeight - FIT_PADDING * 2;
+
+    let newZoom = 1.0;
+    if (page && layout.pageWidth > 0 && page.contentHeight > 0) {
+      const zoomX = effectiveWidth / layout.pageWidth;
+      const zoomY = effectiveHeight / page.contentHeight;
+      newZoom = Math.max(MIN_ZOOM, Math.min(Math.min(zoomX, zoomY), MAX_ZOOM));
+    }
+
     contentLayer.scale.set(newZoom);
     zoomLevelRef.current = newZoom;
     scrollYRef.current = 0;
+    setZoom(newZoom);
 
-    const { currentGroupIndex } = useCanvasStore.getState();
     contentLayer.x = computeGroupX(currentGroupIndex, newZoom);
     contentLayer.y = computeVerticalOffset(currentGroupIndex, newZoom);
 
@@ -693,7 +710,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
     handleZoomThresholdChange(newZoom);
     updateViewport();
-  }, [fitCounter, layout, handleZoomThresholdChange, updateViewport, computeVerticalOffset, computeGroupX]);
+  }, [fitCounter, layout, handleZoomThresholdChange, updateViewport, computeVerticalOffset, computeGroupX, setZoom]);
 
   // ── 选中数量播报（屏幕阅读器） ──
   const selectedCount = useSelectionStore((s) => s.selectedCount);
