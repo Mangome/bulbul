@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use tauri::{AppHandle, Manager};
+use tauri::image::Image;
 use tauri::webview::WebviewWindowBuilder;
 
 use crate::state::SessionState;
@@ -37,6 +38,12 @@ pub async fn open_main_window(
         .visible(false)
         .build()
         .map_err(|e| e.to_string())?;
+
+        // 设置窗口图标
+        let icon_bytes = include_bytes!("../../icons/icon.png");
+        if let Ok(icon) = Image::from_bytes(icon_bytes) {
+            let _ = main_window.set_icon(icon);
+        }
 
         // 默认最大化
         main_window.maximize().map_err(|e| e.to_string())?;
