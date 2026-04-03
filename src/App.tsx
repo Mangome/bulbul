@@ -14,6 +14,12 @@ function AppContent() {
   // 初始化顺序：1. 加载设置 2. 获取窗口 label 3. 标记就绪 4. 显示窗口
   useEffect(() => {
     let isMounted = true;
+
+    // 兜底：无论初始化是否成功，最多 3 秒后强制显示窗口
+    const fallbackTimer = setTimeout(() => {
+      getCurrentWindow().show().catch(() => {});
+    }, 3000);
+
     const init = async () => {
       // 第一步：加载持久化设置（主题、缩放等）
       try {
@@ -28,6 +34,7 @@ function AppContent() {
     init();
     return () => {
       isMounted = false;
+      clearTimeout(fallbackTimer);
     };
   }, []);
 
