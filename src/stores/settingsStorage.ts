@@ -32,7 +32,6 @@ export async function loadSettings(): Promise<PersistedSettings> {
       baseDir: BaseDirectory.AppData,
     });
     if (!fileExists) {
-      console.log('[Settings] 配置文件不存在，使用默认值');
       return { ...DEFAULTS };
     }
 
@@ -44,10 +43,8 @@ export async function loadSettings(): Promise<PersistedSettings> {
       zoomLevel: typeof parsed.zoomLevel === 'number' ? parsed.zoomLevel : DEFAULTS.zoomLevel,
       theme: parsed.theme === 'light' || parsed.theme === 'dark' ? parsed.theme : DEFAULTS.theme,
     };
-    console.log('[Settings] 成功加载配置:', result);
     return result;
   } catch (e) {
-    console.warn('[Settings] 加载设置失败，使用默认值:', e);
     return { ...DEFAULTS };
   }
 }
@@ -70,7 +67,6 @@ export async function saveSettings(settings: PersistedSettings): Promise<void> {
     await writeTextFile(SETTINGS_FILE, JSON.stringify(settings, null, 2), {
       baseDir: BaseDirectory.AppData,
     });
-    console.log('[Settings] 配置已保存:', settings);
   } catch (e) {
     console.error('[Settings] 保存设置失败:', e);
   }

@@ -21,7 +21,6 @@ function scheduleSave() {
   saveTimer = setTimeout(() => {
     saveTimer = null;
     const settings = collectSettings();
-    console.log('[Settings] 开始保存配置到磁盘:', settings);
     saveSettings(settings);
   }, 500);
 }
@@ -33,25 +32,21 @@ function scheduleSave() {
 export async function initSettings(): Promise<void> {
   // 如果已经在初始化，返回现有的 Promise（防止重复初始化）
   if (initializationPromise) {
-    console.log('[Settings] 初始化已进行中，返回现有的 Promise');
     return initializationPromise;
   }
 
   // 创建初始化 Promise
   initializationPromise = (async () => {
-    console.log('[Settings] 开始初始化设置...');
     const saved = await loadSettings();
 
     // 应用到各 store
     useThemeStore.getState().setTheme(saved.theme);
     useCanvasStore.getState().setZoom(saved.zoomLevel);
-    console.log('[Settings] 已应用到 store。theme:', saved.theme, 'zoomLevel:', saved.zoomLevel);
 
     // 订阅变更，自动持久化
     useThemeStore.subscribe(
       (state, prev) => {
         if (state.theme !== prev.theme) {
-          console.log('[Settings] 主题已变更:', prev.theme, '->', state.theme);
           scheduleSave();
         }
       },
@@ -60,7 +55,6 @@ export async function initSettings(): Promise<void> {
     useCanvasStore.subscribe(
       (state, prev) => {
         if (state.zoomLevel !== prev.zoomLevel) {
-          console.log('[Settings] 缩放级别已变更:', prev.zoomLevel, '->', state.zoomLevel);
           scheduleSave();
         }
       },
