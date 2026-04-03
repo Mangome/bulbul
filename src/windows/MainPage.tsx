@@ -9,8 +9,8 @@ import { useKeyboard } from '../hooks/useKeyboard';
 import { useTauriEvents } from '../hooks/useTauriEvents';
 import { ProgressDialog } from '../components/dialogs/ProgressDialog';
 import InfiniteCanvas, { type InfiniteCanvasHandle } from '../components/canvas/InfiniteCanvas';
-import { FloatingGroupNav } from '../components/panels/FloatingGroupNav';
-import { FloatingControlBar } from '../components/panels/FloatingControlBar';
+import { TopNavBar } from '../components/panels/TopNavBar';
+import { RightControlPanel } from '../components/panels/RightControlPanel';
 import { computeHorizontalLayout, type LayoutResult, type ImageDimension } from '../utils/layout';
 import * as imageService from '../services/imageService';
 import { runExportFlow } from '../services/exportService';
@@ -244,7 +244,7 @@ function MainPage() {
         onCancel={handleCancel}
       />
 
-      {/* 画布区域 — 全屏 */}
+      {/* 画布区域 */}
       <div ref={canvasContainerRef} className={cls.canvasArea}>
         {isCanvasReady ? (
           <>
@@ -255,15 +255,15 @@ function MainPage() {
               metadataMap={metadataMap}
             />
 
-            {/* 悬浮面板层 — pointer-events: none 防止拦截画布事件 */}
-            <div className={cls.panelLayer}>
-              <FloatingGroupNav
-                groups={groups}
-                onExport={handleExport}
-                onSelectAll={handleSelectAll}
-              />
-              <FloatingControlBar />
-            </div>
+            {/* 顶部导航栏 */}
+            <TopNavBar
+              groups={groups}
+              onExport={handleExport}
+              onSelectAll={handleSelectAll}
+            />
+
+            {/* 右侧控制面板 */}
+            <RightControlPanel />
           </>
         ) : (
           <div className={cls.placeholder}>
