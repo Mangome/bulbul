@@ -62,7 +62,7 @@ export function Toast({ toast }: ToastProps) {
         <p className={styles.message}>{toast.message}</p>
       </div>
       <button className={styles.closeBtn} onClick={handleClose} aria-label="关闭">
-        \u2715
+        ✕
       </button>
     </div>
   );
