@@ -495,29 +495,18 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
       if (useCanvasStore.getState().isTransitioning) return;
 
+      const dx = e.clientX - dragStartRef.current.x;
       const dy = e.clientY - dragStartRef.current.y;
 
       if (!hasDraggedRef.current) {
-        if (Math.abs(dy) < DRAG_DEAD_ZONE) {
+        if (Math.abs(dx) < DRAG_DEAD_ZONE && Math.abs(dy) < DRAG_DEAD_ZONE) {
           return;
         }
         hasDraggedRef.current = true;
       }
 
-      const { currentGroupIndex } = useCanvasStore.getState();
-      const page = layout.pages[currentGroupIndex];
-      if (!page) return;
-
-      const zoom = zoomLevelRef.current;
-      const screenHeight = appRef.current.screen.height;
-      const maxScrollY = Math.max(0, page.contentHeight - screenHeight / zoom);
-
-      const newScrollY = scrollYRef.current - dy / zoom;
-
-      const clampedScrollY = Math.max(0, Math.min(maxScrollY, newScrollY));
-      const vertOffset = computeVerticalOffset(currentGroupIndex, zoom);
-      contentLayer.y = -clampedScrollY * zoom + vertOffset;
-      contentLayer.x = computeGroupX(currentGroupIndex, zoom);
+      contentLayer.x = contentStartRef.current.x + dx;
+      contentLayer.y = contentStartRef.current.y + dy;
 
       updateViewport();
     };
@@ -528,8 +517,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
       if (wasDragging && !hasDraggedRef.current) {
         handleCanvasClick(e);
-      } else       if (wasDragging && hasDraggedRef.current) {
-        // 从 contentLayer.y 反推 scrollY，考虑垂直居中偏移
+      } else if (wasDragging && hasDraggedRef.current) {
+        // 从 contentLayer.y 反推 scrollY
         const contentLayer = contentLayerRef.current;
         if (contentLayer) {
           const zoom = zoomLevelRef.current;
