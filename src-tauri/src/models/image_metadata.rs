@@ -50,6 +50,9 @@ pub struct ImageMetadata {
     // 文件信息
     pub file_size: Option<u64>,
     pub compression: Option<String>,
+
+    // 合焦程度评分（1-5 星）
+    pub focus_score: Option<u32>,
 }
 
 #[cfg(test)]
@@ -65,6 +68,7 @@ mod tests {
         assert!(meta.iso_speed.is_none());
         assert!(meta.gps_latitude.is_none());
         assert!(meta.file_size.is_none());
+        assert!(meta.focus_score.is_none());
     }
 
     #[test]

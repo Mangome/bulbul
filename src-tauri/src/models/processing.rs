@@ -9,6 +9,7 @@ pub enum ProcessingState {
     Processing,
     Analyzing,
     Grouping,
+    FocusScoring,
     Completed,
     Cancelling,
     Cancelled,
@@ -52,6 +53,10 @@ mod tests {
         let cancelling = ProcessingState::Cancelling;
         let json = serde_json::to_string(&cancelling).unwrap();
         assert_eq!(json, "\"cancelling\"");
+
+        let focus_scoring = ProcessingState::FocusScoring;
+        let json = serde_json::to_string(&focus_scoring).unwrap();
+        assert_eq!(json, "\"focus_scoring\"");
     }
 
     #[test]

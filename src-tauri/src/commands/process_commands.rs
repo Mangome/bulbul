@@ -1,7 +1,7 @@
 //! 处理流水线 Commands
 //!
-//! 实现完整的 5 阶段流水线：
-//! Scanning → Processing → Analyzing → Grouping → Completed
+//! 实现完整的 6 阶段流水线：
+//! Scanning → Processing → Analyzing → Grouping → FocusScoring(异步后台) → Completed
 //! 返回 GroupResult。
 
 use std::path::{Path, PathBuf};
@@ -13,6 +13,7 @@ use chrono::NaiveDateTime;
 use tauri::Emitter;
 use tokio::sync::Semaphore;
 
+use crate::core::focus_score;
 use crate::core::grouping::{self, ImageInfoWithPhash};
 use crate::core::phash;
 use crate::core::raw_processor::{self, ProcessResult};
@@ -436,6 +437,24 @@ pub async fn process_folder(
     );
     let _ = app.emit("processing-completed", &group_result);
 
+    // ═══════════════════════════════════════════════════════
+    // 异步阶段 6: FocusScoring — 后台计算合焦程度
+    // ═══════════════════════════════════════════════════════
+    // 启动后台任务，不阻塞主流程返回
+    {
+        let app = app.clone();
+        let results = results.clone();
+        let pipeline_start = Instant::now(); // 重置计时器用于 FocusScoring 阶段
+
+        tokio::spawn(async move {
+            if let Err(e) = compute_focus_scores_background(&app, &results, total, &pipeline_start)
+                .await
+            {
+                log::error!("后台合焦评分失败: {}", e);
+            }
+        });
+    }
+
     Ok(group_result)
 }
 
@@ -582,4 +601,118 @@ fn parse_capture_time(time_str: &str) -> Option<NaiveDateTime> {
         .or_else(|_| NaiveDateTime::parse_from_str(time_str, "%Y-%m-%d %H:%M:%S"))
         .or_else(|_| NaiveDateTime::parse_from_str(time_str, "%Y-%m-%dT%H:%M:%S"))
         .ok()
+}
+
+/// 异步后台计算合焦程度评分
+///
+/// 在单独的任务中计算所有图片的合焦评分，并定期发送进度事件。
+/// 完成后发送 "focus-scores-completed" 事件。
+async fn compute_focus_scores_background(
+    app: &tauri::AppHandle,
+    results: &[ProcessResult],
+    total: usize,
+    focus_scoring_start: &Instant,
+) -> Result<(), String> {
+    if results.is_empty() {
+        return Ok(());
+    }
+
+    // 并发计算配置
+    let max_concurrency = std::cmp::min(4, num_cpus::get()); // 限制在 4 个并发
+    let semaphore = Arc::new(Semaphore::new(max_concurrency));
+    let mut join_set = tokio::task::JoinSet::new();
+
+    // 发出 FocusScoring 阶段开始事件
+    emit_progress(
+        app,
+        ProcessingState::FocusScoring,
+        0,
+        total,
+        None,
+        focus_scoring_start,
+    );
+
+    // 为每个结果生成任务
+    for (idx, result) in results.iter().enumerate() {
+        let sem = Arc::clone(&semaphore);
+        let hash = result.hash.clone();
+        let medium_path = PathBuf::from(&result.medium_path);
+        let filename = result.filename.clone();
+
+        join_set.spawn(async move {
+            let _permit = sem.acquire().await.ok();
+
+            // CPU 密集型操作在 blocking 线程中执行
+            let hash_clone = hash.clone();
+            let medium_path_clone = medium_path.clone();
+            let score = tokio::task::spawn_blocking(move || {
+                focus_score::calculate_focus_score(&medium_path_clone)
+            })
+            .await
+            .map_err(|e| format!("任务失败: {}", e))
+            .and_then(|r| r.map_err(|e| format!("{}", e)));
+
+            (idx, hash_clone, score, filename)
+        });
+    }
+
+    // 流式收集结果，每完成一张立即 emit
+    let mut completed = 0usize;
+
+    while let Some(join_result) = join_set.join_next().await {
+        match join_result {
+            Ok((_idx, hash, Ok(score), filename)) => {
+                completed += 1;
+                let _ = app.emit("focus-score-update", (&hash, score));
+                emit_progress(
+                    app,
+                    ProcessingState::FocusScoring,
+                    completed,
+                    total,
+                    Some(filename),
+                    focus_scoring_start,
+                );
+            }
+            Ok((_idx, hash, Err(err), _filename)) => {
+                completed += 1;
+                log::warn!("计算 {} 的合焦评分失败: {}", hash, err);
+                let _ = app.emit("focus-score-update", (&hash, 0u32));
+                emit_progress(
+                    app,
+                    ProcessingState::FocusScoring,
+                    completed,
+                    total,
+                    None,
+                    focus_scoring_start,
+                );
+            }
+            Err(join_err) => {
+                completed += 1;
+                log::warn!("合焦评分任务错误: {}", join_err);
+                emit_progress(
+                    app,
+                    ProcessingState::FocusScoring,
+                    completed,
+                    total,
+                    None,
+                    focus_scoring_start,
+                );
+            }
+        }
+    }
+
+    // 发送完成事件
+    let final_progress = ProcessingProgress {
+        state: ProcessingState::FocusScoring,
+        current: total,
+        total,
+        progress_percent: 100.0,
+        message: Some("合焦评分完成".to_string()),
+        current_file: None,
+        elapsed_ms: Some(focus_scoring_start.elapsed().as_secs_f64() * 1000.0),
+        estimated_remaining_ms: None,
+    };
+    let _ = app.emit("processing-progress", &final_progress);
+
+    Ok(())
 }
