@@ -26,16 +26,20 @@ const INFO_OVERLAY_MIN_ZOOM = 0.3;
 /** 信息覆盖层从开始淡入到完全可见的缩放区间宽度 */
 const INFO_OVERLAY_FADE_RANGE = 0.1;
 
-/** 选中边框颜色 */
-const SELECTION_COLOR = 0x3B82F6;
+/** 选中色（品牌青绿，在画布背景上辨识度高） */
+const SELECTION_COLOR = 0x2D8C78;
 /** 选中边框宽度 */
 const SELECTION_BORDER_WIDTH = 3;
 /** 悬停边框宽度 */
 const HOVER_BORDER_WIDTH = 2;
-/** ✓ 标记圆形半径 */
-const CHECK_RADIUS = 10;
+/** ✓ 标记圆形半径（增大以提升可见性） */
+const CHECK_RADIUS = 13;
 /** ✓ 标记右上角偏移 */
-const CHECK_OFFSET = 8;
+const CHECK_OFFSET = 10;
+/** 选中叠加层透明度（极轻微品牌色调） */
+const SELECTION_OVERLAY_ALPHA = 0.08;
+/** 外发光透明度 */
+const SELECTION_GLOW_ALPHA = 0.2;
 
 // ─── CanvasImageItem ─────────────────────────────────
 
@@ -55,6 +59,7 @@ export class CanvasImageItem extends Container {
   private lastZoom: number = 1;
 
   // 选中/悬停视觉对象（延迟创建）
+  private selectionOverlay: Graphics | null = null;
   private selectionBorder: Graphics | null = null;
   private checkMark: Graphics | null = null;
   private hoverBorder: Graphics | null = null;
@@ -243,6 +248,7 @@ export class CanvasImageItem extends Container {
 
     if (selected) {
       this._ensureSelectionGraphics();
+      this.selectionOverlay!.visible = true;
       this.selectionBorder!.visible = true;
       this.checkMark!.visible = true;
       this._animateSelectionIn();
@@ -280,6 +286,7 @@ export class CanvasImageItem extends Container {
     this.sprite?.destroy();
     this.placeholder.destroy();
     this.infoOverlay.destroy();
+    this.selectionOverlay?.destroy();
     this.selectionBorder?.destroy();
     this.checkMark?.destroy();
     this.hoverBorder?.destroy();
@@ -296,20 +303,35 @@ export class CanvasImageItem extends Container {
     this.setHovered(false);
   }
 
-  /** 延迟创建选中边框 + ✓ 标记 */
+  /** 延迟创建选中叠加层 + 边框 + ✓ 标记 */
   private _ensureSelectionGraphics(): void {
+    // ── 半透明叠加层：让选中图片有轻微品牌色调 ──
+    if (!this.selectionOverlay) {
+      this.selectionOverlay = new Graphics();
+      this.selectionOverlay
+        // 全尺寸半透明色调覆盖
+        .rect(0, 0, this.itemWidth, this.itemHeight)
+        .fill({ color: SELECTION_COLOR, alpha: SELECTION_OVERLAY_ALPHA })
+        // 内侧 1px 品牌色线（内发光效果）
+        .rect(0, 0, this.itemWidth, this.itemHeight)
+        .stroke({ color: SELECTION_COLOR, width: 1, alpha: 0.15 });
+      this.selectionOverlay.visible = false;
+      this.addChild(this.selectionOverlay);
+    }
+
+    // ── 选中边框：外发光 + 实色边框 ──
     if (!this.selectionBorder) {
       this.selectionBorder = new Graphics();
       this.selectionBorder
-        // 外阴影（用白色边框模拟）
+        // 外发光（品牌色半透明扩散）
         .rect(
-          -SELECTION_BORDER_WIDTH - 2,
-          -SELECTION_BORDER_WIDTH - 2,
-          this.itemWidth + (SELECTION_BORDER_WIDTH + 2) * 2,
-          this.itemHeight + (SELECTION_BORDER_WIDTH + 2) * 2,
+          -SELECTION_BORDER_WIDTH - 3,
+          -SELECTION_BORDER_WIDTH - 3,
+          this.itemWidth + (SELECTION_BORDER_WIDTH + 3) * 2,
+          this.itemHeight + (SELECTION_BORDER_WIDTH + 3) * 2,
         )
-        .stroke({ color: 0xFFFFFF, width: 2, alpha: 0.6 })
-        // 蓝色选中边框
+        .stroke({ color: SELECTION_COLOR, width: 3, alpha: SELECTION_GLOW_ALPHA })
+        // 实色选中边框
         .rect(
           -SELECTION_BORDER_WIDTH / 2,
           -SELECTION_BORDER_WIDTH / 2,
@@ -321,39 +343,44 @@ export class CanvasImageItem extends Container {
       this.addChild(this.selectionBorder);
     }
 
+    // ── ✓ 标记：增大 + 白色外环 ──
     if (!this.checkMark) {
       this.checkMark = new Graphics();
       const cx = this.itemWidth - CHECK_OFFSET - CHECK_RADIUS;
       const cy = CHECK_OFFSET + CHECK_RADIUS;
-      // 蓝色圆形背景
+      // 白色外环（提升对比度）
+      this.checkMark
+        .circle(cx, cy, CHECK_RADIUS + 2)
+        .fill({ color: 0xFFFFFF, alpha: 0.9 });
+      // 品牌色圆形背景
       this.checkMark
         .circle(cx, cy, CHECK_RADIUS)
         .fill(SELECTION_COLOR);
-      // 白色 ✓ 线条
+      // 白色 ✓ 线条（加粗 + 路径放大）
       this.checkMark
-        .moveTo(cx - 4, cy)
-        .lineTo(cx - 1, cy + 3)
-        .lineTo(cx + 5, cy - 4)
-        .stroke({ color: 0xFFFFFF, width: 2 });
+        .moveTo(cx - 5, cy)
+        .lineTo(cx - 1.5, cy + 4)
+        .lineTo(cx + 6, cy - 5)
+        .stroke({ color: 0xFFFFFF, width: 2.5 });
       this.checkMark.visible = false;
       this.addChild(this.checkMark);
     }
   }
 
-  /** 延迟创建悬停边框 */
+  /** 延迟创建悬停边框（品牌色系） */
   private _ensureHoverGraphics(): void {
     if (!this.hoverBorder) {
       this.hoverBorder = new Graphics();
       this.hoverBorder
-        // 外发光（用更宽的半透明边框模拟）
+        // 外发光（品牌色半透明扩散）
         .rect(
           -HOVER_BORDER_WIDTH - 2,
           -HOVER_BORDER_WIDTH - 2,
           this.itemWidth + (HOVER_BORDER_WIDTH + 2) * 2,
           this.itemHeight + (HOVER_BORDER_WIDTH + 2) * 2,
         )
-        .stroke({ color: SELECTION_COLOR, width: 3, alpha: 0.25 })
-        // 蓝色悬停边框
+        .stroke({ color: SELECTION_COLOR, width: 3, alpha: 0.2 })
+        // 品牌色悬停边框
         .rect(
           -HOVER_BORDER_WIDTH / 2,
           -HOVER_BORDER_WIDTH / 2,
@@ -375,13 +402,15 @@ export class CanvasImageItem extends Container {
       ? 0
       : 200;
 
-  /** 选中时渐入动画：边框 alpha 0→1，checkmark scale 0→1（弹性） */
+  /** 选中时渐入动画：叠加层 + 边框 alpha 0→1，checkmark scale 0→1（弹性） */
   private _animateSelectionIn(): void {
+    const overlay = this.selectionOverlay!;
     const border = this.selectionBorder!;
     const check = this.checkMark!;
     const cx = this.itemWidth - CHECK_OFFSET - CHECK_RADIUS;
     const cy = CHECK_OFFSET + CHECK_RADIUS;
 
+    overlay.alpha = 0;
     border.alpha = 0;
     check.scale.set(0);
     check.pivot.set(cx, cy);
@@ -394,12 +423,13 @@ export class CanvasImageItem extends Container {
       const elapsed = now - start;
       const t = Math.min(elapsed / duration, 1);
 
-      // 边框线性渐入
+      // 叠加层 + 边框渐入
+      overlay.alpha = t;
       border.alpha = t;
 
       // checkmark 弹性缩放（overshoot）
       const s = t < 1
-        ? 1 - Math.pow(1 - t, 3) * Math.cos(t * Math.PI * 0.5) // ease-out cubic + slight overshoot
+        ? 1 - Math.pow(1 - t, 3) * Math.cos(t * Math.PI * 0.5)
         : 1;
       check.scale.set(s);
 
@@ -415,6 +445,7 @@ export class CanvasImageItem extends Container {
 
   /** 取消选中时渐出动画：alpha 1→0，完成后隐藏 */
   private _animateSelectionOut(): void {
+    const overlay = this.selectionOverlay!;
     const border = this.selectionBorder!;
     const check = this.checkMark!;
     const start = performance.now();
@@ -425,16 +456,19 @@ export class CanvasImageItem extends Container {
       const t = Math.min(elapsed / duration, 1);
       const alpha = 1 - t;
 
+      overlay.alpha = alpha;
       border.alpha = alpha;
       check.alpha = alpha;
 
       if (t < 1) {
         this._selAnimFrame = requestAnimationFrame(tick);
       } else {
+        overlay.visible = false;
         border.visible = false;
         check.visible = false;
         border.alpha = 1;
         check.alpha = 1;
+        overlay.alpha = 1;
         check.scale.set(1);
         this._selAnimFrame = 0;
       }
