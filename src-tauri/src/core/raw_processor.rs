@@ -10,7 +10,7 @@
 //! - 图像处理使用 spawn_blocking 避免阻塞 tokio 异步运行时
 
 use std::io::Cursor;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use image::imageops::FilterType;
 use serde::{Deserialize, Serialize};
@@ -191,15 +191,6 @@ pub fn generate_thumbnail(jpeg_data: &[u8]) -> Result<Vec<u8>, AppError> {
     Ok(buf.into_inner())
 }
 
-/// 辅助函数：仅从 medium 缓存路径获取完整路径
-pub fn get_medium_path(cache_base_dir: &Path, hash: &str) -> PathBuf {
-    crate::utils::paths::get_cache_file_path(cache_base_dir, hash, "medium")
-}
-
-/// 辅助函数：仅从 thumbnail 缓存路径获取完整路径
-pub fn get_thumbnail_path(cache_base_dir: &Path, hash: &str) -> PathBuf {
-    crate::utils::paths::get_cache_file_path(cache_base_dir, hash, "thumbnail")
-}
 
 #[cfg(test)]
 mod tests {

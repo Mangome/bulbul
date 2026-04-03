@@ -271,6 +271,7 @@ pub fn extract_largest_jpeg(data: &[u8]) -> Result<Vec<u8>, AppError> {
 // ─── RawExtractor trait ──────────────────────────────────
 
 /// RAW 格式提取器 trait，为后续支持多格式预留
+#[allow(dead_code)]
 pub trait RawExtractor: Send + Sync {
     /// 支持的文件扩展名（小写，不含点）
     fn supported_extensions(&self) -> &[&str];

@@ -10,7 +10,6 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use chrono::NaiveDateTime;
-use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 use tokio::sync::Semaphore;
 
@@ -26,17 +25,6 @@ fn get_max_concurrency() -> usize {
     let cpu_count = num_cpus::get();
     // 2x CPU 核数，但不超过 16
     std::cmp::min(cpu_count * 2, 16)
-}
-
-/// 处理文件夹的返回结果（保留用于兼容，内部使用 GroupResult）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProcessFolderResult {
-    pub total_files: usize,
-    pub processed: usize,
-    pub failed: usize,
-    pub failed_files: Vec<String>,
-    pub results: Vec<ProcessResult>,
 }
 
 /// 处理文件夹：完整 5 阶段流水线
@@ -385,7 +373,6 @@ pub async fn process_folder(
                 capture_time: r.metadata.capture_time.as_ref().and_then(|t| {
                     parse_capture_time(t)
                 }),
-                thumbnail_path: r.thumbnail_path.clone(),
             })
         })
         .collect();

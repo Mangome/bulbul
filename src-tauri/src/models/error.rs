@@ -2,6 +2,7 @@ use serde::Serialize;
 
 /// 应用错误类型
 #[derive(Debug, thiserror::Error)]
+#[allow(dead_code)]
 pub enum AppError {
     #[error("文件未找到: {0}")]
     FileNotFound(String),
@@ -39,6 +40,7 @@ pub enum AppError {
 
 impl AppError {
     /// 返回面向用户的中文友好提示
+    #[allow(dead_code)]
     pub fn user_message(&self) -> String {
         match self {
             AppError::FileNotFound(path) => format!("找不到文件「{}」，请检查路径是否正确", path),

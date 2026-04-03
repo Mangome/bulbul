@@ -5,140 +5,13 @@
 
 use chrono::NaiveDateTime;
 
-use crate::core::similarity::{self, SimilarityCache};
+use crate::core::similarity;
 use crate::models::GroupData;
-
-/// 分组算法的输入：单张图片信息
-#[derive(Debug, Clone)]
-pub struct ImageInfo {
-    /// 文件路径 hash（MD5）
-    pub hash: String,
-    /// 文件名
-    pub filename: String,
-    /// 原始文件路径
-    pub file_path: String,
-    /// 拍摄时间（可为 None）
-    pub capture_time: Option<NaiveDateTime>,
-    /// 缩略图路径
-    pub thumbnail_path: String,
-}
 
 /// 默认相似度阈值（百分比）
 const DEFAULT_SIMILARITY_THRESHOLD: f64 = 90.0;
 /// 默认时间间隔（秒）
 const DEFAULT_TIME_GAP_SECONDS: i64 = 10;
-
-/// 对已排序的图片列表执行分组
-///
-/// 分组条件：两张图片的拍摄时间间隔 ≤ time_gap_seconds **且** 相似度 ≥ similarity_threshold
-///
-/// 策略：顺序扫描 + 早期终止
-pub fn group_images(
-    images: &[ImageInfo],
-    similarity_threshold: Option<f64>,
-    time_gap_seconds: Option<i64>,
-    similarity_cache: &mut SimilarityCache,
-) -> Vec<GroupData> {
-    if images.is_empty() {
-        return Vec::new();
-    }
-
-    let threshold = similarity_threshold.unwrap_or(DEFAULT_SIMILARITY_THRESHOLD);
-    let time_gap = time_gap_seconds.unwrap_or(DEFAULT_TIME_GAP_SECONDS);
-
-    let mut groups: Vec<Vec<usize>> = Vec::new();
-    let mut assigned = vec![false; images.len()];
-
-    for i in 0..images.len() {
-        if assigned[i] {
-            continue;
-        }
-
-        let mut current_group = vec![i];
-        assigned[i] = true;
-
-        // 向后顺序扫描，早期终止
-        for j in (i + 1)..images.len() {
-            if assigned[j] {
-                continue;
-            }
-
-            // 与当前组的最后一个成员比较
-            let last_in_group = *current_group.last().unwrap();
-            if should_group(
-                &images[last_in_group],
-                &images[j],
-                threshold,
-                time_gap,
-                similarity_cache,
-            ) {
-                current_group.push(j);
-                assigned[j] = true;
-            } else {
-                // 早期终止：遇到第一个不满足条件的即 break
-                break;
-            }
-        }
-
-        groups.push(current_group);
-    }
-
-    // 构建 GroupData
-    groups
-        .into_iter()
-        .enumerate()
-        .map(|(idx, member_indices)| {
-            build_group_data(idx as u32, images, &member_indices, similarity_cache)
-        })
-        .collect()
-}
-
-/// 判断两张图片是否应归入同一组
-///
-/// 条件：
-/// 1. 时间检查（如果双方都有 capture_time）：间隔 ≤ time_gap_seconds
-/// 2. 相似度检查：pHash 相似度 ≥ threshold
-///
-/// 缺少时间信息时跳过时间检查，仅用相似度判断
-fn should_group(
-    a: &ImageInfo,
-    b: &ImageInfo,
-    threshold: f64,
-    time_gap_seconds: i64,
-    similarity_cache: &mut SimilarityCache,
-) -> bool {
-    // 时间检查（仅当两者都有时间信息时）
-    if let (Some(t1), Some(t2)) = (&a.capture_time, &b.capture_time) {
-        let diff = (*t2 - *t1).num_seconds().abs();
-        if diff > time_gap_seconds {
-            return false;
-        }
-    }
-
-    // 相似度检查：基于 pHash 值
-    let sim = compute_hash_similarity(&a.hash, &b.hash, similarity_cache);
-    sim >= threshold
-}
-
-/// 基于已存储的 pHash hash pair 计算相似度
-///
-/// 使用文件路径 hash 作为缓存 key
-fn compute_hash_similarity(
-    hash_a: &str,
-    hash_b: &str,
-    cache: &mut SimilarityCache,
-) -> f64 {
-    // 先查缓存
-    if let Some(cached) = cache.get(hash_a, hash_b) {
-        return cached;
-    }
-
-    // 从 hash 字符串解析 pHash 值
-    // 注意：这里的 hash 是文件路径的 MD5 hash，不是 pHash
-    // pHash 值需要从外部传入。为了在分组阶段使用，我们改为在 ImageInfo 中存储 pHash 值
-    // 由于此时 pHash 已经在 Analyzing 阶段计算完成，直接返回 0.0 作为未命中
-    0.0
-}
 
 /// 使用 pHash 值计算的分组判断
 ///
@@ -177,8 +50,6 @@ pub struct ImageInfoWithPhash {
     pub file_path: String,
     /// 拍摄时间（可为 None）
     pub capture_time: Option<NaiveDateTime>,
-    /// 缩略图路径
-    pub thumbnail_path: String,
 }
 
 /// 对已排序且已计算 pHash 的图片列表执行分组
@@ -239,32 +110,6 @@ pub fn group_images_with_phash(
         })
         .collect()
 }
-
-/// 构建 GroupData（兼容旧接口）
-fn build_group_data(
-    group_id: u32,
-    images: &[ImageInfo],
-    members: &[usize],
-    _cache: &mut SimilarityCache,
-) -> GroupData {
-    let picture_hashes: Vec<String> = members.iter().map(|&i| images[i].hash.clone()).collect();
-    let picture_names: Vec<String> = members.iter().map(|&i| images[i].filename.clone()).collect();
-    let picture_paths: Vec<String> =
-        members.iter().map(|&i| images[i].file_path.clone()).collect();
-
-    GroupData {
-        id: group_id,
-        name: format!("分组 {}", group_id + 1),
-        image_count: members.len(),
-        avg_similarity: 0.0, // 无 pHash 时无法计算
-        representative_hash: picture_hashes.first().cloned().unwrap_or_default(),
-        picture_hashes,
-        picture_names,
-        picture_paths,
-    }
-}
-
-/// 构建 GroupData（含 pHash 计算平均相似度）
 fn build_group_data_with_phash(
     group_id: u32,
     images: &[ImageInfoWithPhash],
@@ -313,7 +158,6 @@ mod tests {
             capture_time: time.map(|t| {
                 NaiveDateTime::parse_from_str(t, "%Y-%m-%d %H:%M:%S").unwrap()
             }),
-            thumbnail_path: format!("/cache/thumbnail/hash_{}.jpg", filename),
         }
     }
 
