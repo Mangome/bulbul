@@ -42,8 +42,8 @@ const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 3.0;
 const ZOOM_SENSITIVITY = 0.001;
 const DRAG_DEAD_ZONE = 5;
-const BG_COLOR_LIGHT = 0xFAFAFA;
-const BG_COLOR_DARK = 0x0F0F0F;
+const BG_COLOR_LIGHT = 0xFFFFFF;
+const BG_COLOR_DARK = 0x0A0E1A;
 const GROUP_TRANSITION_MS =
   typeof window !== 'undefined' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches

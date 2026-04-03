@@ -1,24 +1,23 @@
 /* ════════════════════════════════════════════════════════════════════════════
    FloatingGroupList 组件 - 左侧分组导航面板
    
-   左侧浮动毛玻璃面板，统一视觉语言
-   包含：文件夹信息 | 分组列表 | 收叠/展开
+   紧贴顶部导航栏下方，可收起/展开
+   展开态 220px 宽，收起态 32px 宽
 ════════════════════════════════════════════════════════════════════════════ */
 
 .container {
-  position: absolute;
-  left: 20px;
-  top: 20px;
-  bottom: 72px;
-  width: 240px;
+  position: fixed;
+  left: 0;
+  top: 40px;
+  bottom: 0;
+  width: 220px;
+  z-index: 80;
   
-  /* 统一面板样式 */
   background: var(--panel-bg);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--panel-border);
-  border-radius: var(--panel-radius);
-  box-shadow: var(--panel-shadow);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-right: 1px solid var(--panel-border);
+  box-shadow: var(--shadow-subtle);
   
   display: flex;
   flex-direction: column;
@@ -26,23 +25,16 @@
   pointer-events: auto;
   
   transition:
-    width var(--transition-normal) cubic-bezier(0.4, 0, 0.2, 1),
-    opacity var(--transition-normal),
+    width 250ms cubic-bezier(0.4, 0, 0.2, 1),
     box-shadow var(--transition-normal);
 }
 
-.container:hover {
-  box-shadow: var(--shadow-normal);
-}
-
 /* ────────────────────────────────────────────────────────────────
-   收叠状态 - 仅显示一个小图标按钮
+   收叠状态
 ──────────────────────────────────────────────────────────────── */
 
 .collapsed {
-  width: 40px;
-  bottom: auto;
-  cursor: default;
+  width: 32px;
 }
 
 .collapsed .header,
@@ -58,12 +50,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
   cursor: pointer;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
   background: transparent;
   border: none;
   padding: 0;
@@ -81,15 +73,15 @@
 
 /* 收叠态下的按钮居中 */
 .collapsed .toggleBtn {
-  margin: 6px auto;
+  margin: var(--spacing-sm) auto;
 }
 
 /* ────────────────────────────────────────────────────────────────
-   头部区域 - 文件夹信息 + 分组标题
+   头部区域
 ──────────────────────────────────────────────────────────────── */
 
 .header {
-  padding: var(--spacing-md) var(--spacing-lg) var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-md) var(--spacing-sm);
   border-bottom: 1px solid var(--panel-border);
   flex-shrink: 0;
 }
@@ -116,33 +108,31 @@
 .folderMeta {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
-  margin-top: var(--spacing-xs);
-  font-weight: var(--font-weight-normal);
+  margin-top: 2px;
 }
 
 .sectionLabel {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: var(--font-weight-medium);
   color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin-top: var(--spacing-md);
+  margin-top: var(--spacing-sm);
 }
 
 /* ────────────────────────────────────────────────────────────────
-   列表区域 - 可滚动
+   列表区域
 ──────────────────────────────────────────────────────────────── */
 
 .list {
   flex: 1;
   overflow-y: auto;
-  padding: var(--spacing-sm);
+  padding: var(--spacing-xs);
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
+  gap: 2px;
 }
 
-/* 自定义滚动条样式 */
 .list::-webkit-scrollbar {
   width: 4px;
 }
@@ -165,9 +155,9 @@
 ──────────────────────────────────────────────────────────────── */
 
 [data-theme="dark"] .header {
-  border-bottom-color: rgba(255, 255, 255, 0.08);
+  border-bottom-color: rgba(255, 255, 255, 0.06);
 }
 
 [data-theme="dark"] .toggleBtn:hover {
-  background-color: rgba(95, 168, 157, 0.2);
+  background-color: rgba(74, 144, 226, 0.15);
 }

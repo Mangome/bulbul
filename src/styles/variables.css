@@ -3,61 +3,61 @@
    
    品牌理念：摄影师的专业工作室
    - 精致细节，不浮夸，富有意图
-   - 黑白灰的摄影美学 + 精选高级色彩
+   - 深靛蓝 + 纯净背景，高对比度与清晰文字
    - 极简主义与优雅的结合
    
-   核心配色灵感：
-   - Light Mode: 冷白背景 + 深青绿主色（#2D5A4F）+ 精致中性色
-   - Dark Mode: 深黑背景 + 亮青绿主色（#5FA89D）+ 柔和中性色
+   核心配色：
+   - Light Mode: 纯白背景 + 深靛蓝主色（#1E3A5F）+ 高对比中性色
+   - Dark Mode: 深靛背景 + 亮蓝主色（#4A90E2）+ 柔和中性色
 ============================================================================ */
 
 :root {
   /* ────────────────────────────────────────────────────────────────
-     主色调系统 (深青绿 - 专业工作室感)
+     主色调系统 (深靛蓝 - 专业工作室)
   ──────────────────────────────────────────────────────────────── */
-  --color-primary: #2D5A4F;
-  --color-primary-hover: #235045;
-  --color-primary-active: #1A3A30;
-  --color-primary-light: #E8F2F0;
+  --color-primary: #1E3A5F;
+  --color-primary-hover: #264A78;
+  --color-primary-active: #152D4A;
+  --color-primary-light: #E4ECF5;
 
   /* ────────────────────────────────────────────────────────────────
-     语义色 (精选，不过度)
+     语义色
   ──────────────────────────────────────────────────────────────── */
-  --color-success: #4A7C59;
-  --color-success-light: #DFE8DC;
-  --color-warning: #B8860B;
-  --color-warning-light: #F0E4D0;
-  --color-danger: #8B3A3A;
-  --color-danger-light: #F0DEDE;
-  --color-info: #2D5A4F;
-  --color-info-light: #E8F2F0;
+  --color-success: #2E7D4F;
+  --color-success-light: #E0F0E5;
+  --color-warning: #A67B1A;
+  --color-warning-light: #F5ECD4;
+  --color-danger: #B33B3B;
+  --color-danger-light: #F5DEDE;
+  --color-info: #1E3A5F;
+  --color-info-light: #E4ECF5;
 
   /* ────────────────────────────────────────────────────────────────
      选中态 (使用主色系)
   ──────────────────────────────────────────────────────────────── */
-  --color-selected: #2D5A4F;
-  --color-selected-bg: rgba(45, 90, 79, 0.08);
-  --color-selected-border: rgba(45, 90, 79, 0.3);
+  --color-selected: #1E3A5F;
+  --color-selected-bg: rgba(30, 58, 95, 0.08);
+  --color-selected-border: rgba(30, 58, 95, 0.3);
 
   /* ────────────────────────────────────────────────────────────────
-     中性色系 (摄影灰度系 - 冷调)
+     中性色系 (高对比度，文字清晰)
   ──────────────────────────────────────────────────────────────── */
-  --color-text-primary: #1A1A1A;
-  --color-text-secondary: #5A5A5A;
-  --color-text-muted: #8B8B8B;
-  --color-bg-primary: #FAFAFA;
-  --color-bg-secondary: #F3F3F3;
-  --color-bg-tertiary: #ECECEC;
-  --color-border: #D8D8D8;
-  --color-border-light: #E8E8E8;
+  --color-text-primary: #0F1729;
+  --color-text-secondary: #4A5568;
+  --color-text-muted: #94A3B8;
+  --color-bg-primary: #FFFFFF;
+  --color-bg-secondary: #F8FAFB;
+  --color-bg-tertiary: #F0F3F8;
+  --color-border: #E0E4EB;
+  --color-border-light: #EDF0F5;
 
   /* ────────────────────────────────────────────────────────────────
      面板样式 (毛玻璃效果)
   ──────────────────────────────────────────────────────────────── */
-  --panel-bg: rgba(255, 255, 255, 0.92);
-  --panel-border: rgba(0, 0, 0, 0.08);
-  --panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 4px rgba(0, 0, 0, 0.08);
-  --panel-radius: 12px;
+  --panel-bg: rgba(255, 255, 255, 0.95);
+  --panel-border: rgba(30, 58, 95, 0.08);
+  --panel-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.08);
+  --panel-radius: 10px;
 
   /* ────────────────────────────────────────────────────────────────
      间距系统 (模块化，创造节奏)
@@ -94,10 +94,10 @@
   /* ────────────────────────────────────────────────────────────────
      阴影系统 (深度感)
   ──────────────────────────────────────────────────────────────── */
-  --shadow-subtle: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 4px rgba(0, 0, 0, 0.08);
-  --shadow-normal: 0 2px 4px rgba(0, 0, 0, 0.08), 0 4px 8px rgba(0, 0, 0, 0.12);
-  --shadow-elevated: 0 4px 8px rgba(0, 0, 0, 0.12), 0 8px 16px rgba(0, 0, 0, 0.16);
-  --shadow-deep: 0 8px 16px rgba(0, 0, 0, 0.16), 0 16px 32px rgba(0, 0, 0, 0.2);
+  --shadow-subtle: 0 1px 2px rgba(0, 0, 0, 0.04), 0 2px 4px rgba(0, 0, 0, 0.06);
+  --shadow-normal: 0 2px 4px rgba(0, 0, 0, 0.06), 0 4px 8px rgba(0, 0, 0, 0.1);
+  --shadow-elevated: 0 4px 8px rgba(0, 0, 0, 0.1), 0 8px 16px rgba(0, 0, 0, 0.14);
+  --shadow-deep: 0 8px 16px rgba(0, 0, 0, 0.14), 0 16px 32px rgba(0, 0, 0, 0.18);
 
   /* ────────────────────────────────────────────────────────────────
      过渡和动画 (自然感)
@@ -111,62 +111,62 @@
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   暗色主题 (摄影工作室的黑暗环保感)
+   暗色主题 (深靛背景，亮蓝主色)
 ════════════════════════════════════════════════════════════════════════════ */
 
 [data-theme="dark"] {
   /* ────────────────────────────────────────────────────────────────
-     主色调系统 (亮青绿)
+     主色调系统 (亮蓝)
   ──────────────────────────────────────────────────────────────── */
-  --color-primary: #5FA89D;
-  --color-primary-hover: #70B8AD;
-  --color-primary-active: #4A9185;
-  --color-primary-light: rgba(95, 168, 157, 0.15);
+  --color-primary: #4A90E2;
+  --color-primary-hover: #5FA0F0;
+  --color-primary-active: #3B7FD6;
+  --color-primary-light: rgba(74, 144, 226, 0.15);
 
   /* ────────────────────────────────────────────────────────────────
-     语义色 (亮度调整)
+     语义色 (暗色适配)
   ──────────────────────────────────────────────────────────────── */
-  --color-success: #6BA975;
-  --color-success-light: rgba(107, 169, 117, 0.15);
-  --color-warning: #D4AF37;
-  --color-warning-light: rgba(212, 175, 55, 0.15);
-  --color-danger: #C85A5A;
-  --color-danger-light: rgba(200, 90, 90, 0.15);
-  --color-info: #5FA89D;
-  --color-info-light: rgba(95, 168, 157, 0.15);
+  --color-success: #5CB870;
+  --color-success-light: rgba(92, 184, 112, 0.15);
+  --color-warning: #E0A830;
+  --color-warning-light: rgba(224, 168, 48, 0.15);
+  --color-danger: #E05A5A;
+  --color-danger-light: rgba(224, 90, 90, 0.15);
+  --color-info: #4A90E2;
+  --color-info-light: rgba(74, 144, 226, 0.15);
 
   /* ────────────────────────────────────────────────────────────────
      选中态
   ──────────────────────────────────────────────────────────────── */
-  --color-selected: #5FA89D;
-  --color-selected-bg: rgba(95, 168, 157, 0.12);
-  --color-selected-border: rgba(95, 168, 157, 0.4);
+  --color-selected: #4A90E2;
+  --color-selected-bg: rgba(74, 144, 226, 0.12);
+  --color-selected-border: rgba(74, 144, 226, 0.4);
 
   /* ────────────────────────────────────────────────────────────────
-     中性色系 (深色 + 柔和)
+     中性色系 (深靛背景 + 高对比文字)
   ──────────────────────────────────────────────────────────────── */
-  --color-text-primary: #F5F5F5;
-  --color-text-secondary: #A8A8A8;
-  --color-text-muted: #707070;
-  --color-bg-primary: #0F0F0F;
-  --color-bg-secondary: #1A1A1A;
-  --color-bg-tertiary: #252525;
-  --color-border: #333333;
-  --color-border-light: #282828;
+  --color-text-primary: #F0F4F8;
+  --color-text-secondary: #B0B8C4;
+  --color-text-muted: #5A6370;
+  --color-bg-primary: #0A0E1A;
+  --color-bg-secondary: #111827;
+  --color-bg-tertiary: #1A2237;
+  --color-border: #232D40;
+  --color-border-light: #1C2535;
 
   /* ────────────────────────────────────────────────────────────────
-     面板样式 (深色毛玻璃)
+     面板样式 (深靛毛玻璃)
   ──────────────────────────────────────────────────────────────── */
-  --panel-bg: rgba(20, 20, 30, 0.88);
-  --panel-border: rgba(255, 255, 255, 0.08);
-  --panel-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-  --panel-radius: 12px;
+  --panel-bg: rgba(10, 14, 26, 0.92);
+  --panel-border: rgba(74, 144, 226, 0.1);
+  --panel-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.2);
+  --panel-radius: 10px;
 
   /* ────────────────────────────────────────────────────────────────
      阴影系统 (暗色优化)
   ──────────────────────────────────────────────────────────────── */
   --shadow-subtle: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.4);
-  --shadow-normal: 0 2px 4px rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.6);
-  --shadow-elevated: 0 4px 8px rgba(0, 0, 0, 0.5), 0 8px 16px rgba(0, 0, 0, 0.7);
-  --shadow-deep: 0 8px 16px rgba(0, 0, 0, 0.6), 0 16px 32px rgba(0, 0, 0, 0.8);
+  --shadow-normal: 0 2px 4px rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.5);
+  --shadow-elevated: 0 4px 8px rgba(0, 0, 0, 0.5), 0 8px 16px rgba(0, 0, 0, 0.6);
+  --shadow-deep: 0 8px 16px rgba(0, 0, 0, 0.6), 0 16px 32px rgba(0, 0, 0, 0.7);
 }

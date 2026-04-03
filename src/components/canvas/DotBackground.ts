@@ -20,9 +20,9 @@ const DOT_SPACING = 40;
 /** 波点半径（单位 px） */
 const DOT_RADIUS = 1.0;
 /** 亮色主题波点颜色 */
-const DOT_COLOR_LIGHT = 0xE0E0E0;
+const DOT_COLOR_LIGHT = 0xE0E4EB;
 /** 暗色主题波点颜色 */
-const DOT_COLOR_DARK = 0x4A4A4A;
+const DOT_COLOR_DARK = 0x232D40;
 /** 波点透明度 */
 const DOT_ALPHA = 0.5;
 

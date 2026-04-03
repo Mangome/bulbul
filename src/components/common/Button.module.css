@@ -107,7 +107,7 @@
 }
 
 .ghost:active:not(.disabled) {
-  background-color: rgba(45, 90, 79, 0.15);
+  background-color: var(--color-primary-light);
   color: var(--color-primary-active);
 }
 

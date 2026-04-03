@@ -20,14 +20,14 @@ import type { ImageMetadata } from '../../types';
 // ─── 常量 ─────────────────────────────────────────────
 
 /** 占位色块颜色 */
-const PLACEHOLDER_COLOR = 0xE5E7EB;
+const PLACEHOLDER_COLOR = 0xE0E4EB;
 /** 信息覆盖层可见的最低缩放级别 */
 const INFO_OVERLAY_MIN_ZOOM = 0.3;
 /** 信息覆盖层从开始淡入到完全可见的缩放区间宽度 */
 const INFO_OVERLAY_FADE_RANGE = 0.1;
 
-/** 选中色（品牌青绿，在画布背景上辨识度高） */
-const SELECTION_COLOR = 0x2D8C78;
+/** 选中色（品牌靛蓝，在画布背景上辨识度高） */
+const SELECTION_COLOR = 0x2563A8;
 /** 选中边框宽度 */
 const SELECTION_BORDER_WIDTH = 3;
 /** 悬停边框宽度 */
