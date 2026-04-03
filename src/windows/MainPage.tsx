@@ -22,6 +22,7 @@ function MainPage() {
     processingState,
     progress,
     groups,
+    currentFolder,
     setFolder,
   } = useAppStore();
 
@@ -258,12 +259,13 @@ function MainPage() {
             {/* 顶部导航栏 */}
             <TopNavBar
               groups={groups}
+              folderPath={currentFolder}
               onExport={handleExport}
               onSelectAll={handleSelectAll}
             />
 
             {/* 右侧控制面板 */}
-            <RightControlPanel />
+            <RightControlPanel onSwitchFolder={handleOpenFolder} />
           </>
         ) : (
           <div className={cls.placeholder}>

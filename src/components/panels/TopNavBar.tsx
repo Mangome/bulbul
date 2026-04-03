@@ -5,6 +5,7 @@
 // 包含：分组导航箭头 | 分组名 | 进度条 | 全选/导出按钮
 // ============================================================
 
+import { useState, useCallback, useMemo } from 'react';
 import { motion } from 'motion/react';
 import { Button } from '../common/Button';
 import { Badge } from '../common/Badge';
@@ -17,18 +18,42 @@ import cls from './TopNavBar.module.css';
 
 export interface TopNavBarProps {
   groups: GroupData[];
+  /** 当前文件夹完整路径 */
+  folderPath: string | null;
   onExport: () => void;
   onSelectAll: () => void;
 }
 
 // ─── 组件 ─────────────────────────────────────────────
 
-export function TopNavBar({ groups, onExport, onSelectAll }: TopNavBarProps) {
+/** 将完整路径截断为末尾 N 段，前面用 … 省略 */
+function shortenPath(fullPath: string, maxSegments = 3): string {
+  const normalized = fullPath.replace(/\\/g, '/');
+  const segments = normalized.split('/').filter(Boolean);
+  if (segments.length <= maxSegments) return normalized;
+  return '\u2026/' + segments.slice(-maxSegments).join('/');
+}
+
+export function TopNavBar({ groups, folderPath, onExport, onSelectAll }: TopNavBarProps) {
   const currentGroupIndex = useCanvasStore((s) => s.currentGroupIndex);
   const groupCount = useCanvasStore((s) => s.groupCount);
   const prevGroup = useCanvasStore((s) => s.prevGroup);
   const nextGroup = useCanvasStore((s) => s.nextGroup);
   const selectedCount = useSelectionStore((s) => s.selectedCount);
+
+  const [copied, setCopied] = useState(false);
+
+  const displayPath = useMemo(
+    () => (folderPath ? shortenPath(folderPath) : null),
+    [folderPath],
+  );
+
+  const handleCopyPath = useCallback(async () => {
+    if (!folderPath) return;
+    await navigator.clipboard.writeText(folderPath);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }, [folderPath]);
 
   const group = groups[currentGroupIndex];
   if (!group) return null;
@@ -72,6 +97,19 @@ export function TopNavBar({ groups, onExport, onSelectAll }: TopNavBarProps) {
           ›
         </button>
       </div>
+
+      {/* 路径显示 */}
+      {displayPath && (
+        <button
+          className={cls.folderPath}
+          onClick={handleCopyPath}
+          title={copied ? '已复制' : folderPath!}
+          aria-label={`当前目录: ${folderPath}`}
+        >
+          <span className={cls.pathText}>{displayPath}</span>
+          {copied && <span className={cls.copyHint}>✓</span>}
+        </button>
+      )}
 
       {/* 中区：进度条 */}
       <div className={cls.progressSection}>

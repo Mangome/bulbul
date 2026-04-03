@@ -92,6 +92,57 @@
 }
 
 /* ────────────────────────────────────────────────────────────────
+   路径显示
+──────────────────────────────────────────────────────────────── */
+
+.folderPath {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  max-width: 280px;
+  flex-shrink: 1;
+  min-width: 0;
+
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.folderPath:hover {
+  background-color: var(--color-bg-tertiary);
+}
+
+.folderPath:active {
+  background-color: var(--color-primary-light);
+}
+
+.pathText {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace);
+  letter-spacing: -0.2px;
+}
+
+.folderPath:hover .pathText {
+  color: var(--color-text-secondary);
+}
+
+.copyHint {
+  font-size: 10px;
+  color: var(--color-success);
+  flex-shrink: 0;
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ────────────────────────────────────────────────────────────────
    中区：进度条
 ──────────────────────────────────────────────────────────────── */
 

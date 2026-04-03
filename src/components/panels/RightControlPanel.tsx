@@ -46,7 +46,7 @@ function IconFit() {
 function IconActual() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <text x="2" y="11" fontSize="10" fontWeight="600" fill="currentColor" fontFamily="system-ui">1:1</text>
+      <text x="1" y="10" fontSize="8" fontWeight="700" fill="currentColor" fontFamily="system-ui" textAnchor="start">1:1</text>
     </svg>
   );
 }
@@ -68,9 +68,21 @@ function IconMoon() {
   );
 }
 
+function IconFolder() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+      <path d="M2 4.5V11a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1H7.5L6 3.5H3A1 1 0 0 0 2 4.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 // ─── 组件 ─────────────────────────────────────────────
 
-export function RightControlPanel() {
+interface RightControlPanelProps {
+  onSwitchFolder: () => void;
+}
+
+export function RightControlPanel({ onSwitchFolder }: RightControlPanelProps) {
   const zoomLevel = useCanvasStore((s) => s.zoomLevel);
   const setZoom = useCanvasStore((s) => s.setZoom);
   const zoomIn = useCanvasStore((s) => s.zoomIn);
@@ -129,6 +141,13 @@ export function RightControlPanel() {
       </button>
       <button className={cls.iconBtn} onClick={resetZoom} title="实际大小">
         <IconActual />
+      </button>
+
+      <div className={cls.sep} />
+
+      {/* 切换目录 */}
+      <button className={cls.iconBtn} onClick={onSwitchFolder} title="切换目录 (Ctrl+O)">
+        <IconFolder />
       </button>
 
       <div className={cls.sep} />
