@@ -116,6 +116,7 @@ export class CanvasImageItem extends Container {
     if (this.sprite) {
       this.removeChild(this.sprite);
       this.sprite.destroy();
+      this.sprite = null;
     }
 
     this.sprite = new Sprite(texture);
@@ -283,7 +284,13 @@ export class CanvasImageItem extends Container {
     }
     this.off('pointerover', this._onPointerOver, this);
     this.off('pointerout', this._onPointerOut, this);
-    this.sprite?.destroy();
+    
+    // 安全销毁 sprite（setTexture 可能已经销毁过）
+    if (this.sprite) {
+      this.sprite.destroy();
+      this.sprite = null;
+    }
+    
     this.placeholder.destroy();
     this.infoOverlay.destroy();
     this.selectionOverlay?.destroy();
