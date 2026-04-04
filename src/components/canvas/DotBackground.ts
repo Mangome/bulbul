@@ -31,6 +31,8 @@ const DOT_ALPHA = 0.5;
 export class DotBackground extends Container {
   private tilingSprite: TilingSprite | null = null;
   private app: Application | null = null;
+  private isRenderingDots: boolean = false;
+  private currentTheme: 'light' | 'dark' = 'light';
 
   /**
    * 初始化波点底纹
@@ -43,38 +45,50 @@ export class DotBackground extends Container {
   }
 
   /**
-   * 根据主题重新渲染波点
+   * 根据主题重新渲染波点（防止并发调用）
    */
   private renderDots(theme: 'light' | 'dark'): void {
     if (!this.app) return;
+    if (this.isRenderingDots) return; // 防止并发渲染
+    if (theme === this.currentTheme && this.tilingSprite) return; // 主题未变，跳过
+    
+    this.isRenderingDots = true;
+    this.currentTheme = theme;
 
-    // 清理旧的 TilingSprite
-    if (this.tilingSprite) {
-      this.removeChild(this.tilingSprite);
-      this.tilingSprite.destroy({ texture: true });
+    try {
+      // 清理旧的 TilingSprite
+      if (this.tilingSprite) {
+        this.removeChild(this.tilingSprite);
+        this.tilingSprite.destroy({ texture: true });
+        this.tilingSprite = null;
+      }
+
+      const tileSize = DOT_SPACING;
+      const dotColor = theme === 'light' ? DOT_COLOR_LIGHT : DOT_COLOR_DARK;
+
+      // 生成波点纹理
+      const dotGraphics = new Graphics();
+      dotGraphics
+        .circle(tileSize / 2, tileSize / 2, DOT_RADIUS)
+        .fill({ color: dotColor, alpha: DOT_ALPHA });
+
+      // 生成纹理
+      const texture = (this.app.renderer as Renderer).generateTexture(dotGraphics);
+      dotGraphics.destroy();
+
+      // 创建 TilingSprite
+      this.tilingSprite = new TilingSprite({
+        texture,
+        width: this.app.screen.width,
+        height: this.app.screen.height,
+      });
+
+      this.addChild(this.tilingSprite);
+    } catch (err) {
+      console.error('[DotBackground] Error rendering dots:', err);
+    } finally {
+      this.isRenderingDots = false;
     }
-
-    const tileSize = DOT_SPACING;
-    const dotColor = theme === 'light' ? DOT_COLOR_LIGHT : DOT_COLOR_DARK;
-
-    // 生成波点纹理
-    const dotGraphics = new Graphics();
-    dotGraphics
-      .circle(tileSize / 2, tileSize / 2, DOT_RADIUS)
-      .fill({ color: dotColor, alpha: DOT_ALPHA });
-
-    // 生成纹理
-    const texture = (this.app.renderer as Renderer).generateTexture(dotGraphics);
-    dotGraphics.destroy();
-
-    // 创建 TilingSprite
-    this.tilingSprite = new TilingSprite({
-      texture,
-      width: this.app.screen.width,
-      height: this.app.screen.height,
-    });
-
-    this.addChild(this.tilingSprite);
   }
 
   /**
@@ -89,5 +103,14 @@ export class DotBackground extends Container {
     if (!this.tilingSprite) return;
     this.tilingSprite.width = width;
     this.tilingSprite.height = height;
+  }
+
+  /** 清理资源 */
+  override destroy(): void {
+    if (this.tilingSprite) {
+      this.tilingSprite.destroy({ texture: true });
+      this.tilingSprite = null;
+    }
+    super.destroy({ children: true });
   }
 }
