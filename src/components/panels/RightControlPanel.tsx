@@ -123,6 +123,7 @@ export function RightControlPanel({ onSwitchFolder }: RightControlPanelProps) {
           value={zoomPercent}
           step={5}
           onChange={handleSliderChange}
+          style={{ width: 130 }}
           aria-label="缩放比例"
         />
       </div>
