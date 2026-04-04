@@ -348,7 +348,27 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     if (!container) return;
 
     let destroyed = false;
+    let contextLost = false;
     const app = new Application();
+
+    const handleContextLost = (e: Event) => {
+      console.warn('[InfiniteCanvas] WebGL context lost');
+      contextLost = true;
+      e.preventDefault();
+      
+      // 隐藏 canvas，防止渲染错误
+      if (appRef.current?.canvas) {
+        (appRef.current.canvas as HTMLCanvasElement).style.display = 'none';
+      }
+    };
+
+    const handleContextRestored = () => {
+      console.warn('[InfiniteCanvas] WebGL context restored');
+      if (contextLost && appRef.current?.canvas) {
+        (appRef.current.canvas as HTMLCanvasElement).style.display = '';
+        contextLost = false;
+      }
+    };
 
     const initApp = async () => {
       const theme = useThemeStore.getState().theme;
@@ -367,7 +387,13 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         return;
       }
 
-      container.appendChild(app.canvas as HTMLCanvasElement);
+      const canvas = app.canvas as HTMLCanvasElement;
+      container.appendChild(canvas);
+      
+      // 监听 WebGL 上下文丢失
+      canvas.addEventListener('webglcontextlost', handleContextLost, false);
+      canvas.addEventListener('webglcontextrestored', handleContextRestored, false);
+      
       appRef.current = app;
 
       // ── 背景层 ──
@@ -605,6 +631,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       if (canvas) {
         canvas.removeEventListener('wheel', handleWheel);
         canvas.removeEventListener('pointerdown', handlePointerDown);
+        canvas.removeEventListener('webglcontextlost', handleContextLost);
+        canvas.removeEventListener('webglcontextrestored', handleContextRestored);
       }
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
