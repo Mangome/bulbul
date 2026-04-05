@@ -174,7 +174,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       const fileName = fileNamesRef.current.get(item.hash) ?? item.hash;
       const meta = metadataMapRef.current.get(item.hash);
       canvasItem.setImageInfo(fileName, meta);
-      canvasItem.updateZoomVisibility(zoomLevelRef.current);
+      canvasItem.updateZoomVisibility(getActualZoom(item.groupIndex));
 
       const { selectedHashes } = useSelectionStore.getState();
       canvasItem.setSelected(selectedHashes.has(item.hash));
@@ -189,7 +189,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
       if (imageLoader) {
         imageLoader
-          .loadTexture(item.hash, item.width * zoomLevelRef.current)
+          .loadTexture(item.hash, item.width * getActualZoom(item.groupIndex))
           .then((texture) => {
             if (texture && canvasItemsRef.current.has(item.hash)) {
               canvasItemsRef.current.get(item.hash)!.setTexture(texture);
@@ -202,14 +202,15 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
   }, [layout, setViewport, setViewportRect]);
 
   // ── 缩放阈值切换 ──
+  // 注意: newActualZoom 参数是实际画布缩放（已含补偿系数）
   const handleZoomThresholdChange = useCallback(
-    (newZoom: number) => {
+    (newActualZoom: number) => {
       const visibleItems = visibleItemsRef.current;
       if (visibleItems.length === 0) return;
 
-      // 在等宽列布局下所有图片宽度相同，取第一个即可
+      // 在等宽列布局下同组图片宽度相同，取第一个即可
       const representativeWidth = visibleItems[0].width;
-      const displayWidth = representativeWidth * newZoom;
+      const displayWidth = representativeWidth * newActualZoom;
       const newSize = getSizeForDisplay(displayWidth);
       if (newSize === prevSizeRef.current) return;
       prevSizeRef.current = newSize;
@@ -219,7 +220,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
       const entries = visibleItems.map((item) => ({
         hash: item.hash,
-        displayWidth: item.width * newZoom,
+        displayWidth: item.width * newActualZoom,
       }));
       imageLoader.reloadForZoomChange(
         entries,
@@ -258,6 +259,20 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     }
   }, []);
 
+  // ── 缩放补偿：使不同列数的分组中图片看起来一样大 ──
+  // baseColumnWidth 是多列模式下的列宽（基准），groupColumnWidth 是该分组的列宽
+  // 单张组列宽 >> 多张组列宽，补偿系数 < 1 会缩小单张组的画布缩放
+  const getZoomCompensation = useCallback((groupIndex: number): number => {
+    const page = layout.pages[groupIndex];
+    if (!page || !layout.baseColumnWidth || !page.columnWidth) return 1.0;
+    return layout.baseColumnWidth / page.columnWidth;
+  }, [layout]);
+
+  /** 获取指定分组应应用的实际画布缩放值 */
+  const getActualZoom = useCallback((groupIndex: number): number => {
+    return zoomLevelRef.current * getZoomCompensation(groupIndex);
+  }, [getZoomCompensation]);
+
   // ── 计算当前组的垂直居中偏移 ──
   const computeVerticalOffset = useCallback((groupIndex: number, zoom: number) => {
     const app = appRef.current;
@@ -294,13 +309,14 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     if (!contentLayer || !app) return;
     if (!layout.pages || layout.pages.length === 0) return;
 
-    const zoom = zoomLevelRef.current;
-    const targetX = computeGroupX(groupIndex, zoom);
-    const verticalOffset = computeVerticalOffset(groupIndex, zoom);
+    const targetActualZoom = getActualZoom(groupIndex);
+    const targetX = computeGroupX(groupIndex, targetActualZoom);
+    const verticalOffset = computeVerticalOffset(groupIndex, targetActualZoom);
     const targetY = verticalOffset;
     scrollYRef.current = 0;
 
     if (!animated) {
+      contentLayer.scale.set(targetActualZoom);
       contentLayer.x = targetX;
       contentLayer.y = targetY;
       setTransitioning(false);
@@ -316,6 +332,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
     const startX = contentLayer.x;
     const startY = contentLayer.y;
+    const startScale = contentLayer.scale.x;
     const startTime = performance.now();
 
     const animate = (now: number) => {
@@ -323,6 +340,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       const progress = Math.min(elapsed / GROUP_TRANSITION_MS, 1);
       const eased = 1 - Math.pow(1 - progress, 4);
 
+      const currentScale = startScale + (targetActualZoom - startScale) * eased;
+      contentLayer.scale.set(currentScale);
       contentLayer.x = startX + (targetX - startX) * eased;
       contentLayer.y = startY + (targetY - startY) * eased;
 
@@ -340,7 +359,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     };
 
     transitionAnimRef.current = requestAnimationFrame(animate);
-  }, [layout, updateViewport, setTransitioning, applyGroupAlpha, ensureOnlyGroupVisible, computeVerticalOffset, computeGroupX]);
+  }, [layout, updateViewport, setTransitioning, applyGroupAlpha, ensureOnlyGroupVisible, computeVerticalOffset, computeGroupX, getActualZoom]);
 
   // ── 初始化 PixiJS ──
   useEffect(() => {
@@ -414,7 +433,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       // ── 从 store 读取已加载的缩放级别（可能从持久化配置恢复） ──
       const savedZoom = useCanvasStore.getState().zoomLevel;
       zoomLevelRef.current = savedZoom;
-      contentLayer.scale.set(savedZoom);
+      // scale.set 由 positionToGroup 根据分组补偿系数设置，此处不直接设
 
       // ── 设置分组总数 ──
       useCanvasStore.getState().setGroupCount(layout.pages.length);
@@ -457,37 +476,41 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         );
         if (newZoom === oldZoom) return;
 
+        const { currentGroupIndex } = useCanvasStore.getState();
+        const compensation = getZoomCompensation(currentGroupIndex);
+        const oldActualZoom = oldZoom * compensation;
+        const newActualZoom = newZoom * compensation;
+
         // 鼠标锚点缩放：仅在 Y 轴上以鼠标位置为锚点
         const rect = (e.target as HTMLElement).getBoundingClientRect();
         const mouseY = e.clientY - rect.top;
-        const contentMouseY = (mouseY - contentLayer.y) / oldZoom;
+        const contentMouseY = (mouseY - contentLayer.y) / oldActualZoom;
 
-        contentLayer.scale.set(newZoom);
+        contentLayer.scale.set(newActualZoom);
 
         // X 轴：内容中心对齐窗口中心
-        const { currentGroupIndex } = useCanvasStore.getState();
-        contentLayer.x = computeGroupX(currentGroupIndex, newZoom);
+        contentLayer.x = computeGroupX(currentGroupIndex, newActualZoom);
 
         // Y 轴：以鼠标位置为锚点缩放，并 clamp 到合法范围
         const page = layout.pages[currentGroupIndex];
         const screenHeight = appRef.current!.screen.height;
-        const maxScrollY = page ? Math.max(0, page.contentHeight - screenHeight / newZoom) : 0;
-        const newContentY = mouseY - contentMouseY * newZoom;
-        const vertOffset = computeVerticalOffset(currentGroupIndex, newZoom);
+        const maxScrollY = page ? Math.max(0, page.contentHeight - screenHeight / newActualZoom) : 0;
+        const newContentY = mouseY - contentMouseY * newActualZoom;
+        const vertOffset = computeVerticalOffset(currentGroupIndex, newActualZoom);
 
         // 从 contentLayer.y 反推 scrollY
-        const rawScrollY = -(newContentY - vertOffset) / newZoom;
+        const rawScrollY = -(newContentY - vertOffset) / newActualZoom;
         scrollYRef.current = Math.max(0, Math.min(maxScrollY, rawScrollY));
-        contentLayer.y = -scrollYRef.current * newZoom + vertOffset;
+        contentLayer.y = -scrollYRef.current * newActualZoom + vertOffset;
 
         zoomLevelRef.current = newZoom;
         setZoom(newZoom);
 
         for (const item of canvasItemsRef.current.values()) {
-          item.updateZoomVisibility(newZoom);
+          item.updateZoomVisibility(newActualZoom);
         }
 
-        handleZoomThresholdChange(newZoom);
+        handleZoomThresholdChange(newActualZoom);
         // throttle updateViewport 调用
         const now = performance.now();
         if (now - lastWheelUpdateTimeRef.current >= WHEEL_THROTTLE_MS) {
@@ -500,15 +523,15 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         const page = layout.pages[currentGroupIndex];
         if (!page) return;
 
-        const zoom = zoomLevelRef.current;
+        const actualZoom = getActualZoom(currentGroupIndex);
         const screenHeight = appRef.current.screen.height;
-        const maxScrollY = Math.max(0, page.contentHeight - screenHeight / zoom);
+        const maxScrollY = Math.max(0, page.contentHeight - screenHeight / actualZoom);
 
-        scrollYRef.current = Math.max(0, Math.min(maxScrollY, scrollYRef.current + e.deltaY / zoom));
+        scrollYRef.current = Math.max(0, Math.min(maxScrollY, scrollYRef.current + e.deltaY / actualZoom));
 
-        const vertOffset = computeVerticalOffset(currentGroupIndex, zoom);
-        contentLayer.y = -scrollYRef.current * zoom + vertOffset;
-        contentLayer.x = computeGroupX(currentGroupIndex, zoom);
+        const vertOffset = computeVerticalOffset(currentGroupIndex, actualZoom);
+        contentLayer.y = -scrollYRef.current * actualZoom + vertOffset;
+        contentLayer.x = computeGroupX(currentGroupIndex, actualZoom);
 
         // throttle updateViewport 调用
         const now = performance.now();
@@ -563,10 +586,10 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         // 从 contentLayer.y 反推 scrollY
         const contentLayer = contentLayerRef.current;
         if (contentLayer) {
-          const zoom = zoomLevelRef.current;
           const { currentGroupIndex } = useCanvasStore.getState();
-          const vertOffset = computeVerticalOffset(currentGroupIndex, zoom);
-          scrollYRef.current = -(contentLayer.y - vertOffset) / zoom;
+          const actualZoom = getActualZoom(currentGroupIndex);
+          const vertOffset = computeVerticalOffset(currentGroupIndex, actualZoom);
+          scrollYRef.current = -(contentLayer.y - vertOffset) / actualZoom;
         }
       }
     };
@@ -581,9 +604,9 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       const rect = (e.target as HTMLElement).getBoundingClientRect();
       const screenX = e.clientX - rect.left;
       const screenY = e.clientY - rect.top;
-      const zoom = zoomLevelRef.current;
-      const contentX = (screenX - contentLayer.x) / zoom;
-      const contentY = (screenY - contentLayer.y) / zoom;
+      const actualZoom = getActualZoom(activeGroupIdx);
+      const contentX = (screenX - contentLayer.x) / actualZoom;
+      const contentY = (screenY - contentLayer.y) / actualZoom;
 
       for (const [hash, item] of canvasItemsRef.current) {
         // 只对当前组的可见图片做命中检测
@@ -594,8 +617,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         const lx = item.x;
         const ly = item.y;
         const bounds = item.getBounds();
-        const w = bounds.width / zoom;
-        const h = bounds.height / zoom;
+        const w = bounds.width / actualZoom;
+        const h = bounds.height / actualZoom;
 
         if (
           contentX >= lx &&
@@ -646,7 +669,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       appRef.current?.destroy(true);
       appRef.current = null;
     };
-  }, [layout, updateViewport, setZoom, handleZoomThresholdChange, positionToGroup]);
+  }, [layout, updateViewport, setZoom, handleZoomThresholdChange, positionToGroup, getZoomCompensation, getActualZoom]);
 
   // ── 监听 currentGroupIndex 变化 → 带动画切换 ──
   useEffect(() => {
@@ -676,9 +699,11 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     scrollToY: (y: number) => {
       const contentLayer = contentLayerRef.current;
       if (!contentLayer) return;
-      const zoom = zoomLevelRef.current;
+      const { currentGroupIndex } = useCanvasStore.getState();
+      const actualZoom = getActualZoom(currentGroupIndex);
       scrollYRef.current = y;
-      contentLayer.y = -y * zoom;
+      const vertOffset = computeVerticalOffset(currentGroupIndex, actualZoom);
+      contentLayer.y = -y * actualZoom + vertOffset;
       updateViewport();
     },
     updateItemMetadata: (hash: string) => {
@@ -688,7 +713,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       const fileName = fileNamesRef.current.get(hash) ?? hash;
       canvasItem.setImageInfo(fileName, meta);
     },
-  }), [updateViewport]);
+  }), [updateViewport, getActualZoom, computeVerticalOffset]);
 
   // ── 外部缩放同步 ──
   useEffect(() => {
@@ -700,29 +725,30 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
     const newZoom = storeZoomLevel;
     const { currentGroupIndex } = useCanvasStore.getState();
+    const actualZoom = newZoom * getZoomCompensation(currentGroupIndex);
 
-    contentLayer.scale.set(newZoom);
+    contentLayer.scale.set(actualZoom);
 
     // X：内容中心对齐窗口中心
-    contentLayer.x = computeGroupX(currentGroupIndex, newZoom);
+    contentLayer.x = computeGroupX(currentGroupIndex, actualZoom);
 
     // Y: 保持 scrollY 不变，重新计算居中偏移
     const page = layout.pages[currentGroupIndex];
     const screenHeight = app.screen.height;
-    const maxScrollY = page ? Math.max(0, page.contentHeight - screenHeight / newZoom) : 0;
+    const maxScrollY = page ? Math.max(0, page.contentHeight - screenHeight / actualZoom) : 0;
     scrollYRef.current = Math.min(scrollYRef.current, maxScrollY);
-    const vertOffset = computeVerticalOffset(currentGroupIndex, newZoom);
-    contentLayer.y = -scrollYRef.current * newZoom + vertOffset;
+    const vertOffset = computeVerticalOffset(currentGroupIndex, actualZoom);
+    contentLayer.y = -scrollYRef.current * actualZoom + vertOffset;
 
     zoomLevelRef.current = newZoom;
 
     for (const item of canvasItemsRef.current.values()) {
-      item.updateZoomVisibility(newZoom);
+      item.updateZoomVisibility(actualZoom);
     }
 
-    handleZoomThresholdChange(newZoom);
+    handleZoomThresholdChange(actualZoom);
     updateViewport();
-  }, [storeZoomLevel, layout, handleZoomThresholdChange, updateViewport, computeVerticalOffset, computeGroupX]);
+  }, [storeZoomLevel, layout, handleZoomThresholdChange, updateViewport, computeVerticalOffset, computeGroupX, getZoomCompensation]);
 
   // ── fitToWindow ──
   useEffect(() => {
@@ -743,7 +769,9 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     const effectiveWidth = screenWidth - FIT_PADDING_X * 2;
     const effectiveHeight = screenHeight - FIT_PADDING_Y * 2;
 
-    let newZoom = 1.0;
+    // fitToWindow 计算的是实际画布缩放，需要反推出用户级 zoomLevel
+    const compensation = getZoomCompensation(currentGroupIndex);
+    let actualZoom = 1.0;
     if (page && layout.pageWidth > 0 && page.contentHeight > 0) {
       // 使用不含布局 padding 的纯内容高度来计算缩放，避免上下留白过大
       const pureContentHeight = page.contentHeight
@@ -751,24 +779,27 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         - DEFAULT_LAYOUT_CONFIG.paddingBottom;
       const zoomX = effectiveWidth / layout.pageWidth;
       const zoomY = effectiveHeight / (pureContentHeight > 0 ? pureContentHeight : page.contentHeight);
-      newZoom = Math.max(MIN_ZOOM, Math.min(Math.min(zoomX, zoomY), MAX_ZOOM));
+      actualZoom = Math.max(MIN_ZOOM * compensation, Math.min(Math.min(zoomX, zoomY), MAX_ZOOM * compensation));
     }
 
-    contentLayer.scale.set(newZoom);
+    // 反推用户级 zoomLevel
+    const newZoom = actualZoom / compensation;
+
+    contentLayer.scale.set(actualZoom);
     zoomLevelRef.current = newZoom;
     scrollYRef.current = 0;
     setZoom(newZoom);
 
-    contentLayer.x = computeGroupX(currentGroupIndex, newZoom);
-    contentLayer.y = computeVerticalOffset(currentGroupIndex, newZoom);
+    contentLayer.x = computeGroupX(currentGroupIndex, actualZoom);
+    contentLayer.y = computeVerticalOffset(currentGroupIndex, actualZoom);
 
     for (const item of canvasItemsRef.current.values()) {
-      item.updateZoomVisibility(newZoom);
+      item.updateZoomVisibility(actualZoom);
     }
 
-    handleZoomThresholdChange(newZoom);
+    handleZoomThresholdChange(actualZoom);
     updateViewport();
-  }, [fitCounter, layout, handleZoomThresholdChange, updateViewport, computeVerticalOffset, computeGroupX, setZoom]);
+  }, [fitCounter, layout, handleZoomThresholdChange, updateViewport, computeVerticalOffset, computeGroupX, setZoom, getZoomCompensation]);
 
   // ── 选中数量播报（屏幕阅读器） ──
   const selectedCount = useSelectionStore((s) => s.selectedCount);

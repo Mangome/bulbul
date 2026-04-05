@@ -41,6 +41,7 @@ function makePage(
     groupId: groupIndex + 1,
     offsetX: groupIndex * pageWidth,
     contentHeight: maxY,
+    columnWidth: 400,
     items,
     groupTitle: titleItem,
     sortedItems,

@@ -93,6 +93,8 @@ export interface GroupPageLayout {
   offsetX: number;
   /** 该分组内容的总高度 */
   contentHeight: number;
+  /** 该分组的列宽 (px) — 用于缩放补偿计算 */
+  columnWidth: number;
   /** 该分组包含的所有 LayoutItem */
   items: LayoutItem[];
   /** 分组标题 */
@@ -115,6 +117,8 @@ export interface LayoutResult {
   pageWidth: number;
   /** 列宽 */
   columnWidth: number;
+  /** 基准列宽 (多列模式) — 用于跨分组缩放归一化 */
+  baseColumnWidth: number;
   /** 总高度 (最大分组内容高度) — 用于纵向滚动边界 */
   totalHeight: number;
 }
@@ -211,6 +215,7 @@ export function computeHorizontalLayout(
         groupId: group.id,
         offsetX: pageOffsetX,
         contentHeight: contentStartY,
+        columnWidth: groupColumnWidth,
         items: [],
         groupTitle: titleItem,
         sortedItems: [],
@@ -261,6 +266,7 @@ export function computeHorizontalLayout(
       groupId: group.id,
       offsetX: pageOffsetX,
       contentHeight,
+      columnWidth: groupColumnWidth,
       items: pageItems,
       groupTitle: titleItem,
       sortedItems,
@@ -276,6 +282,7 @@ export function computeHorizontalLayout(
     totalWidth,
     pageWidth,
     columnWidth: defaultColumnWidth,
+    baseColumnWidth: defaultColumnWidth,
     totalHeight: maxContentHeight,
   };
 }
