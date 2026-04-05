@@ -87,6 +87,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
   const visibleItemsRef = useRef<LayoutItem[]>([]);
   const canvasItemsRef = useRef<Map<string, CanvasImageItem>>(new Map());
   const zoomLevelRef = useRef(1.0);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
   /** 上次质量判断对应的 size（基于 displayWidth） */
   const prevSizeRef = useRef<string>('medium');
 
@@ -98,6 +99,10 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
   fileNamesRef.current = fileNames;
   const metadataMapRef = useRef(metadataMap);
   metadataMapRef.current = metadataMap;
+
+  // ── 用 ref 持有最新的 layout（避免 layout 变化触发 Application 重建） ──
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
 
   // ── Drag state ──
   const isDraggingRef = useRef(false);
@@ -142,11 +147,12 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     setViewport(-contentLayer.x / scale, -contentLayer.y / scale);
     setViewportRect(viewport);
 
-    if (!layout.pages || layout.pages.length === 0) return;
+    const currentLayout = layoutRef.current;
+    if (!currentLayout.pages || currentLayout.pages.length === 0) return;
 
     const newVisible = getVisibleItems(
-      layout.pages,
-      layout.pageWidth,
+      currentLayout.pages,
+      currentLayout.pageWidth,
       viewport,
     );
     const prevVisible = visibleItemsRef.current;
@@ -159,6 +165,9 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         contentLayer.removeChild(canvasItem);
         canvasItem.destroy();
         canvasItemsRef.current.delete(item.hash);
+
+        // ── 主动释放离屏纹理，及时回收 GPU 内存 ──
+        imageLoaderRef.current?.evictTexture(item.hash);
       }
     }
 
@@ -167,6 +176,16 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     const activeGroupIdx = useCanvasStore.getState().currentGroupIndex;
     const transitioning = useCanvasStore.getState().isTransitioning;
 
+    // 内联计算 actualZoom：避免循环依赖
+    const calcActualZoom = (groupIndex: number): number => {
+      const page = currentLayout.pages[groupIndex];
+      if (!page || !currentLayout.baseColumnWidth || !page.columnWidth) {
+        return zoomLevelRef.current;
+      }
+      const compensation = currentLayout.baseColumnWidth / page.columnWidth;
+      return zoomLevelRef.current * compensation;
+    };
+
     for (const item of diff.enter) {
       if (canvasItemsRef.current.has(item.hash)) continue;
 
@@ -174,7 +193,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       const fileName = fileNamesRef.current.get(item.hash) ?? item.hash;
       const meta = metadataMapRef.current.get(item.hash);
       canvasItem.setImageInfo(fileName, meta);
-      canvasItem.updateZoomVisibility(getActualZoom(item.groupIndex));
+      canvasItem.updateZoomVisibility(calcActualZoom(item.groupIndex));
 
       const { selectedHashes } = useSelectionStore.getState();
       canvasItem.setSelected(selectedHashes.has(item.hash));
@@ -189,17 +208,22 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
       if (imageLoader) {
         imageLoader
-          .loadTexture(item.hash, item.width * getActualZoom(item.groupIndex))
-          .then((texture) => {
-            if (texture && canvasItemsRef.current.has(item.hash)) {
-              canvasItemsRef.current.get(item.hash)!.setTexture(texture);
+          .loadTexture(item.hash, item.width * calcActualZoom(item.groupIndex))
+          .then((result) => {
+            // 安全检查：Application 或 ImageLoader 可能已在 cleanup 中销毁
+            if (!result || !appRef.current || !imageLoaderRef.current) return;
+            // 版本校验：纹理可能在异步加载期间被 evict 销毁
+            if (!imageLoaderRef.current.getCache().isTextureValid(result.key, result.version)) return;
+            const ci = canvasItemsRef.current.get(item.hash);
+            if (ci) {
+              ci.setTexture(result.texture);
             }
           });
       }
     }
 
     visibleItemsRef.current = newVisible;
-  }, [layout, setViewport, setViewportRect]);
+  }, [setViewport, setViewportRect]);
 
   // ── 缩放阈值切换 ──
   // 注意: newActualZoom 参数是实际画布缩放（已含补偿系数）
@@ -224,10 +248,12 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       }));
       imageLoader.reloadForZoomChange(
         entries,
-        (hash, texture) => {
+        (hash, result) => {
+          if (!appRef.current || !imageLoaderRef.current) return;
+          if (!imageLoaderRef.current.getCache().isTextureValid(result.key, result.version)) return;
           const canvasItem = canvasItemsRef.current.get(hash);
           if (canvasItem) {
-            canvasItem.setTexture(texture);
+            canvasItem.setTexture(result.texture);
           }
         },
       );
@@ -263,22 +289,24 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
   // baseColumnWidth 是多列模式下的列宽（基准），groupColumnWidth 是该分组的列宽
   // 单张组列宽 >> 多张组列宽，补偿系数 < 1 会缩小单张组的画布缩放
   const getZoomCompensation = useCallback((groupIndex: number): number => {
-    const page = layout.pages[groupIndex];
-    if (!page || !layout.baseColumnWidth || !page.columnWidth) return 1.0;
-    return layout.baseColumnWidth / page.columnWidth;
-  }, [layout]);
+    const currentLayout = layoutRef.current;
+    const page = currentLayout.pages[groupIndex];
+    if (!page || !currentLayout.baseColumnWidth || !page.columnWidth) return 1.0;
+    return currentLayout.baseColumnWidth / page.columnWidth;
+  }, []);
 
   /** 获取指定分组应应用的实际画布缩放值 */
   const getActualZoom = useCallback((groupIndex: number): number => {
     return zoomLevelRef.current * getZoomCompensation(groupIndex);
-  }, [getZoomCompensation]);
+  }, []);
 
   // ── 计算当前组的垂直居中偏移 ──
   const computeVerticalOffset = useCallback((groupIndex: number, zoom: number) => {
     const app = appRef.current;
-    if (!app || !layout.pages[groupIndex]) return 0;
+    const currentLayout = layoutRef.current;
+    if (!app || !currentLayout.pages[groupIndex]) return 0;
 
-    const page = layout.pages[groupIndex];
+    const page = currentLayout.pages[groupIndex];
     const screenHeight = app.screen.height;
     const { paddingTop, paddingBottom } = DEFAULT_LAYOUT_CONFIG;
     const pureContentHeight = (page.contentHeight - paddingTop - paddingBottom) * zoom;
@@ -289,25 +317,27 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       return (screenHeight - pureContentHeight) / 2 - paddingTop * zoom;
     }
     return 0;
-  }, [layout]);
+  }, []);
 
   // ── 计算当前组的 X 坐标（内容中心对齐窗口中心） ──
   const computeGroupX = useCallback((groupIndex: number, zoom: number) => {
     const app = appRef.current;
-    if (!app) return -(groupIndex * layout.pageWidth * zoom);
+    const currentLayout = layoutRef.current;
+    if (!app) return -(groupIndex * currentLayout.pageWidth * zoom);
 
     const screenWidth = app.screen.width;
     // 页面中心（内容坐标系）= (groupIndex + 0.5) * pageWidth
     // 映射到屏幕中心
-    return screenWidth / 2 - (groupIndex + 0.5) * layout.pageWidth * zoom;
-  }, [layout]);
+    return screenWidth / 2 - (groupIndex + 0.5) * currentLayout.pageWidth * zoom;
+  }, []);
 
   // ── 定位到当前分组（设置 ContentLayer 位置） ──
   const positionToGroup = useCallback((groupIndex: number, animated: boolean) => {
     const contentLayer = contentLayerRef.current;
     const app = appRef.current;
     if (!contentLayer || !app) return;
-    if (!layout.pages || layout.pages.length === 0) return;
+    const currentLayout = layoutRef.current;
+    if (!currentLayout.pages || currentLayout.pages.length === 0) return;
 
     const targetActualZoom = getActualZoom(groupIndex);
     const targetX = computeGroupX(groupIndex, targetActualZoom);
@@ -359,7 +389,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     };
 
     transitionAnimRef.current = requestAnimationFrame(animate);
-  }, [layout, updateViewport, setTransitioning, applyGroupAlpha, ensureOnlyGroupVisible, computeVerticalOffset, computeGroupX, getActualZoom]);
+  }, [updateViewport, setTransitioning, applyGroupAlpha, ensureOnlyGroupVisible, computeVerticalOffset, computeGroupX, getActualZoom]);
 
   // ── 初始化 PixiJS ──
   useEffect(() => {
@@ -428,7 +458,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       contentLayerRef.current = contentLayer;
 
       // ── 图片加载器 ──
-      imageLoaderRef.current = new ImageLoader(300);
+      // 容量设为 20：当前组最多显示 ~10 张 + 少量预加载
+      imageLoaderRef.current = new ImageLoader(20);
 
       // ── 从 store 读取已加载的缩放级别（可能从持久化配置恢复） ──
       const savedZoom = useCanvasStore.getState().zoomLevel;
@@ -436,7 +467,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       // scale.set 由 positionToGroup 根据分组补偿系数设置，此处不直接设
 
       // ── 设置分组总数 ──
-      useCanvasStore.getState().setGroupCount(layout.pages.length);
+      useCanvasStore.getState().setGroupCount(layoutRef.current.pages.length);
 
       // ── 滚轮事件 ──
       app.canvas.addEventListener('wheel', handleWheel, { passive: false });
@@ -452,6 +483,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         updateViewport();
       });
       resizeObserver.observe(container);
+      resizeObserverRef.current = resizeObserver;
 
       // 初始定位到第一组
       positionToGroup(useCanvasStore.getState().currentGroupIndex, false);
@@ -492,7 +524,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         contentLayer.x = computeGroupX(currentGroupIndex, newActualZoom);
 
         // Y 轴：以鼠标位置为锚点缩放，并 clamp 到合法范围
-        const page = layout.pages[currentGroupIndex];
+        const page = layoutRef.current.pages[currentGroupIndex];
         const screenHeight = appRef.current!.screen.height;
         const maxScrollY = page ? Math.max(0, page.contentHeight - screenHeight / newActualZoom) : 0;
         const newContentY = mouseY - contentMouseY * newActualZoom;
@@ -520,7 +552,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       } else {
         // ── 普通滚轮：组内纵向滚动（锁定范围） ──
         const { currentGroupIndex } = useCanvasStore.getState();
-        const page = layout.pages[currentGroupIndex];
+        const page = layoutRef.current.pages[currentGroupIndex];
         if (!page) return;
 
         const actualZoom = getActualZoom(currentGroupIndex);
@@ -646,10 +678,17 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     initApp();
 
     return () => {
+      console.log('[InfiniteCanvas] Cleanup function called, destroying resources');
       destroyed = true;
       if (transitionAnimRef.current != null) {
         cancelAnimationFrame(transitionAnimRef.current);
       }
+
+      // ── 立即停止渲染循环，防止销毁资源后 Ticker 回调访问已释放的纹理 ──
+      if (appRef.current) {
+        appRef.current.ticker.stop();
+      }
+
       const canvas = appRef.current?.canvas;
       if (canvas) {
         canvas.removeEventListener('wheel', handleWheel);
@@ -660,16 +699,31 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
 
+      // ── 清理 ResizeObserver ──
+      resizeObserverRef.current?.disconnect();
+      resizeObserverRef.current = null;
+
+      // ── 销毁顺序很关键：先销毁 UI，再销毁资源 ──
+      // 1. 先销毁所有 CanvasImageItem（移除 Sprite 从渲染树）
+      console.log(`[InfiniteCanvas] Destroying ${canvasItemsRef.current.size} canvas items`);
       for (const item of canvasItemsRef.current.values()) {
         item.destroy();
       }
       canvasItemsRef.current.clear();
 
+      // 2. 然后销毁 ImageLoader（销毁所有纹理，同步释放 GPU 资源）
+      console.log('[InfiniteCanvas] Destroying imageLoader');
       imageLoaderRef.current?.destroy();
+      imageLoaderRef.current = null;
+
+      // 3. 最后销毁 PixiJS Application
+      console.log('[InfiniteCanvas] Destroying PixiJS Application');
       appRef.current?.destroy(true);
       appRef.current = null;
+      console.log('[InfiniteCanvas] Cleanup completed');
     };
-  }, [layout, updateViewport, setZoom, handleZoomThresholdChange, positionToGroup, getZoomCompensation, getActualZoom]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setZoom]); // 仅在组件挂载时初始化，所有回调通过 ref 访问最新值
 
   // ── 监听 currentGroupIndex 变化 → 带动画切换 ──
   useEffect(() => {
@@ -680,7 +734,11 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
   // ── layout 变化时重置到第一组（目录切换时触发） ──
   useEffect(() => {
-    if (!layout.pages || layout.pages.length === 0) return;
+    const currentLayout = layoutRef.current;
+    if (!currentLayout.pages || currentLayout.pages.length === 0) return;
+
+    // 更新分组总数
+    useCanvasStore.getState().setGroupCount(currentLayout.pages.length);
 
     // 重置分组索引到 0，不执行动画
     useCanvasStore.setState({
@@ -733,7 +791,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     contentLayer.x = computeGroupX(currentGroupIndex, actualZoom);
 
     // Y: 保持 scrollY 不变，重新计算居中偏移
-    const page = layout.pages[currentGroupIndex];
+    const page = layoutRef.current.pages[currentGroupIndex];
     const screenHeight = app.screen.height;
     const maxScrollY = page ? Math.max(0, page.contentHeight - screenHeight / actualZoom) : 0;
     scrollYRef.current = Math.min(scrollYRef.current, maxScrollY);
@@ -748,7 +806,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
     handleZoomThresholdChange(actualZoom);
     updateViewport();
-  }, [storeZoomLevel, layout, handleZoomThresholdChange, updateViewport, computeVerticalOffset, computeGroupX, getZoomCompensation]);
+  }, [storeZoomLevel, handleZoomThresholdChange, updateViewport, computeVerticalOffset, computeGroupX, getZoomCompensation]);
 
   // ── fitToWindow ──
   useEffect(() => {
@@ -759,7 +817,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     if (!contentLayer || !app) return;
 
     const { currentGroupIndex } = useCanvasStore.getState();
-    const page = layout.pages[currentGroupIndex];
+    const currentLayout = layoutRef.current;
+    const page = currentLayout.pages[currentGroupIndex];
 
     // 根据视口和内容尺寸计算适应窗口的缩放比例
     const FIT_PADDING_X = 40; // px 左右留白
@@ -772,12 +831,12 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     // fitToWindow 计算的是实际画布缩放，需要反推出用户级 zoomLevel
     const compensation = getZoomCompensation(currentGroupIndex);
     let actualZoom = 1.0;
-    if (page && layout.pageWidth > 0 && page.contentHeight > 0) {
+    if (page && currentLayout.pageWidth > 0 && page.contentHeight > 0) {
       // 使用不含布局 padding 的纯内容高度来计算缩放，避免上下留白过大
       const pureContentHeight = page.contentHeight
         - DEFAULT_LAYOUT_CONFIG.paddingTop
         - DEFAULT_LAYOUT_CONFIG.paddingBottom;
-      const zoomX = effectiveWidth / layout.pageWidth;
+      const zoomX = effectiveWidth / currentLayout.pageWidth;
       const zoomY = effectiveHeight / (pureContentHeight > 0 ? pureContentHeight : page.contentHeight);
       actualZoom = Math.max(MIN_ZOOM * compensation, Math.min(Math.min(zoomX, zoomY), MAX_ZOOM * compensation));
     }

@@ -11,7 +11,7 @@ import {
   Container,
   Graphics,
   Sprite,
-  type Texture,
+  Texture,
 } from 'pixi.js';
 import { ImageInfoOverlay } from './ImageInfoOverlay';
 import type { LayoutItem } from '../../utils/layout';
@@ -113,9 +113,13 @@ export class CanvasImageItem extends Container {
 
   /** 纹理加载完成，替换占位色块，并根据 EXIF Orientation 旋转 */
   setTexture(texture: Texture): void {
+    // 安全检查：纹理的底层资源可能在异步加载期间被 evict 销毁
+    if (!texture.source || !texture.source.resource) return;
+
     if (this.sprite) {
+      this.sprite.texture = Texture.EMPTY;
       this.removeChild(this.sprite);
-      this.sprite.destroy();
+      this.sprite.destroy({ texture: false });
       this.sprite = null;
     }
 
@@ -284,13 +288,15 @@ export class CanvasImageItem extends Container {
     }
     this.off('pointerover', this._onPointerOver, this);
     this.off('pointerout', this._onPointerOut, this);
-    
-    // 安全销毁 sprite（setTexture 可能已经销毁过）
+
+    // 先将纹理设为 EMPTY，解除 Sprite 及其 GPU 侧 BatchableSprite 对纹理的引用
+    // 这样即使渲染管线在下一帧仍访问该 Sprite，也不会触碰已销毁的 TextureSource
     if (this.sprite) {
-      this.sprite.destroy();
+      this.sprite.texture = Texture.EMPTY;
+      this.sprite.destroy({ texture: false });
       this.sprite = null;
     }
-    
+
     this.placeholder.destroy();
     this.infoOverlay.destroy();
     this.selectionOverlay?.destroy();

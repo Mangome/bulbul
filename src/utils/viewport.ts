@@ -88,7 +88,7 @@ export function getVisibleItemsInPage(
   page: GroupPageLayout,
   viewportY: number,
   viewportHeight: number,
-  bufferRatio: number = 0.5,
+  bufferRatio: number = 0.2,
 ): LayoutItem[] {
   if (page.sortedItems.length === 0) return [];
 
