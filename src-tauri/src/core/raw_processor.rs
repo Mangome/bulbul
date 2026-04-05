@@ -23,8 +23,16 @@ use crate::utils::paths::compute_path_hash;
 /// 缩略图最大宽度（像素）
 const THUMBNAIL_WIDTH: u32 = 200;
 
+/// Medium 图片最大宽度（像素）
+/// 对应 1920p 显示器 + 缩放因子 1.25（125%)
+/// 降低这个值可进一步减少内存，但可能影响清晰度
+const MEDIUM_WIDTH: u32 = 1920;
+
 /// 缩略图 JPEG 质量（200px 宽不需要太高质量）
 const THUMBNAIL_QUALITY: u8 = 75;
+
+/// Medium JPEG 质量（1920px 显示用，80% 是高质量与文件大小的平衡）
+const MEDIUM_QUALITY: u8 = 80;
 
 /// Exif 头部读取大小上限（64KB 足以覆盖所有 Exif 数据，NEF 的 Exif 在文件头）
 const EXIF_HEADER_SIZE: usize = 64 * 1024;
@@ -106,17 +114,20 @@ pub async fn process_single_raw(
     // 不再需要原始 NEF 数据，尽早释放
     drop(data);
 
-    // 写入 medium（原始嵌入 JPEG，直接异步写入）
-    let medium_path = cache::write_medium(cache_base_dir, &hash, &jpeg_data).await?;
+    // 生成 medium 和缩略图（CPU 密集型，在 blocking 线程池中执行）
+    let jpeg_clone = jpeg_data.clone();
+    let (medium_data, thumbnail_data) = tokio::task::spawn_blocking(move || {
+        let medium = generate_medium(&jpeg_clone)
+            .map_err(|e| AppError::ImageProcessError(format!("Medium 生成失败: {}", e)))?;
+        let thumbnail = generate_thumbnail(&jpeg_clone)
+            .map_err(|e| AppError::ImageProcessError(format!("缩略图生成失败: {}", e)))?;
+        Ok::<_, AppError>((medium, thumbnail))
+    })
+    .await
+    .map_err(|e| AppError::ImageProcessError(format!("图像处理任务失败: {}", e)))??;
 
-    // 生成缩略图（CPU 密集型，在 blocking 线程池中执行）
-    let thumbnail_data = {
-        let jpeg_clone = jpeg_data;
-        tokio::task::spawn_blocking(move || generate_thumbnail(&jpeg_clone))
-            .await
-            .map_err(|e| AppError::ImageProcessError(format!("缩略图生成任务失败: {}", e)))??
-    };
-
+    // 异步写入磁盘
+    let medium_path = cache::write_medium(cache_base_dir, &hash, &medium_data).await?;
     let thumbnail_path = cache::write_thumbnail(cache_base_dir, &hash, &thumbnail_data).await?;
 
     Ok(ProcessResult {
@@ -187,6 +198,36 @@ pub fn generate_thumbnail(jpeg_data: &[u8]) -> Result<Vec<u8>, AppError> {
     resized
         .write_with_encoder(encoder)
         .map_err(|e| AppError::ImageProcessError(format!("缩略图编码失败: {}", e)))?;
+
+    Ok(buf.into_inner())
+}
+
+/// 生成 medium 尺寸图片（最大宽度 1920px）
+///
+/// 用于屏幕显示，比原始嵌入 JPEG（6016×4016）小得多
+/// 解码 JPEG → 按比例缩放到 1920px 宽（Lanczos3）→ 编码为 JPEG（质量 80%）
+pub fn generate_medium(jpeg_data: &[u8]) -> Result<Vec<u8>, AppError> {
+    let img = image::load_from_memory(jpeg_data)
+        .map_err(|e| AppError::ImageProcessError(format!("Medium JPEG 解码失败: {}", e)))?;
+
+    let (orig_width, orig_height) = (img.width(), img.height());
+
+    let (new_width, new_height) = if orig_width <= MEDIUM_WIDTH {
+        // 不放大，但仍重新编码以保证质量和一致性
+        (orig_width, orig_height)
+    } else {
+        let ratio = MEDIUM_WIDTH as f64 / orig_width as f64;
+        let new_height = (orig_height as f64 * ratio).round() as u32;
+        (MEDIUM_WIDTH, new_height.max(1))
+    };
+
+    let resized = img.resize_exact(new_width, new_height, FilterType::Lanczos3);
+
+    let mut buf = Cursor::new(Vec::with_capacity(128 * 1024)); // 预分配 128KB
+    let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, MEDIUM_QUALITY);
+    resized
+        .write_with_encoder(encoder)
+        .map_err(|e| AppError::ImageProcessError(format!("Medium JPEG 编码失败: {}", e)))?;
 
     Ok(buf.into_inner())
 }

@@ -26,8 +26,8 @@ use crate::utils::cache;
 /// 获取最大并发处理数（根据 CPU 核数动态调整）
 fn get_max_concurrency() -> usize {
     let cpu_count = num_cpus::get();
-    // 2x CPU 核数，但不超过 16
-    std::cmp::min(cpu_count * 2, 16)
+    // 1x CPU 核数，但不超过 8（降低内存峰值）
+    std::cmp::min(cpu_count, 8)
 }
 
 /// 处理文件夹：完整 5 阶段流水线
