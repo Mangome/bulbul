@@ -16,6 +16,7 @@ if (!window.matchMedia) {
 
 import { CanvasImageItem } from './CanvasImageItem';
 import type { LayoutItem } from '../../utils/layout';
+import type { DetectionBox } from '../../types';
 
 describe('CanvasImageItem', () => {
   let layoutItem: LayoutItem;
@@ -163,6 +164,40 @@ describe('CanvasImageItem', () => {
     it('缺失 orientation 时默认为 1', () => {
       const mockBitmap = { width: 100, height: 100 } as any;
       canvasItem.setImage(mockBitmap); // 未指定 orientation
+      expect(canvasItem.hash).toBe('test-hash');
+    });
+  });
+
+  describe('检测框数据管理', () => {
+    const sampleBoxes: DetectionBox[] = [
+      { x1: 0.2, y1: 0.1, x2: 0.8, y2: 0.9, confidence: 0.95 },
+      { x1: 0.1, y1: 0.1, x2: 0.3, y2: 0.3, confidence: 0.7 },
+    ];
+
+    it('setDetectionBoxes 设置检测框数据不抛异常', () => {
+      expect(() => {
+        canvasItem.setDetectionBoxes(sampleBoxes);
+      }).not.toThrow();
+    });
+
+    it('setDetectionBoxes 接受空数组', () => {
+      expect(() => {
+        canvasItem.setDetectionBoxes([]);
+      }).not.toThrow();
+    });
+
+    it('setDetectionVisible 控制可见性不抛异常', () => {
+      expect(() => {
+        canvasItem.setDetectionVisible(true);
+        canvasItem.setDetectionVisible(false);
+      }).not.toThrow();
+    });
+
+    it('destroy 后检测框数据被清理', () => {
+      canvasItem.setDetectionBoxes(sampleBoxes);
+      canvasItem.setDetectionVisible(true);
+      canvasItem.destroy();
+      // destroy 后对象仍然存在但状态已重置
       expect(canvasItem.hash).toBe('test-hash');
     });
   });

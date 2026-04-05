@@ -11,7 +11,8 @@
 // ============================================================
 
 import type { LayoutItem } from '../../utils/layout';
-import type { ImageMetadata } from '../../types';
+import type { ImageMetadata, DetectionBox } from '../../types';
+import { drawDetectionOverlay } from './drawDetectionOverlay';
 
 // ─── 常量 ─────────────────────────────────────────────
 
@@ -84,6 +85,10 @@ export class CanvasImageItem {
   // 选中动画状态
   private selectionAnimStartTime: number = 0;
   private selectionAnimDirection: 'in' | 'out' = 'in';
+
+  // 检测框
+  private detectionBoxes: DetectionBox[] = [];
+  private detectionVisible: boolean = false;
 
   // Badge 布局缓存
   private badgeLayoutCache: BadgeLayoutCache | null = null;
@@ -168,6 +173,11 @@ export class CanvasImageItem {
       this._drawPlaceholder(ctx);
     }
 
+    // 绘制检测框覆盖层
+    if (this.detectionVisible && this.detectionBoxes.length > 0) {
+      drawDetectionOverlay(ctx, this.detectionBoxes, this.width, this.height);
+    }
+
     // 计算信息覆盖层的 alpha
     const infoOverlayAlpha = this._calculateInfoOverlayAlpha(zoom);
 
@@ -223,6 +233,20 @@ export class CanvasImageItem {
   }
 
   /**
+   * 设置检测框数据
+   */
+  setDetectionBoxes(boxes: DetectionBox[]): void {
+    this.detectionBoxes = boxes;
+  }
+
+  /**
+   * 控制检测框显示/隐藏
+   */
+  setDetectionVisible(visible: boolean): void {
+    this.detectionVisible = visible;
+  }
+
+  /**
    * 更新信息覆盖层可见性（低缩放时淡出，平滑过渡；文字大小不随缩放变化）
    */
   updateZoomVisibility(zoomLevel: number): void {
@@ -245,6 +269,8 @@ export class CanvasImageItem {
     this.metadata = null;
     this.badgeLayoutCache = null;
     this.selectionAnimStartTime = 0;
+    this.detectionBoxes = [];
+    this.detectionVisible = false;
   }
 
   // ── 私有方法：绘制 ────────────────────────────────────────
