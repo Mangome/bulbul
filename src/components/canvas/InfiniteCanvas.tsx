@@ -162,12 +162,11 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     for (const item of diff.leave) {
       const canvasItem = canvasItemsRef.current.get(item.hash);
       if (canvasItem) {
-        contentLayer.removeChild(canvasItem);
         canvasItem.destroy();
         canvasItemsRef.current.delete(item.hash);
 
-        // ── 主动释放离屏纹理，及时回收 GPU 内存 ──
-        imageLoaderRef.current?.evictTexture(item.hash);
+        // ── 主动释放离屏图片，及时回收内存 ──
+        imageLoaderRef.current?.evictImage(item.hash);
       }
     }
 
@@ -203,20 +202,19 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         canvasItem.alpha = item.groupIndex === activeGroupIdx ? 1 : 0;
       }
 
-      contentLayer.addChild(canvasItem);
       canvasItemsRef.current.set(item.hash, canvasItem);
 
       if (imageLoader) {
         imageLoader
-          .loadTexture(item.hash, item.width * calcActualZoom(item.groupIndex))
+          .loadImage(item.hash, item.width * calcActualZoom(item.groupIndex))
           .then((result) => {
             // 安全检查：Application 或 ImageLoader 可能已在 cleanup 中销毁
             if (!result || !appRef.current || !imageLoaderRef.current) return;
-            // 版本校验：纹理可能在异步加载期间被 evict 销毁
-            if (!imageLoaderRef.current.getCache().isTextureValid(result.key, result.version)) return;
+            // 版本校验：图片可能在异步加载期间被 evict 销毁
+            if (!imageLoaderRef.current.getCache().isImageValid(result.key, result.version)) return;
             const ci = canvasItemsRef.current.get(item.hash);
             if (ci) {
-              ci.setTexture(result.texture);
+              ci.setImage(result.image);
             }
           });
       }
@@ -250,10 +248,10 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         entries,
         (hash, result) => {
           if (!appRef.current || !imageLoaderRef.current) return;
-          if (!imageLoaderRef.current.getCache().isTextureValid(result.key, result.version)) return;
+          if (!imageLoaderRef.current.getCache().isImageValid(result.key, result.version)) return;
           const canvasItem = canvasItemsRef.current.get(hash);
           if (canvasItem) {
-            canvasItem.setTexture(result.texture);
+            canvasItem.setImage(result.image);
           }
         },
       );
@@ -646,18 +644,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         const layoutItem = visibleItemsRef.current.find(li => li.hash === hash);
         if (!layoutItem || layoutItem.groupIndex !== activeGroupIdx) continue;
 
-        const lx = item.x;
-        const ly = item.y;
-        const bounds = item.getBounds();
-        const w = bounds.width / actualZoom;
-        const h = bounds.height / actualZoom;
-
-        if (
-          contentX >= lx &&
-          contentX <= lx + w &&
-          contentY >= ly &&
-          contentY <= ly + h
-        ) {
+        if (item.hitTest(contentX, contentY)) {
           useSelectionStore.getState().toggleSelection(hash);
           syncSelectionVisuals();
           return;

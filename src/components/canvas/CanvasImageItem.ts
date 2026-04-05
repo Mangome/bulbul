@@ -1,33 +1,29 @@
 // ============================================================
-// 画布图片项
+// Canvas 2D 画布图片项
 //
-// PixiJS Container 封装（非 React 组件），包含：
-// - 占位色块（纹理加载前）
-// - Sprite（纹理加载后）
+// 纯 Canvas 2D 实现，替代 PixiJS Container。
+// 包含：
+// - 占位色块（图片加载前）
+// - 图片绘制（应用 EXIF Orientation 变换）
+// - 选中/悬停视觉效果
 // - 信息覆盖层（底部渐变 + Badge）
+// - AABB 命中检测
 // ============================================================
 
-import {
-  Container,
-  Graphics,
-  Sprite,
-  Texture,
-} from 'pixi.js';
-import { ImageInfoOverlay } from './ImageInfoOverlay';
 import type { LayoutItem } from '../../utils/layout';
 import type { ImageMetadata } from '../../types';
 
 // ─── 常量 ─────────────────────────────────────────────
 
 /** 占位色块颜色 */
-const PLACEHOLDER_COLOR = 0xE0E4EB;
+const PLACEHOLDER_COLOR = '#E0E4EB';
 /** 信息覆盖层可见的最低缩放级别 */
 const INFO_OVERLAY_MIN_ZOOM = 0.3;
 /** 信息覆盖层从开始淡入到完全可见的缩放区间宽度 */
 const INFO_OVERLAY_FADE_RANGE = 0.1;
 
 /** 选中色（品牌靛蓝，在画布背景上辨识度高） */
-const SELECTION_COLOR = 0x2563A8;
+const SELECTION_COLOR = '#2563A8';
 /** 选中边框宽度 */
 const SELECTION_BORDER_WIDTH = 3;
 /** 悬停边框宽度 */
@@ -41,239 +37,198 @@ const SELECTION_OVERLAY_ALPHA = 0.08;
 /** 外发光透明度 */
 const SELECTION_GLOW_ALPHA = 0.2;
 
+// Badge 样式常量（屏幕像素，不随缩放变化）
+const BADGE_PADDING_X = 6;
+const BADGE_PADDING_Y = 3;
+const BADGE_RADIUS = 8;
+const BADGE_GAP = 4;
+const ROW_GAP = 3;
+const LEFT_PADDING = 8;
+const VERTICAL_PADDING = 8;
+
+const FILE_NAME_FONT_SIZE = 11;
+const PARAM_FONT_SIZE = 10;
+
+/** 合焦评分星级颜色 */
+const FOCUS_SCORE_COLORS: Record<number, string> = {
+  5: '#4CAF50',  // 绿色
+  4: '#2196F3',  // 蓝色
+  3: '#FF9800',  // 橙色
+  2: '#F44336',  // 红色
+  1: '#F44336',  // 红色
+};
+
 // ─── CanvasImageItem ─────────────────────────────────
 
-export class CanvasImageItem extends Container {
+export class CanvasImageItem {
   readonly hash: string;
   readonly groupId: number;
-  private itemWidth: number;
-  private itemHeight: number;
 
-  private placeholder: Graphics;
-  private sprite: Sprite | null = null;
-  private infoOverlay: ImageInfoOverlay;
+  // 布局信息
+  x: number;
+  y: number;
+  private width: number;
+  private height: number;
+
+  // 图片和元数据
+  private image: ImageBitmap | null = null;
+  private orientation: number = 1;
   private fileName: string = '';
   private metadata: ImageMetadata | null = null;
 
-  /** 上一次缩放级别，用于反向补偿覆盖层文字大小 */
-  private lastZoom: number = 1;
-
-  // 选中/悬停视觉对象（延迟创建）
-  private selectionOverlay: Graphics | null = null;
-  private selectionBorder: Graphics | null = null;
-  private checkMark: Graphics | null = null;
-  private hoverBorder: Graphics | null = null;
+  // 视觉状态
+  alpha: number = 1;
   private _isSelected: boolean = false;
   private _isHovered: boolean = false;
-  /** 选中动画帧 ID，用于取消 */
-  private _selAnimFrame: number = 0;
+
+  // 选中动画状态
+  private selectionAnimStartTime: number = 0;
+  private selectionAnimDirection: 'in' | 'out' = 'in';
+
+  // Badge 布局缓存
+  private badgeLayoutCache: BadgeLayoutCache | null = null;
+  private lastCachedZoom: number = 0;
+
 
   constructor(layoutItem: LayoutItem) {
-    super();
     this.hash = layoutItem.hash;
     this.groupId = layoutItem.groupId;
-    this.itemWidth = layoutItem.width;
-    this.itemHeight = layoutItem.height;
-
-    // 定位
     this.x = layoutItem.x;
     this.y = layoutItem.y;
-
-    // ── 占位色块 ──
-    this.placeholder = new Graphics();
-    this.placeholder
-      .rect(0, 0, this.itemWidth, this.itemHeight)
-      .fill(PLACEHOLDER_COLOR);
-    this.addChild(this.placeholder);
-
-    // ── 信息覆盖层 ──
-    this.infoOverlay = new ImageInfoOverlay();
-    this.addChild(this.infoOverlay);
-
-    // ── 交互设置 ──
-    this.eventMode = 'static';
-    this.on('pointerover', this._onPointerOver, this);
-    this.on('pointerout', this._onPointerOut, this);
+    this.width = layoutItem.width;
+    this.height = layoutItem.height;
   }
 
   // ── 公共方法 ────────────────────────────────────────
 
-  /** 设置图片元数据（文件名 + 拍摄参数）并刷新覆盖层 */
-  setImageInfo(fileName: string, metadata?: ImageMetadata | null): void {
-    this.fileName = fileName;
-    this.metadata = metadata ?? null;
-    this.infoOverlay.update(
-      this.itemWidth,
-      this.itemHeight,
-      this.fileName,
-      this.metadata,
-      this.lastZoom,
-    );
-  }
-
-  /** 纹理加载完成，替换占位色块，并根据 EXIF Orientation 旋转 */
-  setTexture(texture: Texture): void {
-    // 安全检查：纹理的底层资源可能在异步加载期间被 evict 销毁
-    if (!texture.source || !texture.source.resource) return;
-
-    if (this.sprite) {
-      this.sprite.texture = Texture.EMPTY;
-      this.removeChild(this.sprite);
-      this.sprite.destroy({ texture: false });
-      this.sprite = null;
-    }
-
-    this.sprite = new Sprite(texture);
-    this._applySpriteTransform();
-
-    // 插入到占位色块和覆盖层之间
-    this.addChildAt(this.sprite, 1);
-
-    // 隐藏占位色块
-    this.placeholder.visible = false;
+  /**
+   * 设置图片内容
+   * @param image ImageBitmap 对象
+   * @param orientation EXIF Orientation (1-8)
+   */
+  setImage(image: ImageBitmap, orientation?: number): void {
+    this.image = image;
+    this.orientation = orientation ?? 1;
   }
 
   /**
-   * 根据 EXIF Orientation 对 sprite 应用旋转/镜像变换
-   *
-   * EXIF Orientation 标准：
-   *   1 = 正常, 2 = 水平镜像, 3 = 旋转180°,
-   *   4 = 垂直镜像, 5 = 转置(镜像+270°), 6 = 旋转90°CW,
-   *   7 = 转置(镜像+90°), 8 = 旋转270°CW(即90°CCW)
+   * 设置图片信息（文件名 + 拍摄参数）
+   * 预计算 Badge 布局数据并缓存
    */
-  private _applySpriteTransform(): void {
-    const sprite = this.sprite!;
-    const orientation = this.metadata?.orientation ?? 1;
-
-    // 重置变换
-    sprite.rotation = 0;
-    sprite.scale.set(1);
-    sprite.position.set(0, 0);
-
-    switch (orientation) {
-      case 2: // 水平镜像
-        sprite.width = this.itemWidth;
-        sprite.height = this.itemHeight;
-        sprite.scale.x *= -1;
-        sprite.x = this.itemWidth;
-        break;
-
-      case 3: // 旋转 180°
-        sprite.width = this.itemWidth;
-        sprite.height = this.itemHeight;
-        sprite.rotation = Math.PI;
-        sprite.x = this.itemWidth;
-        sprite.y = this.itemHeight;
-        break;
-
-      case 4: // 垂直镜像
-        sprite.width = this.itemWidth;
-        sprite.height = this.itemHeight;
-        sprite.scale.y *= -1;
-        sprite.y = this.itemHeight;
-        break;
-
-      case 5: // 转置：水平镜像 + 270°
-        sprite.width = this.itemHeight;
-        sprite.height = this.itemWidth;
-        sprite.rotation = -Math.PI / 2;
-        sprite.scale.x *= -1;
-        sprite.x = this.itemWidth;
-        break;
-
-      case 6: // 旋转 90° 顺时针
-        sprite.width = this.itemHeight;
-        sprite.height = this.itemWidth;
-        sprite.rotation = Math.PI / 2;
-        sprite.x = this.itemWidth;
-        break;
-
-      case 7: // 转置：水平镜像 + 90°
-        sprite.width = this.itemHeight;
-        sprite.height = this.itemWidth;
-        sprite.rotation = Math.PI / 2;
-        sprite.scale.x *= -1;
-        sprite.y = this.itemHeight;
-        break;
-
-      case 8: // 旋转 270° 顺时针 (90° 逆时针)
-        sprite.width = this.itemHeight;
-        sprite.height = this.itemWidth;
-        sprite.rotation = -Math.PI / 2;
-        sprite.y = this.itemHeight;
-        break;
-
-      default: // orientation = 1 或缺失
-        sprite.width = this.itemWidth;
-        sprite.height = this.itemHeight;
-        break;
-    }
+  setImageInfo(fileName: string, metadata?: ImageMetadata | null): void {
+    this.fileName = fileName;
+    this.metadata = metadata ?? null;
+    // 清除 Badge 缓存，强制在下次 draw 中重新计算
+    this.badgeLayoutCache = null;
+    this.lastCachedZoom = 0;
   }
 
-  /** 更新信息覆盖层可见性（低缩放时淡出，平滑过渡；文字大小不随缩放变化） */
-  updateZoomVisibility(zoomLevel: number): void {
-    if (zoomLevel < INFO_OVERLAY_MIN_ZOOM) {
-      // 低于阈值：完全隐藏
-      this.infoOverlay.visible = false;
-      this.infoOverlay.alpha = 0;
-    } else if (zoomLevel < INFO_OVERLAY_MIN_ZOOM + INFO_OVERLAY_FADE_RANGE) {
-      // 过渡区间 [0.3, 0.4)：alpha 线性从 0 到 1
-      this.infoOverlay.visible = true;
-      this.infoOverlay.alpha =
-        (zoomLevel - INFO_OVERLAY_MIN_ZOOM) / INFO_OVERLAY_FADE_RANGE;
+  /**
+   * AABB 命中检测
+   * @param contentX 内容坐标 X
+   * @param contentY 内容坐标 Y
+   * @returns 是否命中此项
+   */
+  hitTest(contentX: number, contentY: number): boolean {
+    return (
+      contentX >= this.x &&
+      contentX <= this.x + this.width &&
+      contentY >= this.y &&
+      contentY <= this.y + this.height
+    );
+  }
+
+  /**
+   * 核心绘制方法
+   * @param ctx Canvas 2D 上下文
+   * @param zoom 缩放级别
+   * @param now 当前时间戳（performance.now()）
+   * @returns 是否需要继续渲染下一帧（动画进行中）
+   */
+  draw(ctx: CanvasRenderingContext2D, zoom: number, now: number): boolean {
+    // alpha <= 0 时跳过绘制
+    if (this.alpha <= 0) {
+      return false;
+    }
+
+    ctx.save();
+
+    // 平移到此项的位置
+    ctx.translate(this.x, this.y);
+
+    // 应用 alpha
+    ctx.globalAlpha = this.alpha;
+
+    let needsNextFrame = false;
+
+    // 绘制占位色块或图片
+    if (this.image) {
+      this._drawImageWithOrientation(ctx);
     } else {
-      // 完全可见
-      this.infoOverlay.visible = true;
-      this.infoOverlay.alpha = 1;
+      this._drawPlaceholder(ctx);
     }
 
-    // 缩放变化时重新布局覆盖层，使文字大小保持恒定
-    this.lastZoom = zoomLevel;
-    if (this.fileName) {
-      this.infoOverlay.update(
-        this.itemWidth,
-        this.itemHeight,
-        this.fileName,
-        this.metadata,
-        zoomLevel,
-      );
+    // 计算信息覆盖层的 alpha
+    const infoOverlayAlpha = this._calculateInfoOverlayAlpha(zoom);
+
+    // 绘制信息覆盖层
+    if (infoOverlayAlpha > 0) {
+      ctx.save();
+      ctx.globalAlpha *= infoOverlayAlpha;
+      this._drawInfoOverlay(ctx, zoom);
+      ctx.restore();
     }
+
+    // 绘制悬停/选中效果
+    if (this._isSelected) {
+      // 更新选中动画状态
+      const animNeedsFrame = this._updateSelectionAnimation(now);
+      needsNextFrame = needsNextFrame || animNeedsFrame;
+
+      // 绘制选中效果
+      this._drawSelection(ctx);
+    } else if (this._isHovered) {
+      // 绘制悬停效果
+      this._drawHover(ctx);
+    }
+
+    ctx.restore();
+
+    return needsNextFrame;
   }
 
-  /** 设置选中状态视觉（带渐入/渐出动画） */
+  /**
+   * 设置选中状态（带动画）
+   */
   setSelected(selected: boolean): void {
     if (this._isSelected === selected) return;
     this._isSelected = selected;
 
-    // 取消上一次动画
-    if (this._selAnimFrame) {
-      cancelAnimationFrame(this._selAnimFrame);
-      this._selAnimFrame = 0;
-    }
-
     if (selected) {
-      this._ensureSelectionGraphics();
-      this.selectionOverlay!.visible = true;
-      this.selectionBorder!.visible = true;
-      this.checkMark!.visible = true;
-      this._animateSelectionIn();
+      // 启动选中渐入动画
+      this.selectionAnimStartTime = performance.now();
+      this.selectionAnimDirection = 'in';
     } else {
-      if (this.selectionBorder && this.checkMark) {
-        this._animateSelectionOut();
-      }
+      // 启动选中渐出动画
+      this.selectionAnimStartTime = performance.now();
+      this.selectionAnimDirection = 'out';
     }
   }
 
-  /** 设置悬停状态视觉 */
+  /**
+   * 设置悬停状态
+   */
   setHovered(hovered: boolean): void {
-    if (this._isHovered === hovered) return;
-    this._isHovered = hovered;
+    this._isHovered = hovered && !this._isSelected;
+  }
 
-    if (hovered && !this._isSelected) {
-      this._ensureHoverGraphics();
-      this.hoverBorder!.visible = true;
-    } else {
-      if (this.hoverBorder) this.hoverBorder.visible = false;
+  /**
+   * 更新信息覆盖层可见性（低缩放时淡出，平滑过渡；文字大小不随缩放变化）
+   */
+  updateZoomVisibility(zoomLevel: number): void {
+    // 清除 Badge 缓存，强制重新布局（缩放变化时字数上限会变化）
+    if (Math.abs(zoomLevel - this.lastCachedZoom) > 0.01) {
+      this.badgeLayoutCache = null;
     }
   }
 
@@ -281,212 +236,531 @@ export class CanvasImageItem extends Container {
     return this._isSelected;
   }
 
-  /** 清理资源 */
-  override destroy(): void {
-    if (this._selAnimFrame) {
-      cancelAnimationFrame(this._selAnimFrame);
-    }
-    this.off('pointerover', this._onPointerOver, this);
-    this.off('pointerout', this._onPointerOut, this);
-
-    // 先将纹理设为 EMPTY，解除 Sprite 及其 GPU 侧 BatchableSprite 对纹理的引用
-    // 这样即使渲染管线在下一帧仍访问该 Sprite，也不会触碰已销毁的 TextureSource
-    if (this.sprite) {
-      this.sprite.texture = Texture.EMPTY;
-      this.sprite.destroy({ texture: false });
-      this.sprite = null;
-    }
-
-    this.placeholder.destroy();
-    this.infoOverlay.destroy();
-    this.selectionOverlay?.destroy();
-    this.selectionBorder?.destroy();
-    this.checkMark?.destroy();
-    this.hoverBorder?.destroy();
-    super.destroy({ children: true });
+  /**
+   * 清理资源
+   */
+  destroy(): void {
+    // 不触碰 ImageBitmap，生命周期由 ImageCache 管理
+    this.image = null;
+    this.metadata = null;
+    this.badgeLayoutCache = null;
+    this.selectionAnimStartTime = 0;
   }
 
-  // ── 私有方法 ────────────────────────────────────────
+  // ── 私有方法：绘制 ────────────────────────────────────────
 
-  private _onPointerOver(): void {
-    this.setHovered(true);
+  /** 绘制占位色块 */
+  private _drawPlaceholder(ctx: CanvasRenderingContext2D): void {
+    ctx.fillStyle = PLACEHOLDER_COLOR;
+    ctx.fillRect(0, 0, this.width, this.height);
   }
 
-  private _onPointerOut(): void {
-    this.setHovered(false);
+  /**
+   * 绘制图片，应用 EXIF Orientation 变换
+   */
+  private _drawImageWithOrientation(ctx: CanvasRenderingContext2D): void {
+    ctx.save();
+
+    const w = this.width;
+    const h = this.height;
+    const orientation = this.orientation;
+
+    switch (orientation) {
+      case 1: // 正常
+      default:
+        ctx.drawImage(this.image!, 0, 0, w, h);
+        break;
+
+      case 2: // 水平镜像
+        ctx.translate(w, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(this.image!, 0, 0, w, h);
+        break;
+
+      case 3: // 旋转 180°
+        ctx.translate(w, h);
+        ctx.rotate(Math.PI);
+        ctx.drawImage(this.image!, 0, 0, w, h);
+        break;
+
+      case 4: // 垂直镜像
+        ctx.translate(0, h);
+        ctx.scale(1, -1);
+        ctx.drawImage(this.image!, 0, 0, w, h);
+        break;
+
+      case 5: // 转置：水平镜像 + 270°
+        ctx.translate(w, 0);
+        ctx.rotate(Math.PI / 2);
+        ctx.scale(-1, 1);
+        ctx.drawImage(this.image!, 0, 0, h, w);
+        break;
+
+      case 6: // 旋转 90° 顺时针
+        ctx.translate(w, 0);
+        ctx.rotate(Math.PI / 2);
+        ctx.drawImage(this.image!, 0, 0, h, w);
+        break;
+
+      case 7: // 转置：水平镜像 + 90°
+        ctx.translate(0, h);
+        ctx.rotate(Math.PI / 2);
+        ctx.scale(-1, 1);
+        ctx.drawImage(this.image!, 0, 0, h, w);
+        break;
+
+      case 8: // 旋转 270° 顺时针 (90° 逆时针)
+        ctx.translate(0, h);
+        ctx.rotate(-Math.PI / 2);
+        ctx.drawImage(this.image!, 0, 0, h, w);
+        break;
+    }
+
+    ctx.restore();
   }
 
-  /** 延迟创建选中叠加层 + 边框 + ✓ 标记 */
-  private _ensureSelectionGraphics(): void {
-    // ── 半透明叠加层：让选中图片有轻微品牌色调 ──
-    if (!this.selectionOverlay) {
-      this.selectionOverlay = new Graphics();
-      this.selectionOverlay
-        // 全尺寸半透明色调覆盖
-        .rect(0, 0, this.itemWidth, this.itemHeight)
-        .fill({ color: SELECTION_COLOR, alpha: SELECTION_OVERLAY_ALPHA })
-        // 内侧 1px 品牌色线（内发光效果）
-        .rect(0, 0, this.itemWidth, this.itemHeight)
-        .stroke({ color: SELECTION_COLOR, width: 1, alpha: 0.15 });
-      this.selectionOverlay.visible = false;
-      this.addChild(this.selectionOverlay);
+  /**
+   * 绘制信息覆盖层（渐变背景 + 文件名 + Badge）
+   */
+  private _drawInfoOverlay(ctx: CanvasRenderingContext2D, zoom: number): void {
+    ctx.save();
+
+    const s = 1 / zoom; // 反向缩放因子
+    const z = zoom;
+
+    // 1. 计算覆盖层高度
+    const { totalContentH, overlayHeight, overlayY } = this._calculateOverlayLayout(zoom);
+
+    // 2. 绘制渐变背景
+    const gradient = ctx.createLinearGradient(0, overlayY, 0, overlayY + overlayHeight);
+    gradient.addColorStop(0, 'rgba(0,0,0,0)');
+    gradient.addColorStop(1, 'rgba(0,0,0,0.6)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, overlayY, this.width, overlayHeight);
+
+    // 3. 文字内容（反向缩放）
+    ctx.scale(s, s);
+
+    const bottomY = this.height * z; // 图片底边在容器坐标中的位置
+    const contentBottomY = bottomY - VERTICAL_PADDING;
+    const startY = contentBottomY - totalContentH;
+
+    // 文件名
+    if (this.fileName) {
+      ctx.font = `600 ${FILE_NAME_FONT_SIZE}px system-ui, -apple-system, sans-serif`;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.textBaseline = 'top';
+      const maxChars = maxCharsForWidth(this.width, zoom);
+      const displayName = truncateFileName(this.fileName, maxChars);
+      ctx.fillText(displayName, LEFT_PADDING * z, startY);
     }
 
-    // ── 选中边框：外发光 + 实色边框 ──
-    if (!this.selectionBorder) {
-      this.selectionBorder = new Graphics();
-      this.selectionBorder
-        // 外发光（品牌色半透明扩散）
-        .rect(
-          -SELECTION_BORDER_WIDTH - 3,
-          -SELECTION_BORDER_WIDTH - 3,
-          this.itemWidth + (SELECTION_BORDER_WIDTH + 3) * 2,
-          this.itemHeight + (SELECTION_BORDER_WIDTH + 3) * 2,
-        )
-        .stroke({ color: SELECTION_COLOR, width: 3, alpha: SELECTION_GLOW_ALPHA })
-        // 实色选中边框
-        .rect(
-          -SELECTION_BORDER_WIDTH / 2,
-          -SELECTION_BORDER_WIDTH / 2,
-          this.itemWidth + SELECTION_BORDER_WIDTH,
-          this.itemHeight + SELECTION_BORDER_WIDTH,
-        )
-        .stroke({ color: SELECTION_COLOR, width: SELECTION_BORDER_WIDTH });
-      this.selectionBorder.visible = false;
-      this.addChild(this.selectionBorder);
+    // Badge 行
+    if (this.metadata) {
+      const badgeLayout = this._getBadgeLayout(zoom);
+      const badgeY = startY + badgeLayout.nameH + (badgeLayout.badges.length > 0 ? ROW_GAP : 0);
+
+      let offsetX = LEFT_PADDING * z;
+      for (const badge of badgeLayout.badges) {
+        this._drawBadge(ctx, offsetX, badgeY, badge);
+        offsetX += badge.width + BADGE_GAP;
+      }
     }
 
-    // ── ✓ 标记：增大 + 白色外环 ──
-    if (!this.checkMark) {
-      this.checkMark = new Graphics();
-      const cx = this.itemWidth - CHECK_OFFSET - CHECK_RADIUS;
-      const cy = CHECK_OFFSET + CHECK_RADIUS;
-      // 白色外环（提升对比度）
-      this.checkMark
-        .circle(cx, cy, CHECK_RADIUS + 2)
-        .fill({ color: 0xFFFFFF, alpha: 0.9 });
-      // 品牌色圆形背景
-      this.checkMark
-        .circle(cx, cy, CHECK_RADIUS)
-        .fill(SELECTION_COLOR);
-      // 白色 ✓ 线条（加粗 + 路径放大）
-      this.checkMark
-        .moveTo(cx - 5, cy)
-        .lineTo(cx - 1.5, cy + 4)
-        .lineTo(cx + 6, cy - 5)
-        .stroke({ color: 0xFFFFFF, width: 2.5 });
-      this.checkMark.visible = false;
-      this.addChild(this.checkMark);
-    }
+    ctx.restore();
   }
 
-  /** 延迟创建悬停边框（品牌色系） */
-  private _ensureHoverGraphics(): void {
-    if (!this.hoverBorder) {
-      this.hoverBorder = new Graphics();
-      this.hoverBorder
-        // 外发光（品牌色半透明扩散）
-        .rect(
-          -HOVER_BORDER_WIDTH - 2,
-          -HOVER_BORDER_WIDTH - 2,
-          this.itemWidth + (HOVER_BORDER_WIDTH + 2) * 2,
-          this.itemHeight + (HOVER_BORDER_WIDTH + 2) * 2,
-        )
-        .stroke({ color: SELECTION_COLOR, width: 3, alpha: 0.2 })
-        // 品牌色悬停边框
-        .rect(
-          -HOVER_BORDER_WIDTH / 2,
-          -HOVER_BORDER_WIDTH / 2,
-          this.itemWidth + HOVER_BORDER_WIDTH,
-          this.itemHeight + HOVER_BORDER_WIDTH,
-        )
-        .stroke({ color: SELECTION_COLOR, width: HOVER_BORDER_WIDTH });
-      this.hoverBorder.visible = false;
-      this.addChild(this.hoverBorder);
+  /**
+   * 绘制选中效果（叠加层 + 边框 + CheckMark）
+   */
+  private _drawSelection(ctx: CanvasRenderingContext2D): void {
+    const now = performance.now();
+    const elapsed = now - this.selectionAnimStartTime;
+    const duration = CanvasImageItem._getSelAnimDuration();
+
+    let progress = Math.min(elapsed / duration, 1);
+    if (this.selectionAnimDirection === 'out') {
+      const outDuration = duration * 0.6;
+      progress = Math.min(elapsed / outDuration, 1);
+      progress = 1 - progress;
     }
-  }
 
-  // ── 选中动画 ────────────────────────────────────────
+    ctx.save();
 
-  /** 选中动画时长（ms）— 尊重 prefers-reduced-motion */
-  private static readonly SEL_ANIM_DURATION =
-    typeof window !== 'undefined' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
-      ? 0
-      : 200;
+    // 绘制叠加层
+    ctx.globalAlpha *= progress * SELECTION_OVERLAY_ALPHA;
+    ctx.fillStyle = SELECTION_COLOR;
+    ctx.fillRect(0, 0, this.width, this.height);
 
-  /** 选中时渐入动画：叠加层 + 边框 alpha 0→1，checkmark scale 0→1（弹性） */
-  private _animateSelectionIn(): void {
-    const overlay = this.selectionOverlay!;
-    const border = this.selectionBorder!;
-    const check = this.checkMark!;
-    const cx = this.itemWidth - CHECK_OFFSET - CHECK_RADIUS;
+    // 绘制内侧描边
+    ctx.globalAlpha = progress * 0.15;
+    ctx.strokeStyle = SELECTION_COLOR;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0, 0, this.width, this.height);
+
+    // 绘制外发光
+    ctx.globalAlpha = progress * SELECTION_GLOW_ALPHA;
+    ctx.strokeStyle = SELECTION_COLOR;
+    ctx.lineWidth = 3;
+    const glowExtend = 6;
+    ctx.strokeRect(-glowExtend, -glowExtend, this.width + glowExtend * 2, this.height + glowExtend * 2);
+
+    // 绘制实色边框
+    ctx.globalAlpha = progress;
+    ctx.strokeStyle = SELECTION_COLOR;
+    ctx.lineWidth = SELECTION_BORDER_WIDTH;
+    ctx.strokeRect(-SELECTION_BORDER_WIDTH / 2, -SELECTION_BORDER_WIDTH / 2, this.width + SELECTION_BORDER_WIDTH, this.height + SELECTION_BORDER_WIDTH);
+
+    // 绘制 CheckMark
+    const cx = this.width - CHECK_OFFSET - CHECK_RADIUS;
     const cy = CHECK_OFFSET + CHECK_RADIUS;
+    const checkProgress = progress < 1
+      ? 1 - Math.pow(1 - progress, 3) * Math.cos(progress * Math.PI * 0.5)
+      : 1;
+    const checkScale = checkProgress;
 
-    overlay.alpha = 0;
-    border.alpha = 0;
-    check.scale.set(0);
-    check.pivot.set(cx, cy);
-    check.position.set(cx, cy);
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(checkScale, checkScale);
+    ctx.translate(-cx, -cy);
 
-    const start = performance.now();
-    const duration = CanvasImageItem.SEL_ANIM_DURATION;
+    // 白色外环
+    ctx.globalAlpha = progress * 0.9;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.arc(cx, cy, CHECK_RADIUS + 2, 0, Math.PI * 2);
+    ctx.fill();
 
-    const tick = (now: number) => {
-      const elapsed = now - start;
-      const t = Math.min(elapsed / duration, 1);
+    // 品牌色圆形
+    ctx.globalAlpha = progress;
+    ctx.fillStyle = SELECTION_COLOR;
+    ctx.beginPath();
+    ctx.arc(cx, cy, CHECK_RADIUS, 0, Math.PI * 2);
+    ctx.fill();
 
-      // 叠加层 + 边框渐入
-      overlay.alpha = t;
-      border.alpha = t;
+    // 白色对勾
+    ctx.globalAlpha = progress;
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(cx - 5, cy);
+    ctx.lineTo(cx - 1.5, cy + 4);
+    ctx.lineTo(cx + 6, cy - 5);
+    ctx.stroke();
 
-      // checkmark 弹性缩放（overshoot）
-      const s = t < 1
-        ? 1 - Math.pow(1 - t, 3) * Math.cos(t * Math.PI * 0.5)
-        : 1;
-      check.scale.set(s);
-
-      if (t < 1) {
-        this._selAnimFrame = requestAnimationFrame(tick);
-      } else {
-        this._selAnimFrame = 0;
-      }
-    };
-
-    this._selAnimFrame = requestAnimationFrame(tick);
+    ctx.restore();
+    ctx.restore();
   }
 
-  /** 取消选中时渐出动画：alpha 1→0，完成后隐藏 */
-  private _animateSelectionOut(): void {
-    const overlay = this.selectionOverlay!;
-    const border = this.selectionBorder!;
-    const check = this.checkMark!;
-    const start = performance.now();
-    const duration = CanvasImageItem.SEL_ANIM_DURATION * 0.6; // 渐出更快
+  /**
+   * 绘制悬停效果（边框）
+   */
+  private _drawHover(ctx: CanvasRenderingContext2D): void {
+    ctx.save();
 
-    const tick = (now: number) => {
-      const elapsed = now - start;
-      const t = Math.min(elapsed / duration, 1);
-      const alpha = 1 - t;
+    // 绘制外发光
+    ctx.globalAlpha *= 0.2;
+    ctx.strokeStyle = SELECTION_COLOR;
+    ctx.lineWidth = 3;
+    const glowExtend = 4;
+    ctx.strokeRect(-glowExtend, -glowExtend, this.width + glowExtend * 2, this.height + glowExtend * 2);
 
-      overlay.alpha = alpha;
-      border.alpha = alpha;
-      check.alpha = alpha;
+    // 绘制悬停边框
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = SELECTION_COLOR;
+    ctx.lineWidth = HOVER_BORDER_WIDTH;
+    ctx.strokeRect(-HOVER_BORDER_WIDTH / 2, -HOVER_BORDER_WIDTH / 2, this.width + HOVER_BORDER_WIDTH, this.height + HOVER_BORDER_WIDTH);
 
-      if (t < 1) {
-        this._selAnimFrame = requestAnimationFrame(tick);
-      } else {
-        overlay.visible = false;
-        border.visible = false;
-        check.visible = false;
-        border.alpha = 1;
-        check.alpha = 1;
-        overlay.alpha = 1;
-        check.scale.set(1);
-        this._selAnimFrame = 0;
+    ctx.restore();
+  }
+
+  /**
+   * 绘制单个 Badge
+   */
+  private _drawBadge(ctx: CanvasRenderingContext2D, x: number, y: number, badge: BadgeInfo): void {
+    ctx.save();
+
+    ctx.fillStyle = badge.bgColor;
+    ctx.globalAlpha = badge.bgAlpha;
+
+    // 绘制圆角矩形背景
+    this._roundRect(ctx, x, y, badge.width, badge.height, BADGE_RADIUS);
+    ctx.fill();
+
+    // 绘制文字
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = `${PARAM_FONT_SIZE}px system-ui, -apple-system, sans-serif`;
+    ctx.textBaseline = 'top';
+    ctx.fillText(badge.text, x + BADGE_PADDING_X, y + BADGE_PADDING_Y);
+
+    ctx.restore();
+  }
+
+  /**
+   * 绘制圆角矩形路径
+   */
+  private _roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
+  // ── 私有方法：动画和计算 ────────────────────────────────────────
+
+  /** 获取选中动画时长（ms）— 尊重 prefers-reduced-motion */
+  private static _getSelAnimDuration(): number {
+    if (typeof window === 'undefined') return 200;
+    const prefersReduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    return prefersReduced ? 0 : 200;
+  }
+
+  /**
+   * 更新选中动画状态
+   * @returns 是否需要继续渲染
+   */
+  private _updateSelectionAnimation(now: number): boolean {
+    const elapsed = now - this.selectionAnimStartTime;
+    const duration = this.selectionAnimDirection === 'in'
+      ? CanvasImageItem._getSelAnimDuration()
+      : CanvasImageItem._getSelAnimDuration() * 0.6;
+
+    // 动画还在进行中，需要下一帧
+    return elapsed < duration;
+  }
+
+  /**
+   * 计算信息覆盖层的透明度
+   */
+  private _calculateInfoOverlayAlpha(zoom: number): number {
+    if (zoom < INFO_OVERLAY_MIN_ZOOM) {
+      return 0;
+    }
+    if (zoom < INFO_OVERLAY_MIN_ZOOM + INFO_OVERLAY_FADE_RANGE) {
+      return (zoom - INFO_OVERLAY_MIN_ZOOM) / INFO_OVERLAY_FADE_RANGE;
+    }
+    return 1;
+  }
+
+  /**
+   * 计算覆盖层布局
+   */
+  private _calculateOverlayLayout(zoom: number): { totalContentH: number; overlayHeight: number; overlayY: number } {
+    const badgeLayout = this._getBadgeLayout(zoom);
+    const nameH = badgeLayout.nameH;
+    const badgeH = badgeLayout.badges.length > 0 ? badgeLayout.badgeH : 0;
+    const gap = badgeLayout.badges.length > 0 ? ROW_GAP : 0;
+    const totalContentH = nameH + gap + badgeH; // 屏幕像素
+
+    const s = 1 / zoom; // 反向缩放因子
+    const overlayScreenH = totalContentH + VERTICAL_PADDING * 2;
+    const overlayHeight = overlayScreenH * s; // 内容坐标
+    const overlayY = this.height - overlayHeight;
+
+    return { totalContentH, overlayHeight, overlayY };
+  }
+
+  /**
+   * 获取或计算 Badge 布局
+   */
+  private _getBadgeLayout(zoom: number): BadgeLayout {
+    // 检查缓存是否有效
+    if (this.badgeLayoutCache && Math.abs(zoom - this.lastCachedZoom) < 0.01) {
+      return this.badgeLayoutCache;
+    }
+
+    // 测量文件名高度
+    const testCanvas = document.createElement('canvas');
+    const testCtx = testCanvas.getContext('2d')!;
+    testCtx.font = `600 ${FILE_NAME_FONT_SIZE}px system-ui, -apple-system, sans-serif`;
+    const nameMetrics = testCtx.measureText(this.fileName || 'A');
+    const nameH = nameMetrics.actualBoundingBoxAscent + nameMetrics.actualBoundingBoxDescent;
+
+    // 构建 Badge 列表
+    const badges: BadgeInfo[] = [];
+    if (this.metadata) {
+      const badgeTexts = buildParamBadges(this.metadata);
+      const maxX = (this.width - LEFT_PADDING) * zoom;
+      let testX = LEFT_PADDING * zoom;
+
+      testCtx.font = `${PARAM_FONT_SIZE}px system-ui, -apple-system, sans-serif`;
+
+      for (const text of badgeTexts) {
+        const textMetrics = testCtx.measureText(text);
+        const badgeW = textMetrics.width + BADGE_PADDING_X * 2;
+        const badgeH = PARAM_FONT_SIZE + BADGE_PADDING_Y * 2;
+
+        testX += badgeW + BADGE_GAP;
+        if (testX - BADGE_GAP > maxX) {
+          break;
+        }
+
+        badges.push({
+          text,
+          width: badgeW,
+          height: badgeH,
+          bgColor: '#000000',
+          bgAlpha: 0.5,
+        });
       }
+
+      // 合焦评分 Badge
+      if (this.metadata.focusScoreMethod === 'Undetected') {
+        const undetectedBadge = this._createUndetectedBadge(testCtx);
+        testX += undetectedBadge.width + BADGE_GAP;
+        if (testX - BADGE_GAP <= maxX) {
+          badges.push(undetectedBadge);
+        }
+      } else if (this.metadata.focusScore != null) {
+        const focusBadge = this._createFocusScoreBadge(this.metadata.focusScore, testCtx);
+        testX += focusBadge.width + BADGE_GAP;
+        if (testX - BADGE_GAP <= maxX) {
+          badges.push(focusBadge);
+        }
+      }
+    }
+
+    const badgeH = badges.length > 0
+      ? PARAM_FONT_SIZE + BADGE_PADDING_Y * 2
+      : 0;
+
+    const layout: BadgeLayout = {
+      nameH,
+      badgeH,
+      badges,
     };
 
-    this._selAnimFrame = requestAnimationFrame(tick);
+    // 缓存
+    this.badgeLayoutCache = layout;
+    this.lastCachedZoom = zoom;
+
+    return layout;
   }
+
+  /**
+   * 创建合焦评分 Badge
+   */
+  private _createFocusScoreBadge(score: number, ctx: CanvasRenderingContext2D): BadgeInfo {
+    const stars = '\u2605'.repeat(score) + '\u2606'.repeat(5 - score);
+    const bgColor = FOCUS_SCORE_COLORS[score] ?? '#666666';
+
+    ctx.font = `${PARAM_FONT_SIZE}px system-ui, -apple-system, sans-serif`;
+    const metrics = ctx.measureText(stars);
+    const width = metrics.width + BADGE_PADDING_X * 2;
+    const height = PARAM_FONT_SIZE + BADGE_PADDING_Y * 2;
+
+    return {
+      text: stars,
+      width,
+      height,
+      bgColor,
+      bgAlpha: 0.75,
+    };
+  }
+
+  /**
+   * 创建"未检测到主体" Badge
+   */
+  private _createUndetectedBadge(ctx: CanvasRenderingContext2D): BadgeInfo {
+    const text = '未检测到主体';
+    ctx.font = `${PARAM_FONT_SIZE}px system-ui, -apple-system, sans-serif`;
+    const metrics = ctx.measureText(text);
+    const width = metrics.width + BADGE_PADDING_X * 2;
+    const height = PARAM_FONT_SIZE + BADGE_PADDING_Y * 2;
+
+    return {
+      text,
+      width,
+      height,
+      bgColor: '#999999',
+      bgAlpha: 0.75,
+    };
+  }
+}
+
+// ─── 辅助函数 ─────────────────────────────────────────
+
+/**
+ * 从 ImageMetadata 构建拍摄参数标签
+ */
+function buildParamBadges(meta: ImageMetadata): string[] {
+  const badges: string[] = [];
+
+  if (meta.fNumber != null) {
+    badges.push(`f/${meta.fNumber}`);
+  }
+  if (meta.exposureTime != null) {
+    badges.push(meta.exposureTime);
+  }
+  if (meta.isoSpeed != null) {
+    badges.push(`ISO ${meta.isoSpeed}`);
+  }
+  if (meta.focalLength != null) {
+    badges.push(`${meta.focalLength}mm`);
+  }
+
+  return badges;
+}
+
+/**
+ * 根据可用像素宽度截断文件名。
+ * 保留扩展名，中间用 '...' 省略。
+ */
+function truncateFileName(name: string, maxChars: number): string {
+  if (name.length <= maxChars) return name;
+  const ext = name.lastIndexOf('.');
+  if (ext > 0 && name.length - ext <= 6) {
+    const namepart = name.substring(0, ext);
+    const extpart = name.substring(ext);
+    const truncLen = maxChars - 3 - extpart.length;
+    if (truncLen > 0) {
+      return namepart.substring(0, truncLen) + '...' + extpart;
+    }
+  }
+  return name.substring(0, maxChars - 3) + '...';
+}
+
+/**
+ * 根据图片项宽度估算合理的最大字符数。
+ * 考虑缩放级别：缩放越大，图片在屏幕上越大，可显示更多字符。
+ */
+function maxCharsForWidth(itemWidth: number, zoomLevel: number = 1): number {
+  // 屏幕上可用像素 = 内容宽度 * zoomLevel
+  const screenWidth = (itemWidth - LEFT_PADDING * 2) * zoomLevel;
+  // 约 6.5px / 字符 (fontSize 11，系统字体)
+  const estimated = Math.floor(screenWidth / 6.5);
+  // 下限 12 字符（至少显示「abc...xyz.nef」），上限 80
+  return Math.max(12, Math.min(80, estimated));
+}
+
+// ─── 类型定义 ─────────────────────────────────────────
+
+interface BadgeInfo {
+  text: string;
+  width: number;
+  height: number;
+  bgColor: string;
+  bgAlpha: number;
+}
+
+interface BadgeLayout {
+  nameH: number;
+  badgeH: number;
+  badges: BadgeInfo[];
+}
+
+interface BadgeLayoutCache {
+  nameH: number;
+  badgeH: number;
+  badges: BadgeInfo[];
 }
