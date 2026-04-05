@@ -36,6 +36,9 @@ pub enum AppError {
 
     #[error("哈希计算错误: {0}")]
     HashError(String),
+
+    #[error("目标检测失败: {0}")]
+    DetectionFailed(String),
 }
 
 impl AppError {
@@ -54,6 +57,7 @@ impl AppError {
             AppError::ExportError(_) => "导出失败，请检查目标目录权限".to_string(),
             AppError::ConfigError(_) => "配置加载失败，请检查应用设置".to_string(),
             AppError::HashError(_) => "图像指纹计算失败，请重试".to_string(),
+            AppError::DetectionFailed(_) => "目标检测失败，将跳过该图片的区域评分".to_string(),
         }
     }
 }
@@ -170,6 +174,19 @@ mod tests {
     fn test_hash_error_user_message() {
         let err = AppError::HashError("invalid input".to_string());
         assert!(err.user_message().contains("图像指纹计算失败"));
+    }
+
+    #[test]
+    fn test_detection_failed_serialization() {
+        let err = AppError::DetectionFailed("model load error".to_string());
+        let json = serde_json::to_string(&err).unwrap();
+        assert_eq!(json, "\"目标检测失败: model load error\"");
+    }
+
+    #[test]
+    fn test_detection_failed_user_message() {
+        let err = AppError::DetectionFailed("inference timeout".to_string());
+        assert!(err.user_message().contains("目标检测失败"));
     }
 
     #[test]

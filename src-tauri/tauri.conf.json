@@ -52,6 +52,9 @@
     "shortDescription": "RAW 图像智能筛选与管理工具",
     "longDescription": "Bulbul 是一款桌面端 RAW 图像筛选与管理工具，支持 NEF 格式的智能分组、画布浏览和批量导出。",
     "category": "Photography",
+    "resources": [
+      "resources/models"
+    ],
     "windows": {
       "nsis": {
         "displayLanguageSelector": true,
