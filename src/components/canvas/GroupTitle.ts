@@ -2,43 +2,44 @@
 // 分组标题渲染
 //
 // 在每个分组区域顶部显示"分组 N（M 张）"文本
+// 使用 Canvas 2D fillText 直接绘制，无 PixiJS 依赖。
 // ============================================================
 
-import { Container, Text, type TextStyleOptions } from 'pixi.js';
 import type { GroupTitleItem } from '../../utils/layout';
 
+// ─── 配置 ─────────────────────────────────────────────
+
 const TITLE_PADDING = 16;
+const TITLE_FONT = '700 16px system-ui, -apple-system, sans-serif';
+const TITLE_COLOR = '#374151';
 
-const TITLE_STYLE: TextStyleOptions = {
-  fontSize: 16,
-  fontFamily: 'system-ui, -apple-system, sans-serif',
-  fill: 0x374151,
-  fontWeight: '700',
-};
+// ─── 绘制函数 ─────────────────────────────────────────
 
-export class GroupTitle extends Container {
-  constructor(titleItem: GroupTitleItem) {
-    super();
+/**
+ * 绘制所有分组标题。
+ * 在 InfiniteCanvas 渲染循环中、内容层变换后调用。
+ */
+export function drawGroupTitles(
+  ctx: CanvasRenderingContext2D,
+  titles: GroupTitleItem[],
+): void {
+  ctx.font = TITLE_FONT;
+  ctx.fillStyle = TITLE_COLOR;
+  ctx.textBaseline = 'middle';
 
-    // 限制文本宽度，防止长标题溢出
-    const maxWidth = Math.max(100, titleItem.width - TITLE_PADDING * 2);
-    const label = truncateGroupLabel(titleItem.label, maxWidth);
-
-    const text = new Text({ text: label, style: TITLE_STYLE });
-    text.x = titleItem.x;
-    text.y = titleItem.y + (titleItem.height - text.height) / 2;
-
-    this.addChild(text);
+  for (const item of titles) {
+    const maxWidth = Math.max(100, item.width - TITLE_PADDING * 2);
+    const label = truncateGroupLabel(item.label, maxWidth);
+    const cy = item.y + item.height / 2;
+    ctx.fillText(label, item.x, cy);
   }
 }
 
 /**
  * 截断分组标题以适应 maxWidth（像素）。
- * 逐步缩短直到 Text 宽度不超过限制。
+ * 使用字符宽度估算，避免每帧调用 measureText。
  */
 function truncateGroupLabel(label: string, maxWidthPx: number): string {
-  // 快速估算：fontSize 16 时约 9px/字符（中文更宽约 16px）
-  // 先做字符级粗估，避免创建过多 Text 对象
   const estimatedCharWidth = 10;
   const estimatedMaxChars = Math.floor(maxWidthPx / estimatedCharWidth);
 
