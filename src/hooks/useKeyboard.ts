@@ -22,6 +22,11 @@ export interface UseKeyboardOptions {
   onGroupNavigated?: () => void;
 }
 
+// ─── 常量 ─────────────────────────────────────────────
+
+/** 分组导航节流间隔（ms），防止快速连按导致动画/纹理堆叠白屏 */
+const NAVIGATION_THROTTLE_MS = 200;
+
 // ─── 辅助 ─────────────────────────────────────────────
 
 /** 判断当前焦点是否在输入控件上 */
@@ -42,6 +47,8 @@ export function useKeyboard({
   onGroupNavigated,
 }: UseKeyboardOptions): void {
   useEffect(() => {
+    let lastNavigationTime = 0;
+
     const handleKeyDown = (e: KeyboardEvent) => {
       // 输入框聚焦时跳过
       if (isInputFocused()) return;
@@ -93,23 +100,31 @@ export function useKeyboard({
 
       // ── 单键 ──
       switch (e.key) {
-        // 左右箭头 / A/D → 水平分组切换
+        // 左右箭头 / A/D → 水平分组切换（节流保护）
         case 'ArrowLeft':
         case 'a':
-        case 'A':
+        case 'A': {
           e.preventDefault();
+          const now = Date.now();
+          if (now - lastNavigationTime < NAVIGATION_THROTTLE_MS) return;
+          lastNavigationTime = now;
           useCanvasStore.getState().prevGroup();
           useAppStore.getState().navigateGroup('prev');
           onGroupNavigated?.();
           return;
+        }
         case 'ArrowRight':
         case 'd':
-        case 'D':
+        case 'D': {
           e.preventDefault();
+          const now = Date.now();
+          if (now - lastNavigationTime < NAVIGATION_THROTTLE_MS) return;
+          lastNavigationTime = now;
           useCanvasStore.getState().nextGroup();
           useAppStore.getState().navigateGroup('next');
           onGroupNavigated?.();
           return;
+        }
 
         // W/S/上下箭头不再切组，预留给组内滚动（画布层面通过滚轮处理）
         case 'Escape': {

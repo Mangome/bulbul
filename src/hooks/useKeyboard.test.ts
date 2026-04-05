@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useKeyboard } from './useKeyboard';
 import { useAppStore } from '../stores/useAppStore';
@@ -57,6 +57,9 @@ describe('useKeyboard', () => {
     });
   });
 
+  let dateNowSpy: MockInstance;
+  let currentTime: number;
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -96,6 +99,47 @@ describe('useKeyboard', () => {
     mount();
     fireKey('a');
     expect(useCanvasStore.getState().currentGroupIndex).toBe(0);
+  });
+
+  it('快速连按方向键时节流生效，仅第一次触发', () => {
+    currentTime = 1000;
+    dateNowSpy = vi.spyOn(Date, 'now').mockImplementation(() => currentTime);
+
+    mount();
+
+    // 第一次按键 → 应触发
+    fireKey('ArrowRight');
+    expect(useCanvasStore.getState().currentGroupIndex).toBe(1);
+    expect(onGroupNavigated).toHaveBeenCalledTimes(1);
+
+    // 50ms 后再按 → 应被节流
+    currentTime = 1050;
+    useCanvasStore.setState({ groupCount: 3 }); // 让 nextGroup 可以继续前进
+    fireKey('ArrowRight');
+    expect(useCanvasStore.getState().currentGroupIndex).toBe(1); // 仍然是 1
+    expect(onGroupNavigated).toHaveBeenCalledTimes(1);
+
+    dateNowSpy.mockRestore();
+  });
+
+  it('节流窗口过后可以再次触发导航', () => {
+    currentTime = 1000;
+    dateNowSpy = vi.spyOn(Date, 'now').mockImplementation(() => currentTime);
+
+    mount();
+
+    // 第一次按键
+    fireKey('ArrowRight');
+    expect(useCanvasStore.getState().currentGroupIndex).toBe(1);
+
+    // 200ms 后（节流窗口过去）→ 应触发
+    currentTime = 1200;
+    useCanvasStore.setState({ currentGroupIndex: 1, groupCount: 3 });
+    fireKey('ArrowRight');
+    expect(useCanvasStore.getState().currentGroupIndex).toBe(2);
+    expect(onGroupNavigated).toHaveBeenCalledTimes(2);
+
+    dateNowSpy.mockRestore();
   });
 
   it('W/S 键不再触发分组导航', () => {
