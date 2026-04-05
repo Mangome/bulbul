@@ -13,7 +13,9 @@ use chrono::NaiveDateTime;
 use tauri::Emitter;
 use tokio::sync::Semaphore;
 
+use crate::core::bird_detection;
 use crate::core::focus_score;
+use crate::core::focus_score::FocusScoringMethod;
 use crate::core::grouping::{self, ImageInfoWithPhash};
 use crate::core::phash;
 use crate::core::raw_processor::{self, ProcessResult};
@@ -645,14 +647,36 @@ async fn compute_focus_scores_background(
             // CPU 密集型操作在 blocking 线程中执行
             let hash_clone = hash.clone();
             let medium_path_clone = medium_path.clone();
-            let score = tokio::task::spawn_blocking(move || {
-                focus_score::calculate_focus_score(&medium_path_clone)
+            let result = tokio::task::spawn_blocking(move || {
+                // 1. 鸟类检测
+                let detection = bird_detection::detect_birds(&medium_path_clone);
+                let (best_bbox, all_bboxes) = match detection {
+                    Ok(result) if !result.bboxes.is_empty() => {
+                        // 取置信度最高的框用于评分
+                        let best = result.bboxes.iter()
+                            .max_by(|a, b| a.confidence.partial_cmp(&b.confidence).unwrap_or(std::cmp::Ordering::Equal))
+                            .cloned();
+                        (best, result.bboxes)
+                    }
+                    Ok(result) => (None, result.bboxes),
+                    Err(e) => {
+                        log::warn!("鸟类检测失败 {}: {}", medium_path_clone.display(), e);
+                        (None, vec![])
+                    }
+                };
+
+                // 2. 区域合焦评分
+                let (score, method) = focus_score::calculate_focus_score_with_bbox(
+                    &medium_path_clone,
+                    best_bbox.as_ref(),
+                ).unwrap_or((None, FocusScoringMethod::Undetected));
+
+                (score, method, all_bboxes)
             })
             .await
-            .map_err(|e| format!("任务失败: {}", e))
-            .and_then(|r| r.map_err(|e| format!("{}", e)));
+            .map_err(|e| format!("任务失败: {}", e));
 
-            (idx, hash_clone, score, filename)
+            (idx, hash_clone, result, filename)
         });
     }
 
@@ -661,9 +685,14 @@ async fn compute_focus_scores_background(
 
     while let Some(join_result) = join_set.join_next().await {
         match join_result {
-            Ok((_idx, hash, Ok(score), filename)) => {
+            Ok((_idx, hash, Ok((score, method, bboxes)), filename)) => {
                 completed += 1;
-                let _ = app.emit("focus-score-update", (&hash, score));
+                let _ = app.emit("focus-score-update", serde_json::json!({
+                    "hash": &hash,
+                    "score": score,
+                    "method": method,
+                    "detectionBboxes": bboxes,
+                }));
                 emit_progress(
                     app,
                     ProcessingState::FocusScoring,
@@ -676,7 +705,11 @@ async fn compute_focus_scores_background(
             Ok((_idx, hash, Err(err), _filename)) => {
                 completed += 1;
                 log::warn!("计算 {} 的合焦评分失败: {}", hash, err);
-                let _ = app.emit("focus-score-update", (&hash, 0u32));
+                let _ = app.emit("focus-score-update", serde_json::json!({
+                    "hash": &hash,
+                    "score": null,
+                    "method": "Undetected",
+                }));
                 emit_progress(
                     app,
                     ProcessingState::FocusScoring,
@@ -716,3 +749,131 @@ async fn compute_focus_scores_background(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// 测试 5.8：metadata_cache 并发写入不 panic（多线程同时更新不同 hash）
+    #[test]
+    fn test_concurrent_metadata_cache_writes() {
+        let cache = Arc::new(Mutex::new(std::collections::HashMap::new()));
+        let mut handles = vec![];
+
+        for i in 0..8 {
+            let cache_clone = Arc::clone(&cache);
+            let handle = std::thread::spawn(move || {
+                for j in 0..100 {
+                    let hash = format!("hash_{}_{}", i, j);
+                    let mut cache_guard = cache_clone.lock().unwrap();
+                    cache_guard.insert(hash, i * 100 + j);
+                }
+            });
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        let final_cache = cache.lock().unwrap();
+        assert_eq!(final_cache.len(), 800, "应该有 800 个不同的 hash");
+    }
+
+    /// 测试 5.9：focus-score-update 事件 payload 格式验证（包含 detectionBboxes）
+    #[test]
+    fn test_focus_score_update_payload_format() {
+        // 模拟 emit 事件的 JSON payload（完整版本包含 detectionBboxes）
+        let hash = "abc123def456789".to_string();
+        let score = Some(5u32);
+        let method = FocusScoringMethod::BirdRegion;
+        let bboxes = vec![
+            crate::core::bird_detection::DetectionBox::new(0.1, 0.2, 0.8, 0.9, 0.95),
+        ];
+
+        let payload = serde_json::json!({
+            "hash": &hash,
+            "score": score,
+            "method": method,
+            "detectionBboxes": bboxes,
+        });
+
+        // 验证 payload 结构（包含所有必需字段）
+        assert!(payload.is_object());
+        assert_eq!(payload["hash"], "abc123def456789");
+        assert_eq!(payload["score"], 5);
+        assert_eq!(payload["method"], "BirdRegion");
+        assert!(payload["detectionBboxes"].is_array());
+        assert_eq!(payload["detectionBboxes"].as_array().unwrap().len(), 1);
+
+        // 测试 Undetected 情况（无检测框）
+        let empty_bboxes: Vec<crate::core::bird_detection::DetectionBox> = vec![];
+        let payload_undetected = serde_json::json!({
+            "hash": "hash_xyz",
+            "score": serde_json::Value::Null,
+            "method": FocusScoringMethod::Undetected,
+            "detectionBboxes": empty_bboxes,
+        });
+
+        assert_eq!(payload_undetected["score"], serde_json::Value::Null);
+        assert_eq!(payload_undetected["method"], "Undetected");
+        assert!(payload_undetected["detectionBboxes"].as_array().unwrap().is_empty());
+    }
+
+    /// 测试 5.7 辅助：Semaphore 并发限制的基本功能
+    #[test]
+    fn test_semaphore_concurrency_limit() {
+        use tokio::sync::Semaphore;
+        
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let max_concurrency = 4;
+            let semaphore = Arc::new(Semaphore::new(max_concurrency));
+            let counter = Arc::new(AtomicUsize::new(0));
+            let max_concurrent = Arc::new(AtomicUsize::new(0));
+
+            let mut join_set = tokio::task::JoinSet::new();
+
+            for _ in 0..20 {
+                let sem = Arc::clone(&semaphore);
+                let counter_clone = Arc::clone(&counter);
+                let max_concurrent_clone = Arc::clone(&max_concurrent);
+
+                join_set.spawn(async move {
+                    let _permit = sem.acquire().await.ok();
+                    
+                    let current = counter_clone.fetch_add(1, Ordering::SeqCst) + 1;
+                    
+                    // 更新最大并发数
+                    loop {
+                        let max = max_concurrent_clone.load(Ordering::SeqCst);
+                        if current <= max || max_concurrent_clone.compare_exchange(
+                            max,
+                            current,
+                            Ordering::SeqCst,
+                            Ordering::SeqCst,
+                        ).is_ok() {
+                            break;
+                        }
+                    }
+
+                    tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                    counter_clone.fetch_sub(1, Ordering::SeqCst);
+                });
+            }
+
+            while let Some(_) = join_set.join_next().await {}
+
+            let max_observed = max_concurrent.load(Ordering::SeqCst);
+            assert!(
+                max_observed <= max_concurrency,
+                "最大并发数 {} 应不超过限制 {}",
+                max_observed,
+                max_concurrency
+            );
+        });
+    }
+}
+

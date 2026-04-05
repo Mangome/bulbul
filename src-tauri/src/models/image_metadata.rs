@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
 
+use crate::core::bird_detection::DetectionBox;
+use crate::core::focus_score::FocusScoringMethod;
+
 /// RAW 图像元数据结构体
 /// 所有字段均为 Option<T>，以处理 EXIF 数据部分缺失的情况
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -53,6 +56,14 @@ pub struct ImageMetadata {
 
     // 合焦程度评分（1-5 星）
     pub focus_score: Option<u32>,
+
+    // 鸟类检测框（相对坐标 [0, 1]）
+    #[serde(default)]
+    pub detection_bboxes: Vec<DetectionBox>,
+
+    // 合焦评分方法标记
+    #[serde(default)]
+    pub focus_score_method: Option<FocusScoringMethod>,
 }
 
 #[cfg(test)]
@@ -102,5 +113,57 @@ mod tests {
         let meta = ImageMetadata::default();
         let json = serde_json::to_string(&meta).unwrap();
         assert!(json.contains("null"));
+    }
+
+    #[test]
+    fn test_old_json_without_new_fields_deserializes() {
+        // 4.7: 旧 JSON 无 detectionBboxes/focusScoringMethod 时反序列化成功
+        let json = r#"{"cameraMake": "Nikon", "isoSpeed": 400, "focusScore": 4}"#;
+        let meta: ImageMetadata = serde_json::from_str(json).unwrap();
+
+        assert_eq!(meta.camera_make, Some("Nikon".to_string()));
+        assert_eq!(meta.focus_score, Some(4));
+        assert!(meta.detection_bboxes.is_empty());
+        assert!(meta.focus_score_method.is_none());
+    }
+
+    #[test]
+    fn test_new_json_with_all_fields_deserializes() {
+        // 4.8: 新 JSON 含完整字段时反序列化正确
+        let json = r#"{
+            "cameraMake": "Nikon",
+            "focusScore": 5,
+            "detectionBboxes": [
+                {"x1": 0.2, "y1": 0.1, "x2": 0.8, "y2": 0.9, "confidence": 0.95}
+            ],
+            "focusScoreMethod": "BirdRegion"
+        }"#;
+        let meta: ImageMetadata = serde_json::from_str(json).unwrap();
+
+        assert_eq!(meta.focus_score, Some(5));
+        assert_eq!(meta.detection_bboxes.len(), 1);
+        assert!((meta.detection_bboxes[0].confidence - 0.95).abs() < 0.001);
+        assert_eq!(meta.focus_score_method, Some(FocusScoringMethod::BirdRegion));
+    }
+
+    #[test]
+    fn test_detection_box_roundtrip() {
+        // 4.9: DetectionBox 序列化/反序列化往返一致
+        use crate::core::bird_detection::DetectionBox;
+
+        let bbox = DetectionBox::new(0.2, 0.1, 0.8, 0.9, 0.95);
+        let json = serde_json::to_string(&bbox).unwrap();
+        let deserialized: DetectionBox = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(bbox, deserialized);
+    }
+
+    #[test]
+    fn test_empty_detection_bboxes_serializes_as_array() {
+        // 4.10: ImageMetadata 含空 detection_bboxes 时序列化为 []
+        let meta = ImageMetadata::default();
+        let json = serde_json::to_string(&meta).unwrap();
+
+        assert!(json.contains("\"detectionBboxes\":[]"));
     }
 }
