@@ -14,7 +14,7 @@ import { RightControlPanel } from '../components/panels/RightControlPanel';
 import { computeHorizontalLayout, type LayoutResult, type ImageDimension } from '../utils/layout';
 import * as imageService from '../services/imageService';
 import { runExportFlow } from '../services/exportService';
-import type { ImageMetadata } from '../types';
+import type { ImageMetadata, FocusScoringMethod } from '../types';
 import cls from './MainPage.module.css';
 
 function MainPage() {
@@ -120,13 +120,23 @@ function MainPage() {
 
   // ── 监听后台合焦评分（逐张更新） ──
   // 更新 metadataMap 供后续新进入视口的 item 使用
-  useTauriEvents<[string, number]>('focus-score-update', ([hash, score]) => {
-    const meta = metadataMap.get(hash);
+  useTauriEvents<{
+    hash: string;
+    score: number | null;
+    method: string;
+    detectionBboxes: any[];
+  }>('focus-score-update', (payload) => {
+    const meta = metadataMap.get(payload.hash);
     if (meta) {
-      metadataMap.set(hash, { ...meta, focusScore: score });
+      metadataMap.set(payload.hash, {
+        ...meta,
+        focusScore: payload.score,
+        focusScoreMethod: (payload.method as FocusScoringMethod) ?? null,
+        detectionBboxes: payload.detectionBboxes,
+      });
     }
     // 通知画布直接更新对应 item（绕过 React re-render）
-    canvasRef.current?.updateItemMetadata(hash);
+    canvasRef.current?.updateItemMetadata(payload.hash);
   });
 
   // 创建 memoized fileNames，避免处理完成时频繁重建对象

@@ -107,7 +107,16 @@ export class ImageInfoOverlay extends Container {
       }
 
       // 合焦评分 Badge（特殊颜色）
-      if (metadata.focusScore != null) {
+      if (metadata.focusScoreMethod === 'Undetected') {
+        // 未检测到主体：灰色标记
+        const badge = createUndetectedBadge();
+        testX += badge.width + BADGE_GAP;
+        if (testX - BADGE_GAP <= maxX) {
+          badgeObjects.push(badge);
+        } else {
+          badge.destroy();
+        }
+      } else if (metadata.focusScore != null) {
         const focusBadge = createFocusScoreBadge(metadata.focusScore);
         testX += focusBadge.width + BADGE_GAP;
         if (testX - BADGE_GAP <= maxX) {
@@ -208,6 +217,34 @@ function createFocusScoreBadge(score: number): Container {
     fill: 0xFFFFFF,
   });
   const text = new Text({ text: stars, style });
+  const bg = new Graphics();
+
+  const width = text.width + BADGE_PADDING_X * 2;
+  const height = text.height + BADGE_PADDING_Y * 2;
+
+  bg.roundRect(0, 0, width, height, BADGE_RADIUS)
+    .fill({ color: bgColor, alpha: 0.75 });
+
+  text.x = BADGE_PADDING_X;
+  text.y = BADGE_PADDING_Y;
+
+  container.addChild(bg);
+  container.addChild(text);
+  return container;
+}
+
+/** 创建"未检测到主体" Badge（灰色标记） */
+function createUndetectedBadge(): Container {
+  const container = new Container();
+  const label = '未检测到主体';
+  const bgColor = 0x999999; // 灰色
+
+  const style = new TextStyle({
+    fontSize: PARAM_FONT_SIZE,
+    fontFamily: 'system-ui, -apple-system, sans-serif',
+    fill: 0xFFFFFF,
+  });
+  const text = new Text({ text: label, style });
   const bg = new Graphics();
 
   const width = text.width + BADGE_PADDING_X * 2;

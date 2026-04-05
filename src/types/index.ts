@@ -3,6 +3,18 @@
 // 与 Rust 数据模型对齐，字段名使用 camelCase
 // ============================================================
 
+/** 检测框坐标和置信度 */
+export interface DetectionBox {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  confidence: number;
+}
+
+/** 合焦评分方法 */
+export type FocusScoringMethod = "FullImage" | "BirdRegion" | "Undetected";
+
 /** RAW 图像元数据 */
 export interface ImageMetadata {
   // 时间信息
@@ -53,6 +65,12 @@ export interface ImageMetadata {
 
   // 合焦程度评分（1-5 星）
   focusScore: number | null;
+
+  // 鸟类检测框（相对坐标 [0, 1]）
+  detectionBboxes: DetectionBox[];
+
+  // 合焦评分方法标记
+  focusScoreMethod: FocusScoringMethod | null;
 }
 
 /** 单个分组的数据 */
