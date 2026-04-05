@@ -1,4 +1,4 @@
-## Requirements
+## ADDED Requirements
 
 ### Requirement: 检测框 Canvas 2D 绘制函数
 
