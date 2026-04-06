@@ -29,14 +29,18 @@ Tauri 2 桌面应用：React 18 前端 + Rust 后端，通过 IPC (`invoke`) 通
   - `useThemeStore` — 亮/暗主题，同步到 `document.documentElement.dataset.theme`
   - 持久化: `$APPDATA/bulbul/settings.json`，500ms 防抖写入
 
-- **画布渲染** (PixiJS v8):
-  - `InfiniteCanvas.tsx` — 主画布，管理 PixiJS Application 生命周期
-    - 层级: Stage → BackgroundLayer(固定) + ContentLayer(缩放/平移)
+- **画布渲染** (Canvas 2D):
+  - `InfiniteCanvas.tsx` — 主画布，管理原生 HTMLCanvasElement 生命周期
+    - 渲染驱动: dirty flag + requestAnimationFrame 按需渲染，静止时零 CPU
+    - 坐标系: `ctx.save/translate/scale/restore`，offsetX/offsetY/actualZoom 状态变量
     - 虚拟化: `getVisibleItems()` 二分查找 + `diffVisibleItems()` 增量更新
-    - 初始化 effect 依赖 `[layout, updateViewport, ...]`，layout 变化会重建整个 Application
-  - `CanvasImageItem.ts` — 单张图片容器(sprite + placeholder + overlay)
-  - `useImageLoader.ts` — TextureLRUCache (300条目, 300MB 上限)
-    - **禁止手动销毁纹理**: 不调用 `texture.destroy()` 或 `Assets.unload()`，由 PixiJS GCSystem 自动回收
+    - DPR 处理: setupCanvas() 设置物理分辨率 + ctx.scale(dpr, dpr)
+    - 事件: 标准 pointer/wheel/keydown 事件，手动坐标变换 + hitTest
+  - `CanvasImageItem.ts` — 单张图片 Canvas 2D 绘制类（占位色块、EXIF 旋转、选中/悬停动画、信息覆盖层）
+  - `DotBackground.ts` — OffscreenCanvas pattern 波点背景
+  - `GroupTitle.ts` — Canvas 2D 分组标题 fillText
+  - `useImageLoader.ts` — ImageBitmap LRU 缓存（20 条目，200MB 上限）
+    - 释放策略: 淘汰时调用 `image.close()` 释放内存
     - 质量选择: `displayWidth > 200px` → medium，否则 thumbnail
 
 - **布局**: `src/utils/layout.ts` — `computeHorizontalLayout(groups, dims, viewportWidth)`
@@ -67,21 +71,23 @@ Tauri 2 桌面应用：React 18 前端 + Rust 后端，通过 IPC (`invoke`) 通
 
 ## 关键注意事项
 
-- InfiniteCanvas 的初始化 useEffect 是**异步**的（`initApp()` 不被 await），用 `destroyed` 标志防止竞态
+- InfiniteCanvas 使用 dirty flag + rAF 按需渲染，所有状态变化需调用 `markDirty()` 触发重绘
 - EXIF orientation 5,6,7,8 表示 ±90° 旋转，后端自动交换 width/height，前端再做视觉旋转
-- 前端测试 mock: 需要 mock `pixi.js` 的 `Assets` 和 Tauri 的 `invoke()`
+- 前端测试 mock: 需要 mock Canvas 2D context、matchMedia、ResizeObserver 和 Tauri 的 `invoke()`
 - Rust 测试: 内联 `#[cfg(test)]` 模块，`cargo test` 即可运行
 
-## PixiJS 纹理生命周期（重要）
+## Canvas 2D 渲染架构
 
-**核心原则：不要手动销毁通过 `Assets.load()` 加载的纹理。**
+**渲染循环**:
+1. `markDirty()` 标记脏，调度 rAF
+2. `renderFrame()` 执行: 清空 → 背景色 → DotBackground → ctx.save/translate/scale → drawGroupTitles + item.draw() → ctx.restore
+3. item.draw() 返回 boolean，如有动画进行中自动继续 rAF
 
-- `Assets.load(url)` 创建的纹理由 PixiJS Assets 系统内部管理（Cache + Loader + TextureSource）
-- `texture.destroy(true)` 和 `Assets.unload(url)` 都会将 `TextureSource._style` 置为 `null`
-- PixiJS 渲染管线（Batcher → GlTextureSystem）持有 TextureSource 的深层引用，无法从外部保证所有引用已清除
-- 任何时机的手动 destroy 都可能导致 `Cannot read properties of null (reading 'alphaMode'/'addressModeU')` 崩溃
+**坐标系统**:
+- 屏幕坐标 → 内容坐标: `contentX = (screenX - offsetX) / actualZoom`
+- 缩放锚点: 鼠标 Y 轴位置保持不变
 
-**正确做法：**
-- LRU 缓存只管理引用（增删条目），淘汰时不触碰纹理对象
-- PixiJS GCSystem 自动回收无引用纹理的 GPU 资源（调用 `source.unload()` 而非 `source.destroy()`）
-- 替换或销毁 Sprite 前先设置 `sprite.texture = Texture.EMPTY`，断开 BatchableSprite 对纹理的引用
+**ImageBitmap 生命周期**:
+- ImageLRUCache 管理，淘汰时调用 `image.close()` 释放内存
+- ImageBitmap 销毁后 `drawImage()` 为 no-op（无崩溃风险）
+- CanvasImageItem.destroy() 仅置空引用，不调用 `image.close()`
