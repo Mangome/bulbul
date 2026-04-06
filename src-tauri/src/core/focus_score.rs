@@ -33,8 +33,10 @@ pub enum FocusScoringMethod {
 }
 
 /// 分块尺寸（行数）
+#[cfg(test)]
 const BLOCK_ROWS: usize = 4;
 /// 分块尺寸（列数）
+#[cfg(test)]
 const BLOCK_COLS: usize = 5;
 
 /// 下采样长边最大值
@@ -48,6 +50,7 @@ const LAPLACIAN_KERNEL: [[f32; 3]; 3] = [
 ];
 
 /// 评估合焦时取分块方差的 Top-K
+#[cfg(test)]
 const TOP_K_BLOCKS: usize = 3;
 
 /// 从 JPEG 路径计算合焦评分（支持全画面和区域评分）
@@ -89,6 +92,7 @@ fn score_from_image_with_bbox(img: &image::DynamicImage, bbox: &DetectionBox) ->
 }
 
 /// 从 DynamicImage 计算合焦评分的核心逻辑
+#[cfg(test)]
 fn score_from_image(img: &image::DynamicImage) -> u32 {
     // 转灰度 + 等比下采样（保持宽高比，长边 = ANALYSIS_LONG_EDGE）
     let gray = img.grayscale();
@@ -156,6 +160,7 @@ fn apply_laplacian(luma: &image::GrayImage) -> Vec<Vec<f32>> {
 /// - 抗噪点：单个高噪声区域不会拉高整体评分
 /// - 抗纹理误导：砖墙/树叶等规则纹理不会被当作"极佳对焦"
 /// - 同时仍然反映对焦最好区域的质量
+#[cfg(test)]
 fn evaluate_blocks_robust(laplacian: &[Vec<f32>]) -> f64 {
     let height = laplacian.len();
     if height == 0 {
@@ -260,6 +265,7 @@ fn evaluate_blocks_in_bbox(
 }
 
 /// 计算指定行范围和列范围内的方差
+#[cfg(test)]
 fn calculate_block_variance(rows: &[Vec<f32>], x_start: usize, x_end: usize) -> f64 {
     let mut sum = 0.0f64;
     let mut sum_sq = 0.0f64;

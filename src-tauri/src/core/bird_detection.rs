@@ -12,7 +12,6 @@
 //!
 //! 性能：单张 medium JPEG ~50-150ms（CPU，现代硬件）
 
-use image::GenericImageView;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Mutex;
