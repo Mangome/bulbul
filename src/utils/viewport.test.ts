@@ -62,13 +62,13 @@ describe('getVisibleItemsInPage', () => {
   const page = makePage(0, items);
 
   it('视口内元素正确返回', () => {
-    // 视口 y=300~700, 缓冲区 50% → 200px, 有效范围 y=100~900
+    // 视口 y=300~700, 缓冲区 20% → 80px, 有效范围 y=220~780
     const visible = getVisibleItemsInPage(page, 300, 400);
     const hashes = visible.map((v) => v.hash);
     expect(hashes).toContain('b');
     expect(hashes).toContain('c');
     expect(hashes).toContain('d');
-    expect(hashes).toContain('e');
+    expect(hashes).not.toContain('e');
   });
 
   it('视口外元素不返回', () => {
@@ -78,10 +78,12 @@ describe('getVisibleItemsInPage', () => {
   });
 
   it('缓冲区边界判定', () => {
+    // 视口 y=500~700, 缓冲区 20% → 40px, 有效范围 y=460~740
     const visible = getVisibleItemsInPage(page, 500, 200);
     const hashes = visible.map((v) => v.hash);
     expect(hashes).toContain('c');
-    expect(hashes).toContain('e');
+    expect(hashes).toContain('d');
+    expect(hashes).not.toContain('e');
   });
 
   it('无缓冲区模式', () => {

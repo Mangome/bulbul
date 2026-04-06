@@ -32,7 +32,7 @@ describe('RightControlPanel', () => {
 
   it('主题切换按钮存在', () => {
     render(<RightControlPanel onSwitchFolder={noop} />);
-    const themeBtn = screen.getByTitle(/切换/);
+    const themeBtn = screen.getByTitle(/切换暗色主题|切换亮色主题/);
     expect(themeBtn).toBeDefined();
   });
 
