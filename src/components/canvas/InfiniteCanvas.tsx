@@ -303,7 +303,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
             if (!imageLoaderRef.current.getCache().isImageValid(result.key, result.version)) return;
             const ci = canvasItemsRef.current.get(item.hash);
             if (ci) {
-              ci.setImage(result.image);
+              const itemMeta = metadataMapRef.current.get(item.hash);
+              ci.setImage(result.image, itemMeta?.orientation ?? 1);
               markDirty();
             }
           });
@@ -340,7 +341,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
           if (!imageLoaderRef.current.getCache().isImageValid(result.key, result.version)) return;
           const canvasItem = canvasItemsRef.current.get(hash);
           if (canvasItem) {
-            canvasItem.setImage(result.image);
+            const itemMeta = metadataMapRef.current.get(hash);
+            canvasItem.setImage(result.image, itemMeta?.orientation ?? 1);
             markDirty();
           }
         },
@@ -492,13 +494,39 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
     // 3b. 绘制所有可见 CanvasImageItem
     let needsNextFrame = false;
+    const itemsToReload: CanvasImageItem[] = [];
     for (const item of canvasItemsRef.current.values()) {
       const itemNeedsFrame = item.draw(ctx, az, now);
       needsNextFrame = needsNextFrame || itemNeedsFrame;
+      if (item.needsReload) {
+        itemsToReload.push(item);
+      }
     }
 
     // 4. 恢复坐标系
     ctx.restore();
+
+    // 5. 重新加载被 LRU 淘汰的图片
+    if (itemsToReload.length > 0) {
+      const imageLoader = imageLoaderRef.current;
+      if (imageLoader) {
+        for (const item of itemsToReload) {
+          item.needsReload = false;
+          imageLoader
+            .loadImage(item.hash, item.getWidth() * az)
+            .then((result) => {
+              if (!result || destroyedRef.current || !imageLoaderRef.current) return;
+              if (!imageLoaderRef.current.getCache().isImageValid(result.key, result.version)) return;
+              const ci = canvasItemsRef.current.get(item.hash);
+              if (ci) {
+                const itemMeta = metadataMapRef.current.get(item.hash);
+                ci.setImage(result.image, itemMeta?.orientation ?? 1);
+                markDirty();
+              }
+            });
+        }
+      }
+    }
 
     // 如果有动画进行中，继续请求下一帧
     if (needsNextFrame) {
@@ -527,7 +555,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     bgLayerRef.current = bgLayer;
 
     // 图片加载器
-    imageLoaderRef.current = new ImageLoader(20);
+    imageLoaderRef.current = new ImageLoader(50);
 
     // 从 store 恢复缩放
     const savedZoom = useCanvasStore.getState().zoomLevel;

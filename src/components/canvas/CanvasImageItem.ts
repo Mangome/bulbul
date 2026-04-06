@@ -90,6 +90,9 @@ export class CanvasImageItem {
   private detectionBoxes: DetectionBox[] = [];
   private detectionVisible: boolean = false;
 
+  // 重新加载标志：图片被 LRU 淘汰后需要重新加载
+  needsReload: boolean = false;
+
   // Badge 布局缓存
   private badgeLayoutCache: BadgeLayoutCache | null = null;
   private lastCachedZoom: number = 0;
@@ -114,6 +117,12 @@ export class CanvasImageItem {
   setImage(image: ImageBitmap, orientation?: number): void {
     this.image = image;
     this.orientation = orientation ?? 1;
+    this.needsReload = false;
+  }
+
+  /** 获取布局宽度（用于确定加载图片质量） */
+  getWidth(): number {
+    return this.width;
   }
 
   /**
@@ -167,9 +176,14 @@ export class CanvasImageItem {
     let needsNextFrame = false;
 
     // 绘制占位色块或图片
-    if (this.image) {
+    if (this.image && this._isImageUsable()) {
       this._drawImageWithOrientation(ctx);
     } else {
+      // image 被 LRU 缓存淘汰（close()）后变为 detached，标记需要重新加载
+      if (this.image) {
+        this.image = null;
+        this.needsReload = true;
+      }
       this._drawPlaceholder(ctx);
     }
 
@@ -271,6 +285,14 @@ export class CanvasImageItem {
     this.selectionAnimStartTime = 0;
     this.detectionBoxes = [];
     this.detectionVisible = false;
+  }
+
+  /**
+   * 检测 ImageBitmap 是否仍可用（未被 close() 释放）
+   * close() 后 width/height 归零
+   */
+  private _isImageUsable(): boolean {
+    return this.image !== null && this.image.width > 0 && this.image.height > 0;
   }
 
   // ── 私有方法：绘制 ────────────────────────────────────────
