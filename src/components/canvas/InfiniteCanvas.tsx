@@ -8,8 +8,7 @@
 // 1. 清空 Canvas + 背景色
 // 2. DotBackground（固定视口坐标）
 // 3. ctx.save/translate/scale → 内容坐标系
-//    3a. drawGroupTitles
-//    3b. CanvasImageItem.draw() × N
+//    3a. CanvasImageItem.draw() × N
 // 4. ctx.restore
 //
 // 交互模式:
@@ -22,7 +21,6 @@
 import { useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { DotBackground } from './DotBackground';
 import { CanvasImageItem } from './CanvasImageItem';
-import { drawGroupTitles } from './GroupTitle';
 import { ImageLoader, getSizeForDisplay } from '../../hooks/useImageLoader';
 import {
   getVisibleItems,
@@ -488,13 +486,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     ctx.translate(ox, oy);
     ctx.scale(az, az);
 
-    // 3a. 绘制分组标题
+    // 3a. 绘制所有可见 CanvasImageItem
     const currentLayout = layoutRef.current;
-    if (currentLayout.groupTitles.length > 0) {
-      drawGroupTitles(ctx, currentLayout.groupTitles);
-    }
-
-    // 3b. 绘制所有可见 CanvasImageItem
     let needsNextFrame = false;
     const itemsToReload: CanvasImageItem[] = [];
     for (const item of canvasItemsRef.current.values()) {
