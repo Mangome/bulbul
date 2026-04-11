@@ -42,6 +42,7 @@ import { useThemeStore } from '../../stores/useThemeStore';
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 3.0;
 const ZOOM_SENSITIVITY = 0.001;
+const TRACKPAD_ZOOM_SENSITIVITY = 0.01;
 const DRAG_DEAD_ZONE = 5;
 const BG_COLOR_LIGHT = '#FFFFFF';
 const BG_COLOR_DARK = '#0A0E1A';
@@ -127,8 +128,23 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
   // ── 水平分组滑动状态 ──
   const scrollYRef = useRef(0);
-  const transitionAnimRef = useRef<number | null>(null);
   const prevGroupIndexRef = useRef(0);
+
+  // ── 过渡动画状态（由 renderFrame 统一驱动） ──
+  const transitionStateRef = useRef<{
+    startTime: number;
+    startX: number;
+    startY: number;
+    startScale: number;
+    targetX: number;
+    targetY: number;
+    targetScale: number;
+    targetGroupIndex: number;
+    prevGroupIndex: number;
+  } | null>(null);
+
+  // ── hash → groupIndex 快速查找表 ──
+  const groupIndexMapRef = useRef<Map<string, number>>(new Map());
 
   // ── 悬停状态 ──
   const hoveredHashRef = useRef<string | null>(null);
@@ -290,6 +306,20 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
       if (!transitioning) {
         canvasItem.alpha = item.groupIndex === activeGroupIdx ? 1 : 0;
+      } else {
+        // 动画期间新进入的 item：根据当前过渡状态设置 alpha
+        const ts = transitionStateRef.current;
+        if (ts) {
+          if (item.groupIndex === ts.targetGroupIndex) {
+            canvasItem.alpha = 0; // 将在下一帧由 applyGroupAlpha 设置
+          } else if (item.groupIndex === ts.prevGroupIndex) {
+            canvasItem.alpha = 1;
+          } else {
+            canvasItem.alpha = 0;
+          }
+        } else {
+          canvasItem.alpha = 0;
+        }
       }
 
       canvasItemsRef.current.set(item.hash, canvasItem);
@@ -312,6 +342,13 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     }
 
     visibleItemsRef.current = newVisible;
+
+    // 同步维护 groupIndexMap
+    const groupMap = groupIndexMapRef.current;
+    groupMap.clear();
+    for (const item of newVisible) {
+      groupMap.set(item.hash, item.groupIndex);
+    }
   }, [setViewport, setViewportRect, markDirty]);
 
   // ─── 缩放阈值切换 ──────────────────────────────────────
@@ -354,13 +391,13 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
   // ─── 分组 alpha / 可见性 ────────────────────────────────
 
   const applyGroupAlpha = useCallback((activeGroupIdx: number, prevGroupIdx: number, t: number) => {
-    for (const [, canvasItem] of canvasItemsRef.current) {
-      const layoutItem = visibleItemsRef.current.find(li => li.hash === canvasItem.hash);
-      if (!layoutItem) continue;
-
-      if (layoutItem.groupIndex === activeGroupIdx) {
+    const groupMap = groupIndexMapRef.current;
+    for (const [hash, canvasItem] of canvasItemsRef.current) {
+      const gi = groupMap.get(hash);
+      if (gi === undefined) continue;
+      if (gi === activeGroupIdx) {
         canvasItem.alpha = t;
-      } else if (layoutItem.groupIndex === prevGroupIdx) {
+      } else if (gi === prevGroupIdx) {
         canvasItem.alpha = 1 - t;
       } else {
         canvasItem.alpha = 0;
@@ -369,9 +406,10 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
   }, []);
 
   const ensureOnlyGroupVisible = useCallback((groupIndex: number) => {
-    for (const [, ci] of canvasItemsRef.current) {
-      const li = visibleItemsRef.current.find(l => l.hash === ci.hash);
-      ci.alpha = li && li.groupIndex === groupIndex ? 1 : 0;
+    const groupMap = groupIndexMapRef.current;
+    for (const [hash, ci] of canvasItemsRef.current) {
+      const gi = groupMap.get(hash);
+      ci.alpha = gi === groupIndex ? 1 : 0;
     }
   }, []);
 
@@ -389,6 +427,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     scrollYRef.current = 0;
 
     if (!animated || GROUP_TRANSITION_MS === 0) {
+      transitionStateRef.current = null;
       actualZoomRef.current = targetActualZoom;
       offsetXRef.current = targetX;
       offsetYRef.current = targetY;
@@ -400,42 +439,79 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       return;
     }
 
-    if (transitionAnimRef.current != null) {
-      cancelAnimationFrame(transitionAnimRef.current);
+    // 取消正在进行的动画
+    transitionStateRef.current = null;
+
+    const prevIdx = prevGroupIndexRef.current;
+
+    // ── 预计算目标组 items，一次性加入 canvasItems ──
+    const targetViewport: ViewportRect = {
+      x: -targetX / targetActualZoom,
+      y: -targetY / targetActualZoom,
+      width: screenWidthRef.current / targetActualZoom,
+      height: screenHeightRef.current / targetActualZoom,
+    };
+    const targetVisible = getVisibleItems(
+      currentLayout.pages,
+      currentLayout.pageWidth,
+      targetViewport,
+    );
+
+    const imageLoader = imageLoaderRef.current;
+    const groupMap = groupIndexMapRef.current;
+
+    for (const item of targetVisible) {
+      if (canvasItemsRef.current.has(item.hash)) continue;
+
+      const canvasItem = new CanvasImageItem(item);
+      const fileName = fileNamesRef.current.get(item.hash) ?? item.hash;
+      const meta = metadataMapRef.current.get(item.hash);
+      canvasItem.setImageInfo(fileName, meta);
+
+      const itemZoom = getActualZoom(item.groupIndex);
+      canvasItem.updateZoomVisibility(itemZoom);
+
+      const { selectedHashes } = useSelectionStore.getState();
+      canvasItem.setSelected(selectedHashes.has(item.hash));
+
+      // 目标组 alpha=0（动画中渐入），其他 alpha=0
+      canvasItem.alpha = 0;
+
+      canvasItemsRef.current.set(item.hash, canvasItem);
+      groupMap.set(item.hash, item.groupIndex);
+      imageLoader?.pinImage(item.hash);
+
+      if (imageLoader) {
+        imageLoader
+          .loadImage(item.hash, item.width * itemZoom)
+          .then((result) => {
+            if (!result || destroyedRef.current || !imageLoaderRef.current) return;
+            if (!imageLoaderRef.current.getCache().isImageValid(result.key, result.version)) return;
+            const ci = canvasItemsRef.current.get(item.hash);
+            if (ci) {
+              const itemMeta = metadataMapRef.current.get(item.hash);
+              ci.setImage(result.image, itemMeta?.orientation ?? 1);
+              markDirty();
+            }
+          });
+      }
     }
 
-    const startX = offsetXRef.current;
-    const startY = offsetYRef.current;
-    const startScale = actualZoomRef.current;
-    const startTime = performance.now();
-
-    const animate = (now: number) => {
-      if (destroyedRef.current) return;
-      const elapsed = now - startTime;
-      const progress = Math.min(elapsed / GROUP_TRANSITION_MS, 1);
-      const eased = 1 - Math.pow(1 - progress, 4); // easeOutQuart
-
-      actualZoomRef.current = startScale + (targetActualZoom - startScale) * eased;
-      offsetXRef.current = startX + (targetX - startX) * eased;
-      offsetYRef.current = startY + (targetY - startY) * eased;
-
-      applyGroupAlpha(groupIndex, prevGroupIndexRef.current, eased);
-      updateViewport();
-      markDirty();
-
-      if (progress < 1) {
-        transitionAnimRef.current = requestAnimationFrame(animate);
-      } else {
-        transitionAnimRef.current = null;
-        setTransitioning(false);
-        prevGroupIndexRef.current = groupIndex;
-        ensureOnlyGroupVisible(groupIndex);
-        markDirty();
-      }
+    // ── 设置动画状态，由 renderFrame 统一驱动 ──
+    transitionStateRef.current = {
+      startTime: performance.now(),
+      startX: offsetXRef.current,
+      startY: offsetYRef.current,
+      startScale: actualZoomRef.current,
+      targetX,
+      targetY,
+      targetScale: targetActualZoom,
+      targetGroupIndex: groupIndex,
+      prevGroupIndex: prevIdx,
     };
 
-    transitionAnimRef.current = requestAnimationFrame(animate);
-  }, [updateViewport, setTransitioning, applyGroupAlpha, ensureOnlyGroupVisible, computeVerticalOffset, computeGroupX, getActualZoom, markDirty]);
+    markDirty();
+  }, [updateViewport, setTransitioning, ensureOnlyGroupVisible, computeVerticalOffset, computeGroupX, getActualZoom, markDirty]);
 
   // ─── 选中同步 ──────────────────────────────────────────
 
@@ -463,6 +539,30 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     const dpr = dprRef.current;
     const now = performance.now();
 
+    // ── 处理过渡动画（统一在 renderFrame 中驱动） ──
+    const ts = transitionStateRef.current;
+    if (ts) {
+      const elapsed = now - ts.startTime;
+      const progress = Math.min(elapsed / GROUP_TRANSITION_MS, 1);
+      const eased = 1 - Math.pow(1 - progress, 4); // easeOutQuart
+
+      actualZoomRef.current = ts.startScale + (ts.targetScale - ts.startScale) * eased;
+      offsetXRef.current = ts.startX + (ts.targetX - ts.startX) * eased;
+      offsetYRef.current = ts.startY + (ts.targetY - ts.startY) * eased;
+
+      applyGroupAlpha(ts.targetGroupIndex, ts.prevGroupIndex, eased);
+
+      if (progress >= 1) {
+        // 动画完成
+        transitionStateRef.current = null;
+        setTransitioning(false);
+        prevGroupIndexRef.current = ts.targetGroupIndex;
+        // 动画结束后执行一次完整的 viewport 同步（清理离屏 items）
+        updateViewport();
+        ensureOnlyGroupVisible(ts.targetGroupIndex);
+      }
+    }
+
     // 重置变换（DPR scale 已在 setupCanvas 中设置）
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
@@ -487,7 +587,6 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     ctx.scale(az, az);
 
     // 3a. 绘制所有可见 CanvasImageItem
-    const currentLayout = layoutRef.current;
     let needsNextFrame = false;
     const itemsToReload: CanvasImageItem[] = [];
     for (const item of canvasItemsRef.current.values()) {
@@ -523,8 +622,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       }
     }
 
-    // 如果有动画进行中，继续请求下一帧
-    if (needsNextFrame) {
+    // 如果有动画进行中（过渡动画或 item 选中动画），继续请求下一帧
+    if (transitionStateRef.current || needsNextFrame) {
       dirtyRef.current = true;
       rafIdRef.current = requestAnimationFrame(renderFrame);
     }
@@ -572,7 +671,10 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       if (e.ctrlKey || e.metaKey) {
         // Ctrl+滚轮：缩放
         const oldZoom = zoomLevelRef.current;
-        const delta = -e.deltaY * ZOOM_SENSITIVITY;
+        // 触控板 pinch 的 deltaY 通常是小浮点数（±1~5），鼠标滚轮是大整数（±100+）
+        const isTrackpadPinch = Math.abs(e.deltaY) < 50;
+        const sensitivity = isTrackpadPinch ? TRACKPAD_ZOOM_SENSITIVITY : ZOOM_SENSITIVITY;
+        const delta = -e.deltaY * sensitivity;
         const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, oldZoom * (1 + delta)));
         if (newZoom === oldZoom) return;
 
@@ -841,9 +943,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     return () => {
       destroyedRef.current = true;
 
-      if (transitionAnimRef.current != null) {
-        cancelAnimationFrame(transitionAnimRef.current);
-      }
+      transitionStateRef.current = null;
       cancelAnimationFrame(rafIdRef.current);
 
       canvas.removeEventListener('wheel', handleWheel);

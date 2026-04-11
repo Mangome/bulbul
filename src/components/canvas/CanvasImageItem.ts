@@ -433,28 +433,29 @@ export class CanvasImageItem {
       progress = 1 - progress;
     }
 
+    const baseAlpha = this.alpha;
     ctx.save();
 
     // 绘制叠加层
-    ctx.globalAlpha *= progress * SELECTION_OVERLAY_ALPHA;
+    ctx.globalAlpha = baseAlpha * progress * SELECTION_OVERLAY_ALPHA;
     ctx.fillStyle = SELECTION_COLOR;
     ctx.fillRect(0, 0, this.width, this.height);
 
     // 绘制内侧描边
-    ctx.globalAlpha = progress * 0.15;
+    ctx.globalAlpha = baseAlpha * progress * 0.15;
     ctx.strokeStyle = SELECTION_COLOR;
     ctx.lineWidth = 1;
     ctx.strokeRect(0, 0, this.width, this.height);
 
     // 绘制外发光
-    ctx.globalAlpha = progress * SELECTION_GLOW_ALPHA;
+    ctx.globalAlpha = baseAlpha * progress * SELECTION_GLOW_ALPHA;
     ctx.strokeStyle = SELECTION_COLOR;
     ctx.lineWidth = 3;
     const glowExtend = 6;
     ctx.strokeRect(-glowExtend, -glowExtend, this.width + glowExtend * 2, this.height + glowExtend * 2);
 
     // 绘制实色边框
-    ctx.globalAlpha = progress;
+    ctx.globalAlpha = baseAlpha * progress;
     ctx.strokeStyle = SELECTION_COLOR;
     ctx.lineWidth = SELECTION_BORDER_WIDTH;
     ctx.strokeRect(-SELECTION_BORDER_WIDTH / 2, -SELECTION_BORDER_WIDTH / 2, this.width + SELECTION_BORDER_WIDTH, this.height + SELECTION_BORDER_WIDTH);
@@ -473,21 +474,21 @@ export class CanvasImageItem {
     ctx.translate(-cx, -cy);
 
     // 白色外环
-    ctx.globalAlpha = progress * 0.9;
+    ctx.globalAlpha = baseAlpha * progress * 0.9;
     ctx.fillStyle = '#FFFFFF';
     ctx.beginPath();
     ctx.arc(cx, cy, CHECK_RADIUS + 2, 0, Math.PI * 2);
     ctx.fill();
 
     // 品牌色圆形
-    ctx.globalAlpha = progress;
+    ctx.globalAlpha = baseAlpha * progress;
     ctx.fillStyle = SELECTION_COLOR;
     ctx.beginPath();
     ctx.arc(cx, cy, CHECK_RADIUS, 0, Math.PI * 2);
     ctx.fill();
 
     // 白色对勾
-    ctx.globalAlpha = progress;
+    ctx.globalAlpha = baseAlpha * progress;
     ctx.strokeStyle = '#FFFFFF';
     ctx.lineWidth = 2.5;
     ctx.lineCap = 'round';
@@ -508,15 +509,17 @@ export class CanvasImageItem {
   private _drawHover(ctx: CanvasRenderingContext2D): void {
     ctx.save();
 
+    const baseAlpha = this.alpha;
+
     // 绘制外发光
-    ctx.globalAlpha *= 0.2;
+    ctx.globalAlpha = baseAlpha * 0.2;
     ctx.strokeStyle = SELECTION_COLOR;
     ctx.lineWidth = 3;
     const glowExtend = 4;
     ctx.strokeRect(-glowExtend, -glowExtend, this.width + glowExtend * 2, this.height + glowExtend * 2);
 
     // 绘制悬停边框
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = baseAlpha;
     ctx.strokeStyle = SELECTION_COLOR;
     ctx.lineWidth = HOVER_BORDER_WIDTH;
     ctx.strokeRect(-HOVER_BORDER_WIDTH / 2, -HOVER_BORDER_WIDTH / 2, this.width + HOVER_BORDER_WIDTH, this.height + HOVER_BORDER_WIDTH);
@@ -530,15 +533,16 @@ export class CanvasImageItem {
   private _drawBadge(ctx: CanvasRenderingContext2D, x: number, y: number, badge: BadgeInfo): void {
     ctx.save();
 
+    const parentAlpha = ctx.globalAlpha;
     ctx.fillStyle = badge.bgColor;
-    ctx.globalAlpha = badge.bgAlpha;
+    ctx.globalAlpha = parentAlpha * badge.bgAlpha;
 
     // 绘制圆角矩形背景
     this._roundRect(ctx, x, y, badge.width, badge.height, BADGE_RADIUS);
     ctx.fill();
 
     // 绘制文字
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = parentAlpha;
     ctx.fillStyle = '#FFFFFF';
     ctx.font = `${PARAM_FONT_SIZE}px system-ui, -apple-system, sans-serif`;
     ctx.textBaseline = 'top';
