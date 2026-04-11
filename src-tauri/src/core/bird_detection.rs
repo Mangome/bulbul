@@ -13,7 +13,7 @@
 //! 性能：单张 medium JPEG ~50-150ms（CPU，现代硬件）
 
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use crate::models::AppError;
@@ -340,7 +340,21 @@ fn filter_by_confidence(bboxes: Vec<DetectionBox>, threshold: f32) -> Vec<Detect
 // ─── 公开 API ────────────────────────────────────
 
 /// 获取模型文件路径
-fn get_model_path() -> Result<std::path::PathBuf, AppError> {
+///
+/// 查找顺序：
+/// 1. 显式传入的路径（来自 Tauri resource_dir 解析）
+/// 2. 相对路径 candidates（开发模式）
+/// 3. 可执行文件目录相对路径（Windows 安装模式）
+fn get_model_path(explicit_path: Option<&Path>) -> Result<std::path::PathBuf, AppError> {
+    // 1. 优先使用显式传入的路径（生产环境，Tauri resource_dir 解析）
+    if let Some(path) = explicit_path {
+        if path.exists() {
+            return Ok(path.to_path_buf());
+        }
+        log::warn!("显式指定的模型路径不存在: {}", path.display());
+    }
+
+    // 2. 相对路径 candidates（开发模式）
     let candidates = [
         "resources/models/yolov8s.onnx",
         "src-tauri/resources/models/yolov8s.onnx",
@@ -353,7 +367,7 @@ fn get_model_path() -> Result<std::path::PathBuf, AppError> {
         }
     }
 
-    // 尝试从可执行文件目录相对寻找
+    // 3. 可执行文件目录相对路径（Windows 安装模式）
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(parent) = exe_path.parent() {
             let rel_path = parent.join("resources/models/yolov8s.onnx");
@@ -368,12 +382,25 @@ fn get_model_path() -> Result<std::path::PathBuf, AppError> {
     ))
 }
 
+/// 基于 Tauri resource_dir 解析模型文件路径
+///
+/// macOS .app bundle 中资源位于 Contents/Resources/ 下，
+/// 而 current_exe() 返回 Contents/MacOS/bulbul，
+/// 因此需要使用 Tauri 的 resource_dir 来正确定位。
+pub fn resolve_model_path_from_resource_dir(resource_dir: &Path) -> PathBuf {
+    resource_dir.join("resources").join("models").join("yolov8s.onnx")
+}
+
 /// 检测图片中的鸟
 ///
 /// 返回检测到的鸟类框的列表（相对坐标 [0, 1]），按置信度降序排列
-pub fn detect_birds(image_path: &Path) -> Result<DetectionResult, AppError> {
-    let model_path = get_model_path()?;
-    load_model(&model_path)?;
+///
+/// # 参数
+/// - `image_path`: 待检测的图片路径
+/// - `model_path`: 可选的模型文件路径（生产环境应传入 Tauri resource_dir 解析的路径）
+pub fn detect_birds(image_path: &Path, model_path: Option<&Path>) -> Result<DetectionResult, AppError> {
+    let resolved = get_model_path(model_path)?;
+    load_model(&resolved)?;
 
     let img = image::open(image_path).map_err(|e| {
         AppError::ImageProcessError(format!("无法加载图片: {}", e))
@@ -716,7 +743,7 @@ mod tests {
     #[test]
     fn test_model_file_path_resolution() {
         // 验证 get_model_path() 能正确找到模型文件
-        let model_path = super::get_model_path();
+        let model_path = super::get_model_path(None);
         match model_path {
             Ok(path) => {
                 println!("✓ 模型文件路径: {:?}", path);
@@ -732,7 +759,7 @@ mod tests {
     #[test]
     fn test_model_file_size() {
         // 验证模型文件大小约为 22MB（容许 ±2MB 偏差）
-        match super::get_model_path() {
+        match super::get_model_path(None) {
             Ok(path) => {
                 let metadata = std::fs::metadata(&path).expect("无法读取模型文件元数据");
                 let file_size = metadata.len();
@@ -777,7 +804,7 @@ mod tests {
         std::fs::write(&tmp_jpeg, &jpeg_data).unwrap();
 
         let start = std::time::Instant::now();
-        let result = detect_birds(&tmp_jpeg).expect("检测失败");
+        let result = detect_birds(&tmp_jpeg, None).expect("检测失败");
         let elapsed = start.elapsed();
 
         println!("✓ 检测完成: {} 只鸟, 耗时 {:.1}ms", result.bboxes.len(), elapsed.as_secs_f64() * 1000.0);

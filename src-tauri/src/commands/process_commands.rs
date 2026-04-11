@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use chrono::NaiveDateTime;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use tokio::sync::Semaphore;
 
 use crate::core::bird_detection;
@@ -665,6 +665,16 @@ async fn compute_focus_scores_background(
         return Ok(());
     }
 
+    // 解析模型路径（macOS .app bundle 需要 resource_dir）
+    let model_path: Option<PathBuf> = app.path().resource_dir()
+        .map(|dir| bird_detection::resolve_model_path_from_resource_dir(&dir))
+        .ok()
+        .filter(|p: &PathBuf| p.exists());
+    if model_path.is_none() {
+        log::warn!("resource_dir 下未找到模型文件，将回退到默认路径搜索");
+    }
+    let model_path = model_path; // 不可变
+
     // 并发计算配置
     let max_concurrency = std::cmp::min(4, num_cpus::get()); // 限制在 4 个并发
     let semaphore = Arc::new(Semaphore::new(max_concurrency));
@@ -686,6 +696,7 @@ async fn compute_focus_scores_background(
         let hash = result.hash.clone();
         let medium_path = PathBuf::from(&result.medium_path);
         let filename = result.filename.clone();
+        let model_path_for_task = model_path.clone();
 
         join_set.spawn(async move {
             let _permit = sem.acquire().await.ok();
@@ -693,9 +704,10 @@ async fn compute_focus_scores_background(
             // CPU 密集型操作在 blocking 线程中执行
             let hash_clone = hash.clone();
             let medium_path_clone = medium_path.clone();
+            let model_path_clone = model_path_for_task.clone();
             let result = tokio::task::spawn_blocking(move || {
                 // 1. 鸟类检测
-                let detection = bird_detection::detect_birds(&medium_path_clone);
+                let detection = bird_detection::detect_birds(&medium_path_clone, model_path_clone.as_deref());
                 let (best_bbox, all_bboxes) = match detection {
                     Ok(result) if !result.bboxes.is_empty() => {
                         // 取置信度最高的框用于评分
