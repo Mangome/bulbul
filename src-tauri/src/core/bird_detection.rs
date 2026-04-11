@@ -7,7 +7,7 @@
 //! 2. Letterbox 等比缩放输入图片到 640×640
 //! 3. YOLOv8s 推理获得原始检测框
 //! 4. NMS 非极大值抑制过滤重叠框
-//! 5. 置信度阈值过滤（< 0.25 移除）
+//! 5. 置信度阈值过滤（< 0.70 移除）
 //! 6. 坐标反归一化回原始图片相对坐标 [0, 1]
 //!
 //! 性能：单张 medium JPEG ~50-150ms（CPU，现代硬件）
@@ -25,7 +25,7 @@ const BIRD_CLASS_ID: usize = 14;
 const INPUT_SIZE: u32 = 640;
 
 /// 置信度阈值
-const CONFIDENCE_THRESHOLD: f32 = 0.25;
+const CONFIDENCE_THRESHOLD: f32 = 0.70;
 
 /// NMS IoU 阈值
 const NMS_IOU_THRESHOLD: f32 = 0.45;
