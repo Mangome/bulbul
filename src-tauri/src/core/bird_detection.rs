@@ -145,8 +145,8 @@ fn letterbox_resize(img: &image::DynamicImage) -> LetterboxInfo {
     let new_w = (orig_w * scale) as u32;
     let new_h = (orig_h * scale) as u32;
 
-    // 缩放图片
-    let resized = img.resize(new_w, new_h, image::imageops::FilterType::Lanczos3);
+    // 缩放图片（使用 resize_exact 确保尺寸精确匹配）
+    let resized = img.resize_exact(new_w, new_h, image::imageops::FilterType::Lanczos3);
 
     // 创建 640×640 灰色画布
     let mut canvas = image::ImageBuffer::from_pixel(
@@ -155,14 +155,16 @@ fn letterbox_resize(img: &image::DynamicImage) -> LetterboxInfo {
         image::Rgb([114u8, 114u8, 114u8]), // YOLOv8 标准 padding 颜色
     );
 
-    // 计算 padding（上下或左右）
-    let pad_x = (INPUT_SIZE - new_w) / 2;
-    let pad_y = (INPUT_SIZE - new_h) / 2;
+    // 使用 resized 的实际尺寸计算 padding，避免浮点截断导致的 off-by-one
+    let actual_w = resized.width();
+    let actual_h = resized.height();
+    let pad_x = (INPUT_SIZE - actual_w) / 2;
+    let pad_y = (INPUT_SIZE - actual_h) / 2;
 
     // 将缩放的图片粘贴到画布中央
     let rgb = resized.to_rgb8();
-    for y in 0..new_h {
-        for x in 0..new_w {
+    for y in 0..actual_h {
+        for x in 0..actual_w {
             let pixel = rgb.get_pixel(x, y);
             canvas.put_pixel(pad_x + x, pad_y + y, *pixel);
         }
