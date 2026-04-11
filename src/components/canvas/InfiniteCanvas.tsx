@@ -260,6 +260,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       if (canvasItem) {
         canvasItem.destroy();
         canvasItemsRef.current.delete(item.hash);
+        imageLoaderRef.current?.unpinImage(item.hash);
         imageLoaderRef.current?.evictImage(item.hash);
       }
     }
@@ -294,6 +295,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       }
 
       canvasItemsRef.current.set(item.hash, canvasItem);
+      imageLoader?.pinImage(item.hash);
 
       if (imageLoader) {
         imageLoader

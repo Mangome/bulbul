@@ -53,6 +53,7 @@ export class ImageLRUCache {
   private readonly memoryLimit: number;
   private _currentMemory: number = 0;
   private versionMap = new Map<string, number>();
+  private pinnedKeys = new Set<string>();
 
   constructor(cacheCapacity: number = 30, memoryLimit: number = DEFAULT_MEMORY_LIMIT) {
     this.capacity = cacheCapacity;
@@ -84,9 +85,15 @@ export class ImageLRUCache {
       this.cache.size >= this.capacity ||
       (this.cache.size > 0 && this._currentMemory + imgBytes > this.memoryLimit)
     ) {
-      const firstKey = this.cache.keys().next().value;
-      if (firstKey === undefined) break;
-      this._evictEntry(firstKey);
+      let victimKey: string | undefined;
+      for (const k of this.cache.keys()) {
+        if (!this.pinnedKeys.has(k)) {
+          victimKey = k;
+          break;
+        }
+      }
+      if (victimKey === undefined) break;
+      this._evictEntry(victimKey);
     }
 
     const currentVersion = (this.versionMap.get(key) ?? 0) + 1;
@@ -108,12 +115,21 @@ export class ImageLRUCache {
     return this._currentMemory;
   }
 
+  pin(key: string): void {
+    this.pinnedKeys.add(key);
+  }
+
+  unpin(key: string): void {
+    this.pinnedKeys.delete(key);
+  }
+
   /** 清空缓存，释放所有图片 */
   clear(): void {
     for (const [, entry] of this.cache) {
       entry.image.close();
     }
     this.cache.clear();
+    this.pinnedKeys.clear();
     this._currentMemory = 0;
   }
 
@@ -232,6 +248,16 @@ export class ImageLoader {
 
   getCache(): ImageLRUCache {
     return this.imageCache;
+  }
+
+  pinImage(hash: string): void {
+    this.imageCache.pin(cacheKey(hash, 'medium'));
+    this.imageCache.pin(cacheKey(hash, 'thumbnail'));
+  }
+
+  unpinImage(hash: string): void {
+    this.imageCache.unpin(cacheKey(hash, 'medium'));
+    this.imageCache.unpin(cacheKey(hash, 'thumbnail'));
   }
 
   evictImage(hash: string): void {

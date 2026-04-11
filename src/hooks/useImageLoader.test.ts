@@ -166,3 +166,74 @@ describe('ImageLRUCache 内存上限', () => {
     expect(cache.has('a')).toBe(false);
   });
 });
+
+// ─── ImageLRUCache pin/unpin ─────────────────────────
+
+describe('ImageLRUCache pin/unpin', () => {
+  it('pinned 条目不会被 LRU 淘汰', () => {
+    const cache = new ImageLRUCache(3);
+    cache.set('a', createMockImage('a'));
+    cache.set('b', createMockImage('b'));
+    cache.set('c', createMockImage('c'));
+    cache.pin('a');
+    cache.set('d', createMockImage('d'));
+    expect(cache.has('a')).toBe(true);
+    expect(cache.has('b')).toBe(false);
+  });
+
+  it('unpin 后恢复正常淘汰', () => {
+    const cache = new ImageLRUCache(3);
+    cache.set('a', createMockImage('a'));
+    cache.set('b', createMockImage('b'));
+    cache.set('c', createMockImage('c'));
+    cache.pin('a');
+    cache.unpin('a');
+    cache.set('d', createMockImage('d'));
+    expect(cache.has('a')).toBe(false);
+  });
+
+  it('所有条目被 pin 时允许超限', () => {
+    const cache = new ImageLRUCache(2);
+    cache.set('a', createMockImage('a'));
+    cache.set('b', createMockImage('b'));
+    cache.pin('a');
+    cache.pin('b');
+    cache.set('c', createMockImage('c'));
+    expect(cache.size).toBe(3);
+    expect(cache.has('a')).toBe(true);
+    expect(cache.has('b')).toBe(true);
+    expect(cache.has('c')).toBe(true);
+  });
+
+  it('clear 同时清空 pin 状态', () => {
+    const cache = new ImageLRUCache(3);
+    cache.set('a', createMockImage('a'));
+    cache.pin('a');
+    cache.clear();
+    // clear 后重新插入，不应保留旧的 pin
+    cache.set('a', createMockImage('a'));
+    cache.set('b', createMockImage('b'));
+    cache.set('c', createMockImage('c'));
+    cache.set('d', createMockImage('d'));
+    expect(cache.has('a')).toBe(false);
+  });
+
+  it('pin 不存在的 key 不报错', () => {
+    const cache = new ImageLRUCache(3);
+    expect(() => cache.pin('nonexistent')).not.toThrow();
+    expect(() => cache.unpin('nonexistent')).not.toThrow();
+  });
+
+  it('内存超限时也跳过 pinned 条目', () => {
+    // 80000 字节内存限制，每张 100×100 = 40000 字节
+    const cache = new ImageLRUCache(100, 80000);
+    cache.set('a', createMockImage('a', 100, 100));
+    cache.set('b', createMockImage('b', 100, 100));
+    cache.pin('a');
+    // 插入 c，需要淘汰，a 被 pin，淘汰 b
+    cache.set('c', createMockImage('c', 100, 100));
+    expect(cache.has('a')).toBe(true);
+    expect(cache.has('b')).toBe(false);
+    expect(cache.has('c')).toBe(true);
+  });
+});
