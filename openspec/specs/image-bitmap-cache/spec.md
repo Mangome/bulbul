@@ -35,7 +35,7 @@
 - **THEN** 返回 0
 
 ### Requirement: ImageBitmap 安全销毁
-系统 SHALL 通过调用 `ImageBitmap.close()` 释放内存。销毁后如果有代码调用 `ctx.drawImage(closedBitmap, ...)`，SHALL 静默无操作（不抛异常）。
+系统 SHALL 通过调用 `ImageBitmap.close()` 释放内存。销毁后如果有代码调用 `ctx.drawImage(closedBitmap, ...)`，SHALL 静默无操作（不抛异常）。持有已关闭 ImageBitmap 引用的 `CanvasImageItem` SHALL 继续安全工作（显示占位色块），不会导致渲染崩溃。
 
 #### Scenario: 正常销毁
 - **WHEN** LRU 缓存淘汰一个条目
@@ -44,6 +44,12 @@
 #### Scenario: 销毁后绘制
 - **WHEN** 已 close 的 ImageBitmap 被传给 `ctx.drawImage()`
 - **THEN** 不抛出异常，不绘制任何内容（Canvas 2D 规范行为）
+
+#### Scenario: CanvasImageItem 引用已关闭的 ImageBitmap
+- **WHEN** 缓存淘汰触发 `ImageBitmap.close()`
+- **AND** 持有该 bitmap 引用的 `CanvasImageItem` 仍在 Canvas 上调用 `draw(ctx, ...)`
+- **THEN** `ctx.drawImage(closedBitmap, ...)` 不抛异常，静默无操作
+- **AND** 渲染继续正常进行，CanvasImageItem 显示占位色块，无崩溃
 
 ### Requirement: 从 URL 加载 ImageBitmap
 系统 SHALL 提供 `loadImageFromUrl(url: string): Promise<ImageBitmap>` 函数，通过 `fetch → blob → createImageBitmap` 加载图片，不依赖任何第三方渲染框架。

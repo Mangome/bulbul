@@ -37,7 +37,6 @@ export default defineConfig(async () => ({
     rollupOptions: {
       output: {
         manualChunks: {
-          'pixi': ['pixi.js'],
           'tauri': ['@tauri-apps/api', '@tauri-apps/plugin-dialog', '@tauri-apps/plugin-fs', '@tauri-apps/plugin-opener'],
           'motion': ['motion/react'],
         }
