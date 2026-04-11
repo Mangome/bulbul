@@ -158,6 +158,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
   const fitCounter = useCanvasStore((s) => s.fitCounter);
   const currentGroupIndex = useCanvasStore((s) => s.currentGroupIndex);
   const isTransitioning = useCanvasStore((s) => s.isTransitioning);
+  const showDetectionOverlay = useCanvasStore((s) => s.showDetectionOverlay);
   const setZoom = useCanvasStore((s) => s.setZoom);
   const setViewport = useCanvasStore((s) => s.setViewport);
   const setViewportRect = useCanvasStore((s) => s.setViewportRect);
@@ -301,7 +302,15 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       canvasItem.setImageInfo(fileName, meta);
       canvasItem.updateZoomVisibility(calcActualZoom(item.groupIndex));
 
+      // 同步选中 + 检测框状态
       const { selectedHashes } = useSelectionStore.getState();
+      const { showDetectionOverlay: showOverlay } = useCanvasStore.getState();
+      if (showOverlay) {
+        const bboxes = meta?.detectionBboxes ?? [];
+        canvasItem.setDetectionBoxes(bboxes);
+        canvasItem.setDetectionVisible(bboxes.length > 0);
+      }
+
       canvasItem.setSelected(selectedHashes.has(item.hash));
 
       if (!transitioning) {
@@ -335,6 +344,13 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
             if (ci) {
               const itemMeta = metadataMapRef.current.get(item.hash);
               ci.setImage(result.image, itemMeta?.orientation ?? 1);
+              // 恢复检测框状态
+              const { showDetectionOverlay: showOverlay } = useCanvasStore.getState();
+              if (showOverlay) {
+                const bboxes = itemMeta?.detectionBboxes ?? [];
+                ci.setDetectionBoxes(bboxes);
+                ci.setDetectionVisible(bboxes.length > 0);
+              }
               markDirty();
             }
           });
@@ -474,6 +490,14 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       const { selectedHashes } = useSelectionStore.getState();
       canvasItem.setSelected(selectedHashes.has(item.hash));
 
+      // 同步检测框状态
+      const { showDetectionOverlay: showOverlay } = useCanvasStore.getState();
+      if (showOverlay) {
+        const bboxes = meta?.detectionBboxes ?? [];
+        canvasItem.setDetectionBoxes(bboxes);
+        canvasItem.setDetectionVisible(bboxes.length > 0);
+      }
+
       // 目标组 alpha=0（动画中渐入），其他 alpha=0
       canvasItem.alpha = 0;
 
@@ -491,6 +515,13 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
             if (ci) {
               const itemMeta = metadataMapRef.current.get(item.hash);
               ci.setImage(result.image, itemMeta?.orientation ?? 1);
+              // 恢复检测框状态
+              const { showDetectionOverlay: showOverlay } = useCanvasStore.getState();
+              if (showOverlay) {
+                const bboxes = itemMeta?.detectionBboxes ?? [];
+                ci.setDetectionBoxes(bboxes);
+                ci.setDetectionVisible(bboxes.length > 0);
+              }
               markDirty();
             }
           });
@@ -615,6 +646,13 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
               if (ci) {
                 const itemMeta = metadataMapRef.current.get(item.hash);
                 ci.setImage(result.image, itemMeta?.orientation ?? 1);
+                // 恢复检测框状态
+                const { showDetectionOverlay: showOverlay } = useCanvasStore.getState();
+                if (showOverlay) {
+                  const bboxes = itemMeta?.detectionBboxes ?? [];
+                  ci.setDetectionBoxes(bboxes);
+                  ci.setDetectionVisible(bboxes.length > 0);
+                }
                 markDirty();
               }
             });
@@ -1011,9 +1049,30 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       const meta = metadataMapRef.current.get(hash);
       const fileName = fileNamesRef.current.get(hash) ?? hash;
       canvasItem.setImageInfo(fileName, meta);
+      // 桥接检测框数据到渲染管线
+      const bboxes = meta?.detectionBboxes ?? [];
+      canvasItem.setDetectionBoxes(bboxes);
+      const { showDetectionOverlay } = useCanvasStore.getState();
+      canvasItem.setDetectionVisible(showDetectionOverlay && bboxes.length > 0);
       markDirty();
     },
   }), [updateViewport, getActualZoom, computeVerticalOffset, markDirty]);
+
+  // ── 检测框可见性切换：批量回填/清除 ──
+  useEffect(() => {
+    const items = canvasItemsRef.current;
+    const metaMap = metadataMapRef.current;
+    for (const item of items.values()) {
+      if (showDetectionOverlay) {
+        const bboxes = metaMap.get(item.hash)?.detectionBboxes ?? [];
+        item.setDetectionBoxes(bboxes);
+        item.setDetectionVisible(bboxes.length > 0);
+      } else {
+        item.setDetectionVisible(false);
+      }
+    }
+    markDirty();
+  }, [showDetectionOverlay, markDirty]);
 
   // ── 外部缩放同步 ──
   useEffect(() => {

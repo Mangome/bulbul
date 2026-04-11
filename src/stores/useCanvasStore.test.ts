@@ -10,6 +10,7 @@ describe('useCanvasStore', () => {
       viewportY: 0,
       viewportRect: null,
       fitCounter: 0,
+      showDetectionOverlay: false,
     });
   });
 
@@ -119,6 +120,23 @@ describe('useCanvasStore', () => {
       expect(state.zoomLevel).toBe(1.0);
       expect(state.viewportX).toBe(100); // 保留
       expect(state.viewportY).toBe(200); // 保留
+    });
+  });
+
+  describe('toggleDetectionOverlay', () => {
+    it('初始值应为 false', () => {
+      expect(useCanvasStore.getState().showDetectionOverlay).toBe(false);
+    });
+
+    it('切换为 true', () => {
+      useCanvasStore.getState().toggleDetectionOverlay();
+      expect(useCanvasStore.getState().showDetectionOverlay).toBe(true);
+    });
+
+    it('再次切换回 false', () => {
+      useCanvasStore.getState().toggleDetectionOverlay();
+      useCanvasStore.getState().toggleDetectionOverlay();
+      expect(useCanvasStore.getState().showDetectionOverlay).toBe(false);
     });
   });
 });

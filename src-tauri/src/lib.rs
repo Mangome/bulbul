@@ -63,6 +63,7 @@ pub fn run() {
             commands::window_commands::open_main_window,
             commands::process_commands::process_folder,
             commands::process_commands::cancel_processing,
+            commands::process_commands::regroup,
             commands::image_commands::get_image_url,
             commands::image_commands::get_metadata,
             commands::image_commands::get_batch_metadata,

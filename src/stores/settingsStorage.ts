@@ -12,11 +12,17 @@ import type { Theme } from './useThemeStore';
 export interface PersistedSettings {
   zoomLevel: number;
   theme: Theme;
+  showDetectionOverlay: boolean;
+  similarityThreshold: number;
+  timeGapSeconds: number;
 }
 
 const DEFAULTS: PersistedSettings = {
   zoomLevel: 1.0,
   theme: 'light',
+  showDetectionOverlay: false,
+  similarityThreshold: 90.0,
+  timeGapSeconds: 10,
 };
 
 const SETTINGS_DIR = 'bulbul';
@@ -42,6 +48,9 @@ export async function loadSettings(): Promise<PersistedSettings> {
     const result = {
       zoomLevel: typeof parsed.zoomLevel === 'number' ? parsed.zoomLevel : DEFAULTS.zoomLevel,
       theme: parsed.theme === 'light' || parsed.theme === 'dark' ? parsed.theme : DEFAULTS.theme,
+      showDetectionOverlay: typeof parsed.showDetectionOverlay === 'boolean' ? parsed.showDetectionOverlay : DEFAULTS.showDetectionOverlay,
+      similarityThreshold: typeof parsed.similarityThreshold === 'number' ? parsed.similarityThreshold : DEFAULTS.similarityThreshold,
+      timeGapSeconds: typeof parsed.timeGapSeconds === 'number' ? parsed.timeGapSeconds : DEFAULTS.timeGapSeconds,
     };
     return result;
   } catch (e) {

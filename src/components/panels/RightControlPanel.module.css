@@ -67,6 +67,15 @@
 }
 
 /* ────────────────────────────────────────────────────────────────
+   激活态图标按钮（检测框等 toggle 按钮打开时）
+──────────────────────────────────────────────────────────────── */
+
+.iconBtnActive {
+  background-color: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+/* ────────────────────────────────────────────────────────────────
    缩放滑块
 ──────────────────────────────────────────────────────────────── */
 
@@ -114,6 +123,57 @@
   opacity: 0.4;
   margin: 3px 0;
   flex-shrink: 0;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   分组参数弹窗
+──────────────────────────────────────────────────────────────── */
+
+.popoverAnchor {
+  position: relative;
+}
+
+.popover {
+  position: absolute;
+  right: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 200px;
+  padding: 12px;
+
+  background: var(--panel-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--panel-radius);
+  box-shadow: var(--panel-shadow);
+
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  pointer-events: auto;
+}
+
+.popoverSection {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.popoverLabel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  user-select: none;
+}
+
+.popoverValue {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
 }
 
 /* ────────────────────────────────────────────────────────────────

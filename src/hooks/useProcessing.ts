@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { useAppStore } from '../stores/useAppStore';
+import { useGroupingStore } from '../stores/useGroupingStore';
 import { useTauriEvents } from './useTauriEvents';
 import * as processService from '../services/processService';
 import type { ProcessingProgress } from '../types';
@@ -34,7 +35,11 @@ export function useProcessing() {
     async (folderPath: string) => {
       try {
         setProcessingState('scanning');
-        const result = await processService.processFolder(folderPath);
+        const { similarityThreshold, timeGapSeconds } = useGroupingStore.getState();
+        const result = await processService.processFolder(folderPath, {
+          similarityThreshold,
+          timeGapSeconds,
+        });
         setGroups(result.groups, result.totalImages);
       } catch (err) {
         console.error('处理失败:', err);
@@ -53,9 +58,22 @@ export function useProcessing() {
     }
   }, [setProcessingState]);
 
+  const regroupWith = useCallback(
+    async (similarityThreshold: number, timeGapSeconds: number) => {
+      try {
+        const result = await processService.regroup(similarityThreshold, timeGapSeconds);
+        setGroups(result.groups, result.totalImages);
+      } catch (err) {
+        console.error('重分组失败:', err);
+      }
+    },
+    [setGroups],
+  );
+
   return {
     processingState,
     startProcessing,
     cancelProcessing,
+    regroupWith,
   };
 }

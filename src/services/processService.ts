@@ -22,6 +22,17 @@ export async function cancelProcessing(): Promise<void> {
   return await invoke('cancel_processing');
 }
 
+/** 使用新阈值重新分组（不重新扫描） */
+export async function regroup(
+  similarityThreshold: number,
+  timeGapSeconds: number,
+): Promise<GroupResult> {
+  return await invoke<GroupResult>('regroup', {
+    similarityThreshold,
+    timeGapSeconds,
+  });
+}
+
 /** 监听处理进度事件 */
 export async function onProgress(
   callback: (progress: ProcessingProgress) => void

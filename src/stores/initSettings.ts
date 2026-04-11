@@ -1,5 +1,6 @@
 import { useThemeStore } from './useThemeStore';
 import { useCanvasStore } from './useCanvasStore';
+import { useGroupingStore } from './useGroupingStore';
 import { loadSettings, saveSettings, type PersistedSettings } from './settingsStorage';
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -10,6 +11,9 @@ function collectSettings(): PersistedSettings {
   return {
     theme: useThemeStore.getState().theme,
     zoomLevel: useCanvasStore.getState().zoomLevel,
+    showDetectionOverlay: useCanvasStore.getState().showDetectionOverlay,
+    similarityThreshold: useGroupingStore.getState().similarityThreshold,
+    timeGapSeconds: useGroupingStore.getState().timeGapSeconds,
   };
 }
 
@@ -42,6 +46,11 @@ export async function initSettings(): Promise<void> {
     // 应用到各 store
     useThemeStore.getState().setTheme(saved.theme);
     useCanvasStore.getState().setZoom(saved.zoomLevel);
+    if (saved.showDetectionOverlay) {
+      useCanvasStore.getState().toggleDetectionOverlay();
+    }
+    useGroupingStore.getState().setSimilarityThreshold(saved.similarityThreshold);
+    useGroupingStore.getState().setTimeGapSeconds(saved.timeGapSeconds);
 
     // 订阅变更，自动持久化
     useThemeStore.subscribe(
@@ -54,7 +63,15 @@ export async function initSettings(): Promise<void> {
 
     useCanvasStore.subscribe(
       (state, prev) => {
-        if (state.zoomLevel !== prev.zoomLevel) {
+        if (state.zoomLevel !== prev.zoomLevel || state.showDetectionOverlay !== prev.showDetectionOverlay) {
+          scheduleSave();
+        }
+      },
+    );
+
+    useGroupingStore.subscribe(
+      (state, prev) => {
+        if (state.similarityThreshold !== prev.similarityThreshold || state.timeGapSeconds !== prev.timeGapSeconds) {
           scheduleSave();
         }
       },

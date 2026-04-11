@@ -3,6 +3,14 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { RightControlPanel } from './RightControlPanel';
 import { useCanvasStore } from '../../stores/useCanvasStore';
 
+// Mock Tauri event API to prevent unhandled rejections in test
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn(() => Promise.resolve(() => {})),
+}));
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(() => Promise.resolve({})),
+}));
+
 const noop = vi.fn();
 
 describe('RightControlPanel', () => {

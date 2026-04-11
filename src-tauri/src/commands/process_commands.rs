@@ -424,6 +424,7 @@ pub async fn process_folder(
     // 更新 SessionState - 阶段5
     {
         let mut s = state.lock().map_err(|e| e.to_string())?;
+        s.image_infos = Some(image_infos);
         s.group_result = Some(group_result.clone());
         s.processing_state = ProcessingState::Completed;
     }
@@ -455,6 +456,51 @@ pub async fn process_folder(
                 log::error!("后台合焦评分失败: {}", e);
             }
         });
+    }
+
+    Ok(group_result)
+}
+
+/// 使用新阈值重新分组（不重新扫描/计算 pHash）
+///
+/// 从 SessionState 缓存的 image_infos 重新执行分组算法，
+/// 更新 group_result 并返回新的 GroupResult。
+#[tauri::command]
+pub async fn regroup(
+    state: tauri::State<'_, Arc<Mutex<SessionState>>>,
+    similarity_threshold: f64,
+    time_gap_seconds: u64,
+) -> Result<GroupResult, String> {
+    let image_infos = {
+        let s = state.lock().map_err(|e| e.to_string())?;
+        s.image_infos
+            .clone()
+            .ok_or_else(|| "没有可用的图片数据，请先处理文件夹".to_string())?
+    };
+
+    let groups = grouping::group_images_with_phash(
+        &image_infos,
+        Some(similarity_threshold),
+        Some(time_gap_seconds as i64),
+    );
+
+    let group_result = GroupResult {
+        total_images: image_infos.len(),
+        total_groups: groups.len(),
+        processed_files: image_infos.len(),
+        groups,
+        performance: PerformanceMetrics {
+            total_time_ms: 0.0,
+            scan_time_ms: 0.0,
+            process_time_ms: 0.0,
+            similarity_time_ms: 0.0,
+            grouping_time_ms: 0.0,
+        },
+    };
+
+    {
+        let mut s = state.lock().map_err(|e| e.to_string())?;
+        s.group_result = Some(group_result.clone());
     }
 
     Ok(group_result)

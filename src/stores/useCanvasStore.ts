@@ -15,6 +15,9 @@ interface CanvasStoreState {
   /** fitToWindow 触发计数器，每次递增触发画布重置 */
   fitCounter: number;
 
+  /** 是否显示检测框覆盖层 */
+  showDetectionOverlay: boolean;
+
   // 水平分组导航状态
   /** 当前分组索引 (0-based) */
   currentGroupIndex: number;
@@ -31,6 +34,8 @@ interface CanvasStoreState {
   zoomOut: () => void;
   fitToWindow: () => void;
   resetZoom: () => void;
+
+  toggleDetectionOverlay: () => void;
 
   // 分组导航 Actions
   setGroupCount: (count: number) => void;
@@ -50,6 +55,7 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
   currentGroupIndex: 0,
   groupCount: 0,
   isTransitioning: false,
+  showDetectionOverlay: false,
 
   setZoom: (level) =>
     set({ zoomLevel: Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, level)) }),
@@ -77,6 +83,9 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
       viewportRect: null,
       fitCounter: state.fitCounter + 1,
     })),
+
+  toggleDetectionOverlay: () =>
+    set((state) => ({ showDetectionOverlay: !state.showDetectionOverlay })),
 
   resetZoom: () =>
     set({ zoomLevel: 1.0 }),

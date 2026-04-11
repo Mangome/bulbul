@@ -187,8 +187,8 @@ export class CanvasImageItem {
       this._drawPlaceholder(ctx);
     }
 
-    // 绘制检测框覆盖层
-    if (this.detectionVisible && this.detectionBoxes.length > 0) {
+    // 绘制检测框覆盖层（缩放低于 0.4 时隐藏，避免视觉混乱）
+    if (this.detectionVisible && this.detectionBoxes.length > 0 && zoom >= 0.4) {
       drawDetectionOverlay(ctx, this.detectionBoxes, this.width, this.height);
     }
 

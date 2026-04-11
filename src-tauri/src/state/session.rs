@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use crate::core::grouping::ImageInfoWithPhash;
 use crate::models::{GroupResult, ImageMetadata, ProcessingState};
 
 /// 全局会话状态，跨 Command 共享
@@ -14,6 +15,8 @@ pub struct SessionState {
     pub metadata_cache: HashMap<String, ImageMetadata>,
     /// 文件路径 hash → pHash 感知哈希值的缓存
     pub phash_cache: HashMap<String, u64>,
+    /// 分组输入缓存（已排序），用于 regroup 时复用
+    pub image_infos: Option<Vec<ImageInfoWithPhash>>,
     pub group_result: Option<GroupResult>,
     pub processing_state: ProcessingState,
     pub cancel_flag: Arc<AtomicBool>,
@@ -29,6 +32,7 @@ impl SessionState {
             hash_path_map: HashMap::new(),
             metadata_cache: HashMap::new(),
             phash_cache: HashMap::new(),
+            image_infos: None,
             group_result: None,
             processing_state: ProcessingState::Idle,
             cancel_flag: Arc::new(AtomicBool::new(false)),
@@ -55,6 +59,7 @@ impl SessionState {
         self.hash_path_map.clear();
         self.metadata_cache.clear();
         self.phash_cache.clear();
+        self.image_infos = None;
         self.group_result = None;
         self.processing_state = ProcessingState::Idle;
         self.cancel_flag.store(false, Ordering::Relaxed);
@@ -80,6 +85,7 @@ mod tests {
         assert!(state.hash_path_map.is_empty());
         assert!(state.metadata_cache.is_empty());
         assert!(state.phash_cache.is_empty());
+        assert!(state.image_infos.is_none());
         assert!(state.group_result.is_none());
         assert_eq!(state.processing_state, ProcessingState::Idle);
         assert!(!state.cancel_flag.load(Ordering::Relaxed));
@@ -92,6 +98,7 @@ mod tests {
         assert!(state.current_folder.is_none());
         assert!(state.filename_hash_map.is_empty());
         assert!(state.phash_cache.is_empty());
+        assert!(state.image_infos.is_none());
         assert_eq!(state.processing_state, ProcessingState::Idle);
         assert_eq!(state.cache_dir, PathBuf::new());
     }
@@ -105,6 +112,7 @@ mod tests {
         assert!(state.current_folder.is_none());
         assert!(state.filename_hash_map.is_empty());
         assert!(state.phash_cache.is_empty());
+        assert!(state.image_infos.is_none());
         assert_eq!(state.processing_state, ProcessingState::Idle);
     }
 
@@ -131,6 +139,7 @@ mod tests {
         assert!(state.hash_path_map.is_empty());
         assert!(state.metadata_cache.is_empty());
         assert!(state.phash_cache.is_empty());
+        assert!(state.image_infos.is_none());
         assert!(state.group_result.is_none());
         assert_eq!(state.processing_state, ProcessingState::Idle);
         assert!(!state.cancel_flag.load(Ordering::Relaxed));
