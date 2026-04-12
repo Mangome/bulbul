@@ -204,7 +204,9 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
   const getMaxScrollY = useCallback((): number => {
     const currentLayout = layoutRef.current;
     const screenHeight = screenHeightRef.current;
-    return Math.max(0, currentLayout.totalHeight - screenHeight);
+    // offsetY = -scrollY + paddingTop，所以可见底边 = scrollY + screenHeight - paddingTop
+    // 滚到底时 scrollY + screenHeight - paddingTop = totalHeight
+    return Math.max(0, currentLayout.totalHeight + DEFAULT_LAYOUT_CONFIG.paddingTop - screenHeight);
   }, []);
 
   const clampScrollY = useCallback((y: number): number => {
