@@ -1,30 +1,33 @@
-## MODIFIED Requirements
+## Requirements
 
 ### Requirement: 底部信息覆盖层
+每个图片项在缩略图模式下 SHALL 不显示底部信息覆盖层，信息由悬浮放大镜展示。
 
-每个图片项 SHALL 在底部显示半透明渐变信息覆盖层，包含文件名和拍摄参数。覆盖层逻辑 SHALL 内联到 `CanvasImageItem.draw()` 方法中，不再作为独立的 PixiJS Container 对象。
+#### Scenario: 缩略图模式隐藏信息覆盖层
+- **WHEN** 缩略图模式激活
+- **THEN** 信息覆盖层 SHALL 始终不绘制，无论缩放级别如何
 
-#### Scenario: 渐变背景
+#### Scenario: 缩放级别不影响信息覆盖层
+- **WHEN** 用户缩放画布
+- **THEN** 缩略图模式下信息覆盖层 SHALL 始终隐藏
 
-- **WHEN** 图片项绘制且信息覆盖层可见
-- **THEN** 系统 SHALL 使用 `ctx.createLinearGradient()` 在底部绘制渐变背景（从 rgba(0,0,0,0) 到 rgba(0,0,0,0.6)）
+### Requirement: 图片悬停高亮
+CanvasImageItem SHALL 不再绘制悬停高亮效果，悬停交互由悬浮放大镜替代。
 
-#### Scenario: 信息行 1
+#### Scenario: 鼠标悬停无画布内效果
+- **WHEN** 鼠标指针进入缩略图区域
+- **THEN** CanvasImageItem SHALL 不绘制悬停高亮边框和发光效果
+- **AND** 悬停反馈由 Magnifier 组件提供
 
-- **WHEN** 图片项绘制且信息覆盖层可见
-- **THEN** 覆盖层 SHALL 使用 `ctx.fillText()` 绘制文件名，字体 `600 11px system-ui`，颜色白色
+### Requirement: 选中效果简化
+缩略图模式下选中效果 SHALL 简化为半透明蓝色遮罩 + 右上角小对勾。
 
-#### Scenario: 信息行 2
+#### Scenario: 选中缩略图显示
+- **WHEN** 一张缩略图被选中
+- **THEN** 缩略图上 SHALL 叠加半透明蓝色遮罩（SELECTION_COLOR 8% alpha）
+- **AND** 右上角 SHALL 显示小对勾标记
+- **AND** 选中效果带渐入动画
 
-- **WHEN** 图片项绘制且元数据可用且信息覆盖层可见
-- **THEN** 覆盖层 SHALL 使用 `ctx.roundRect()` + `ctx.fillText()` 绘制光圈、快门、ISO、焦段 Badge
-
-#### Scenario: 低缩放隐藏
-
-- **WHEN** 缩放级别 < 30%
-- **THEN** 信息覆盖层 SHALL 不绘制（跳过覆盖层绘制代码）
-
-#### Scenario: 缩放阈值过渡
-
-- **WHEN** 缩放级别从 29% 变化到 31%
-- **THEN** 信息覆盖层 SHALL 平滑渐入（alpha 线性过渡），通过 `ctx.globalAlpha` 控制
+#### Scenario: 取消选中
+- **WHEN** 一张缩略图取消选中
+- **THEN** 蓝色遮罩和对勾 SHALL 以渐出动画消失

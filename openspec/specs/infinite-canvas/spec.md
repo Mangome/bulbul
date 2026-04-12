@@ -1,7 +1,7 @@
 ## Requirements
 
 ### Requirement: 主 InfiniteCanvas React 组件
-系统 SHALL 提供 InfiniteCanvas React 组件，管理原生 Canvas DOM 元素、渲染循环、事件监听、CanvasImageItem 池、与 Zustand store 的同步。
+系统 SHALL 提供 InfiniteCanvas React 组件，管理原生 Canvas DOM 元素、渲染循环、事件监听、CanvasImageItem 池、Magnifier 组件、与 Zustand store 的同步。
 
 #### Scenario: 组件挂载与初始化
 - **WHEN** InfiniteCanvas 组件挂载
@@ -19,10 +19,9 @@
 - **AND** ImageLoader.destroy()
 - **AND** ResizeObserver.disconnect()
 
-#### Scenario: Zustand store 变化时同步
-- **WHEN** useCanvasStore、useAppStore、useSelectionStore 中的状态改变
-- **THEN** 相应的 useEffect 执行同步逻辑
-- **AND** 调用 syncSelectionVisuals()、markDirty()
+#### Scenario: JSX 包含 Magnifier 组件
+- **WHEN** InfiniteCanvas 组件 render
+- **THEN** 返回的 JSX 中 SHALL 包含 Magnifier 组件，作为 Canvas 的兄弟元素
 
 ### Requirement: Canvas 2D 渲染循环
 系统 SHALL 使用 dirty flag + requestAnimationFrame 按需渲染驱动画布，静止时零 CPU 开销。
@@ -36,6 +35,7 @@
 - **WHEN** renderFrame() 执行
 - **THEN** 清空画布 → 填充背景色 → 绘制 DotBackground → ctx.save/translate/scale 进入内容坐标系 → 绘制 GroupTitle + 遍历可见 CanvasImageItem 调用 draw() → ctx.restore
 - **AND** item.draw() 返回 boolean，如有动画进行中自动继续 rAF
+- **AND** GroupTitle.drawGroupTitles() SHALL 被调用绘制分组标题
 
 #### Scenario: DPR 处理
 - **WHEN** setupCanvas() 执行
@@ -48,23 +48,48 @@
 - **AND** 布局 SHALL 重新计算，markDirty() 触发重绘
 
 ### Requirement: 坐标系统与层级结构
-画布 SHALL 维护 offsetX/offsetY/actualZoom 状态变量，通过 ctx.save/translate/scale/restore 管理两层绘制：背景层（波点底纹，固定视口坐标系）和内容层（可缩放/平移的图片项）。
-
-#### Scenario: 层级渲染顺序
-- **WHEN** 画布渲染帧
-- **THEN** 先绘制背景层（clearRect + 背景色 + 波点），再通过 ctx.translate/scale 进入内容坐标系，遍历可见 CanvasImageItem 调用 draw()
+画布 SHALL 维护 scrollY/zoomLevel 状态变量，通过 ctx.save/translate/scale/restore 管理两层绘制。offsetX 恒为 0，仅纵向滚动。
 
 #### Scenario: 屏幕坐标转内容坐标
 - **WHEN** 需要将屏幕坐标转换为内容坐标
-- **THEN** 使用公式 contentX = (screenX - offsetX) / actualZoom, contentY = (screenY - offsetY) / actualZoom
+- **THEN** 使用公式 contentX = (screenX - contentOffsetX) / zoomLevel, contentY = (screenY - offsetY) / zoomLevel
+- **AND** contentOffsetX 由布局居中计算得出
 
-#### Scenario: 图片项管理
-- **WHEN** 视口更新发现新的可见图片项
-- **THEN** 系统 SHALL 创建 CanvasImageItem 实例并存入 Map
+#### Scenario: 纵向滚动偏移
+- **WHEN** 用户滚轮或拖拽纵向滚动
+- **THEN** offsetY = -scrollY * zoomLevel + verticalPadding
+- **AND** scrollY 范围为 [0, maxScrollY]，maxScrollY = max(0, totalHeight - screenHeight / zoomLevel)
 
-#### Scenario: 图片项移除
-- **WHEN** 视口更新发现图片项离开可见区域
-- **THEN** 系统 SHALL 调用 item.destroy() 并从 Map 中移除
+### Requirement: 滚轮缩放
+系统 SHALL 支持以鼠标 Y 轴位置为锚点的滚轮缩放，缩放范围 10%~300%。
+
+#### Scenario: 鼠标锚点缩放
+- **WHEN** 用户 Ctrl+滚轮缩放
+- **THEN** 以鼠标 Y 位置为锚点调整 zoomLevel，缩放后鼠标下方的内容 Y 坐标保持不变
+- **AND** 无缩放补偿机制，actualZoom = zoomLevel
+
+#### Scenario: 缩放范围限制
+- **WHEN** 缩放级别达到 10% 或 300%
+- **THEN** 继续滚动不再改变缩放级别
+
+### Requirement: 拖拽纵向平移
+系统 SHALL 支持鼠标左键拖拽纵向平移画布内容。
+
+#### Scenario: 拖拽移动
+- **WHEN** 用户按住鼠标左键并纵向移动
+- **THEN** 画布内容跟随鼠标纵向方向平移
+
+#### Scenario: 拖拽死区
+- **WHEN** 鼠标移动距离 < 5px
+- **THEN** 不触发拖拽，保留为点击事件
+
+### Requirement: 命中检测
+系统 SHALL 通过手动 AABB 坐标计算实现命中检测，将屏幕坐标转换为内容坐标后遍历可见 CanvasImageItem 调用 hitTest(contentX, contentY)。
+
+#### Scenario: 悬停命中与放大镜联动
+- **WHEN** 鼠标在画布上移动（非拖拽状态）
+- **THEN** 系统 SHALL 使用坐标转换和 hitTest() 逻辑检测悬停目标
+- **AND** 命中时将悬停图片信息传递给 Magnifier 组件
 
 ### Requirement: 虚拟化渲染
 系统 SHALL 通过 getVisibleItems() 二分查找和 diffVisibleItems() 增量更新实现虚拟化，仅绘制视口内的图片项。
@@ -73,43 +98,6 @@
 - **WHEN** 视口矩形更新
 - **THEN** 使用二分查找确定当前视口内的 CanvasImageItem 范围
 - **AND** 通过增量 diff 仅创建/销毁变化项
-
-### Requirement: 命中检测
-系统 SHALL 通过手动 AABB 坐标计算实现命中检测，将屏幕坐标转换为内容坐标后遍历可见 CanvasImageItem 调用 hitTest(contentX, contentY)。
-
-#### Scenario: 点击命中
-- **WHEN** 用户点击画布
-- **THEN** 系统将屏幕坐标转换为内容坐标，遍历当前分组的可见 CanvasImageItem 调用 hitTest()
-
-#### Scenario: 悬停命中
-- **WHEN** 鼠标在画布上移动（非拖拽状态）
-- **THEN** 系统使用相同的坐标转换和 hitTest() 逻辑检测悬停目标
-
-### Requirement: 滚轮缩放
-系统 SHALL 支持以鼠标 Y 轴位置为锚点的滚轮缩放，缩放范围 10%~300%。
-
-#### Scenario: 鼠标锚点缩放
-- **WHEN** 用户在画布上滚动滚轮
-- **THEN** 以鼠标位置为锚点调整 actualZoom，缩放后鼠标下方的内容保持不变
-
-#### Scenario: 缩放范围限制
-- **WHEN** 缩放级别达到 10% 或 300%
-- **THEN** 继续滚动不再改变缩放级别
-
-#### Scenario: 缩放同步到 Store
-- **WHEN** 缩放级别变化
-- **THEN** useCanvasStore.zoomLevel SHALL 同步更新
-
-### Requirement: 拖拽平移
-系统 SHALL 支持鼠标左键拖拽平移画布内容，通过更新 offsetX/offsetY 实现。
-
-#### Scenario: 拖拽移动
-- **WHEN** 用户按住鼠标左键并移动
-- **THEN** 画布内容跟随鼠标移动方向平移
-
-#### Scenario: 拖拽死区
-- **WHEN** 鼠标移动距离 < 5px
-- **THEN** 不触发拖拽，保留为点击事件
 
 ### Requirement: 视口状态管理
 系统 SHALL 实时追踪当前视口矩形（x, y, width, height），用于虚拟化渲染。
@@ -121,15 +109,14 @@
 ### Requirement: useImperativeHandle 接口
 系统 SHALL 暴露一个 ref handle，允许父组件调用特定的 imperative 方法。
 
-#### Scenario: syncSelectionVisuals 方法
-- **WHEN** 外部组件通过 ref.current.syncSelectionVisuals() 调用
-- **THEN** 遍历 canvasItemsRef 中所有 item
-- **AND** 根据 useSelectionStore.isSelected(hash) 调用 setSelected(true/false)
-- **AND** markDirty()
-
 #### Scenario: scrollToY 方法
 - **WHEN** 外部组件通过 ref.current.scrollToY(y) 调用
 - **THEN** 更新 scrollY 值，clamp 到 [0, maxScrollY]
+- **AND** updateViewport()、markDirty()
+
+#### Scenario: scrollToGroup 方法
+- **WHEN** 外部组件通过 ref.current.scrollToGroup(groupIndex) 调用
+- **THEN** 计算 groupIndex 对应的 offsetY，设置 scrollY
 - **AND** updateViewport()、markDirty()
 
 #### Scenario: updateItemMetadata 方法

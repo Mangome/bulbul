@@ -1,0 +1,37 @@
+.container {
+  position: absolute;
+  pointer-events: none;
+  z-index: 10;
+  transition: opacity 150ms ease;
+}
+
+.canvasWrap {
+  width: 200px;
+  height: 200px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
+  background: #1a1a2e;
+}
+
+.magnificationLabel {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.5);
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+
+/* prefers-reduced-motion: 立即显示/隐藏 */
+@media (prefers-reduced-motion: reduce) {
+  .container {
+    transition: none;
+  }
+}

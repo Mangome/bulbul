@@ -89,6 +89,11 @@ export class CanvasImageItem {
     return this.width;
   }
 
+  /** 获取布局高度 */
+  getHeight(): number {
+    return this.height;
+  }
+
   /**
    * 设置图片信息（文件名 + 拍摄参数）
    * 缩略图模式不绘制信息覆盖层，此方法仅保留元数据引用

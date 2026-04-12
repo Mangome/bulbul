@@ -39,7 +39,8 @@ import type { ImageMetadata } from '../../types';
 import { useCanvasStore } from '../../stores/useCanvasStore';
 import { useSelectionStore } from '../../stores/useSelectionStore';
 import { useThemeStore } from '../../stores/useThemeStore';
-import { Magnifier } from './Magnifier';
+import { Loupe, type LoupeHandle, type LoupeSourceRect } from './Loupe';
+import type { ItemRect } from './Loupe';
 
 // ─── 常量 ─────────────────────────────────────────────
 
@@ -152,7 +153,17 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     hash: string | null;
     mouseX: number;
     mouseY: number;
-  }>({ visible: false, hash: null, mouseX: 0, mouseY: 0 });
+    itemRect: ItemRect | null;
+  }>({ visible: false, hash: null, mouseX: 0, mouseY: 0, itemRect: null });
+
+  // ── Loupe ref ──
+  const loupeRef = useRef<LoupeHandle | null>(null);
+
+  // ── 放大镜倍率状态（提升到 InfiniteCanvas 以便 renderFrame 计算方框） ──
+  const loupeMagnificationRef = useRef(3.0);
+
+  // ── 放大镜区域方框（由 Loupe 回调设置，renderFrame 中绘制） ──
+  const loupeSourceRectRef = useRef<LoupeSourceRect | null>(null);
 
   // ── wheel 事件 throttle ──
   const lastWheelUpdateTimeRef = useRef<number>(0);
@@ -440,6 +451,16 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       }
     }
 
+    // 3c. 绘制放大镜区域方框（在缩略图上标识放大区域）
+    const sourceRect = loupeSourceRectRef.current;
+    if (sourceRect) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.lineWidth = 1.5 / zoom;
+      ctx.strokeRect(sourceRect.x, sourceRect.y, sourceRect.w, sourceRect.h);
+      ctx.restore();
+    }
+
     // 4. 恢复坐标系
     ctx.restore();
 
@@ -552,9 +573,13 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         }
         markDirty();
       } else {
-        // 普通滚轮：纵向滚动
-        const zoom = zoomLevelRef.current;
-        scrollYRef.current = clampScrollY(scrollYRef.current + e.deltaY / zoom);
+        // 普通滚轮：放大镜可见时调节倍率，否则纵向滚动
+        if (magnifierState.visible && loupeRef.current) {
+          loupeRef.current.adjustMagnification(e.deltaY);
+        } else {
+          const zoom = zoomLevelRef.current;
+          scrollYRef.current = clampScrollY(scrollYRef.current + e.deltaY / zoom);
+        }
 
         const now = performance.now();
         if (now - lastWheelUpdateTimeRef.current >= WHEEL_THROTTLE_MS) {
@@ -574,6 +599,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
       // 拖拽期间隐藏放大镜
       setMagnifierState(prev => prev.visible ? { ...prev, visible: false } : prev);
+      loupeSourceRectRef.current = null;
+      markDirty();
     };
 
     const handlePointerMove = (e: PointerEvent) => {
@@ -607,13 +634,21 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         const contentY = (screenY - offsetY) / zoom;
 
         let newHoveredHash: string | null = null;
+        let hitItemRect: ItemRect | null = null;
 
         for (const [hash, item] of canvasItemsRef.current) {
           if (item.alpha <= 0) continue;
           if (item.hitTest(contentX, contentY)) {
             newHoveredHash = hash;
+            hitItemRect = { x: item.x, y: item.y, width: item.getWidth(), height: item.getHeight() };
             break;
           }
+        }
+
+        // 放大镜区域方框由 Loupe onSourceRectChange 回调控制
+        if (!newHoveredHash && loupeSourceRectRef.current !== null) {
+          loupeSourceRectRef.current = null;
+          markDirty();
         }
 
         if (newHoveredHash !== hoveredHashRef.current) {
@@ -625,16 +660,18 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
               hash: newHoveredHash,
               mouseX: e.clientX - rect.left,
               mouseY: e.clientY - rect.top,
+              itemRect: hitItemRect,
             });
           } else {
             setMagnifierState(prev => prev.visible ? { ...prev, visible: false } : prev);
           }
         } else if (newHoveredHash) {
-          // 更新鼠标位置
+          // 更新鼠标位置和 itemRect
           setMagnifierState(prev => ({
             ...prev,
             mouseX: e.clientX - rect.left,
             mouseY: e.clientY - rect.top,
+            itemRect: hitItemRect ?? prev.itemRect,
           }));
         }
       }
@@ -995,16 +1032,21 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
           height: '100%',
         }}
       />
-      <Magnifier
+      <Loupe
+        ref={loupeRef}
         visible={magnifierState.visible}
         hash={magnifierState.hash}
         mouseX={magnifierState.mouseX}
         mouseY={magnifierState.mouseY}
+        itemRect={magnifierState.itemRect}
+        zoom={zoomLevelRef.current}
+        scrollY={scrollYRef.current}
+        magnification={loupeMagnificationRef.current}
+        onMagnificationChange={(mag) => { loupeMagnificationRef.current = mag; markDirty(); }}
+        onSourceRectChange={(rect) => { loupeSourceRectRef.current = rect; markDirty(); }}
         metadataMap={metadataMap}
-        fileNames={fileNames}
         viewportWidth={screenWidthRef.current}
         viewportHeight={screenHeightRef.current}
-        isDragging={isDraggingRef.current}
       />
       {/* 屏幕阅读器播报区：选中变化 */}
       <div
