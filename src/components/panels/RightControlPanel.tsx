@@ -18,7 +18,7 @@ import cls from './RightControlPanel.module.css';
 // ─── 常量 ─────────────────────────────────────────────
 
 const MIN_ZOOM_PERCENT = 10;
-const MAX_ZOOM_PERCENT = 300;
+const MAX_ZOOM_PERCENT = 500;
 
 // ─── SVG 图标 ────────────────────────────────────────
 

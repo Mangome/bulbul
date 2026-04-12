@@ -1,11 +1,14 @@
 use tauri::image::Image;
 use windows::Win32::Foundation::HWND;
-use windows::Win32::UI::WindowsAndMessaging::{CreateIcon, DestroyIcon, SendMessageW, ICON_BIG, WM_SETICON};
+use windows::Win32::UI::WindowsAndMessaging::{CreateIcon, SendMessageW, ICON_BIG, WM_SETICON};
 
 /// 将 RGBA 像素数据创建为 HICON，并通过 WM_SETICON(ICON_BIG) 设置到窗口。
 ///
 /// 实现方式与 tao 的 `WinIcon::from_rgba` + `set_for_window(IconType::Big)` 一致：
 /// RGBA → BGRA + AND mask → CreateIcon → SendMessageW。
+///
+/// 注意：不调用 DestroyIcon。WM_SETICON 不会复制图标资源，系统持续使用 HICON
+/// 绘制任务栏/Alt+Tab 图标，立即销毁会导致图标丢失。HICON 随窗口销毁而清理。
 pub fn set_big_icon(hwnd: HWND, image: &Image<'_>) {
     let rgba = image.rgba();
     let width = image.width();
@@ -43,7 +46,6 @@ pub fn set_big_icon(hwnd: HWND, image: &Image<'_>) {
                 Some(windows::Win32::Foundation::LPARAM(hicon.0 as isize)),
             );
         }
-        // SendMessageW 复制图标句柄，原始句柄可安全销毁
-        let _ = unsafe { DestroyIcon(hicon) };
+        // 不调用 DestroyIcon：WM_SETICON 不复制图标，立即销毁会使任务栏图标失效
     }
 }

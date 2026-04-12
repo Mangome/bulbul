@@ -1,5 +1,5 @@
 // ============================================================
-// 无限画布 (InfiniteCanvas) — Canvas 2D 渲染引擎
+// 无限画布 (InfiniteCanvas) — Canvas 2D 纵向滚动引擎
 //
 // React 组件，管理原生 HTMLCanvasElement 生命周期。
 // 使用 dirty flag + requestAnimationFrame 按需渲染。
@@ -8,20 +8,23 @@
 // 1. 清空 Canvas + 背景色
 // 2. DotBackground（固定视口坐标）
 // 3. ctx.save/translate/scale → 内容坐标系
-//    3a. CanvasImageItem.draw() × N
+//    3a. drawGroupTitles()
+//    3b. CanvasImageItem.draw() × N
 // 4. ctx.restore
 //
 // 交互模式:
-// - 鼠标滚轮 → 组内纵向滚动（锁定当前分组范围）
-// - 左右键 / 底部进度条 → 水平切换分组（带动画）
-// - 点击 → 选中/取消图片（仅当前组）
-// - Ctrl+滚轮 → 缩放
+// - 普通滚轮 → 纵向滚动
+// - Ctrl+滚轮 → 缩放（Y 轴锚点）
+// - 左键拖拽 → 纵向平移
+// - 点击 → 选中/取消图片
+// - W/S → 纵向滚动到上/下一组
 // ============================================================
 
-import { useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 'react';
+import { useEffect, useRef, useCallback, useImperativeHandle, forwardRef, useState } from 'react';
 import { DotBackground } from './DotBackground';
 import { CanvasImageItem } from './CanvasImageItem';
 import { ImageLoader, getSizeForDisplay } from '../../hooks/useImageLoader';
+import { drawGroupTitles } from './GroupTitle';
 import {
   getVisibleItems,
   diffVisibleItems,
@@ -36,17 +39,18 @@ import type { ImageMetadata } from '../../types';
 import { useCanvasStore } from '../../stores/useCanvasStore';
 import { useSelectionStore } from '../../stores/useSelectionStore';
 import { useThemeStore } from '../../stores/useThemeStore';
+import { Magnifier } from './Magnifier';
 
 // ─── 常量 ─────────────────────────────────────────────
 
 const MIN_ZOOM = 0.1;
-const MAX_ZOOM = 3.0;
+const MAX_ZOOM = 5.0;
 const ZOOM_SENSITIVITY = 0.001;
 const TRACKPAD_ZOOM_SENSITIVITY = 0.01;
 const DRAG_DEAD_ZONE = 5;
 const BG_COLOR_LIGHT = '#FFFFFF';
 const BG_COLOR_DARK = '#0A0E1A';
-const GROUP_TRANSITION_MS =
+const SCROLL_ANIMATION_MS =
   typeof window !== 'undefined' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches
     ? 0
@@ -69,8 +73,16 @@ export interface InfiniteCanvasHandle {
   syncSelectionVisuals: () => void;
   /** 将画布视口滚动到指定 Y 坐标 */
   scrollToY: (y: number) => void;
+  /** 将画布视口滚动到指定分组 */
+  scrollToGroup: (groupIndex: number) => void;
   /** 更新指定 hash 的 item 元数据（合焦评分逐张到达时调用） */
   updateItemMetadata: (hash: string) => void;
+}
+
+// ─── 缓动函数 ────────────────────────────────────────
+
+function easeOutQuart(t: number): number {
+  return 1 - Math.pow(1 - t, 4);
 }
 
 // ─── Component ────────────────────────────────────────
@@ -87,7 +99,6 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
   const imageLoaderRef = useRef<ImageLoader | null>(null);
   const visibleItemsRef = useRef<LayoutItem[]>([]);
   const canvasItemsRef = useRef<Map<string, CanvasImageItem>>(new Map());
-  const zoomLevelRef = useRef(1.0);
 
   // Canvas 尺寸（CSS 像素）
   const screenWidthRef = useRef(0);
@@ -100,7 +111,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
   const destroyedRef = useRef(false);
 
   /** 上次质量判断对应的 size（基于 displayWidth） */
-  const prevSizeRef = useRef<string>('medium');
+  const prevSizeRef = useRef<string>('thumbnail');
 
   // ── 选中状态同步 fn ref（在 effect 内赋值） ──
   const syncSelectionVisualsRef = useRef<(() => void) | null>(null);
@@ -115,39 +126,33 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
 
-  // ── 坐标变换状态（替代 PixiJS contentLayer） ──
-  const offsetXRef = useRef(0);
-  const offsetYRef = useRef(0);
-  const actualZoomRef = useRef(1.0);
+  // ── 纵向滚动状态 ──
+  const scrollYRef = useRef(0);
+  const zoomLevelRef = useRef(1.0);
 
   // ── Drag state ──
   const isDraggingRef = useRef(false);
   const dragStartRef = useRef({ x: 0, y: 0 });
-  const offsetStartRef = useRef({ x: 0, y: 0 });
+  const scrollYStartRef = useRef(0);
   const hasDraggedRef = useRef(false);
 
-  // ── 水平分组滑动状态 ──
-  const scrollYRef = useRef(0);
-  const prevGroupIndexRef = useRef(0);
-
-  // ── 过渡动画状态（由 renderFrame 统一驱动） ──
-  const transitionStateRef = useRef<{
+  // ── 滚动动画状态 ──
+  const scrollAnimRef = useRef<{
     startTime: number;
-    startX: number;
-    startY: number;
-    startScale: number;
-    targetX: number;
-    targetY: number;
-    targetScale: number;
-    targetGroupIndex: number;
-    prevGroupIndex: number;
+    startScrollY: number;
+    targetScrollY: number;
   } | null>(null);
-
-  // ── hash → groupIndex 快速查找表 ──
-  const groupIndexMapRef = useRef<Map<string, number>>(new Map());
 
   // ── 悬停状态 ──
   const hoveredHashRef = useRef<string | null>(null);
+
+  // ── Magnifier 状态 ──
+  const [magnifierState, setMagnifierState] = useState<{
+    visible: boolean;
+    hash: string | null;
+    mouseX: number;
+    mouseY: number;
+  }>({ visible: false, hash: null, mouseX: 0, mouseY: 0 });
 
   // ── wheel 事件 throttle ──
   const lastWheelUpdateTimeRef = useRef<number>(0);
@@ -156,13 +161,11 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
   // Store sync
   const storeZoomLevel = useCanvasStore((s) => s.zoomLevel);
   const fitCounter = useCanvasStore((s) => s.fitCounter);
-  const currentGroupIndex = useCanvasStore((s) => s.currentGroupIndex);
-  const isTransitioning = useCanvasStore((s) => s.isTransitioning);
   const showDetectionOverlay = useCanvasStore((s) => s.showDetectionOverlay);
+  const currentGroupIndex = useCanvasStore((s) => s.currentGroupIndex);
   const setZoom = useCanvasStore((s) => s.setZoom);
   const setViewport = useCanvasStore((s) => s.setViewport);
   const setViewportRect = useCanvasStore((s) => s.setViewportRect);
-  const setTransitioning = useCanvasStore((s) => s.setTransitioning);
 
   // ─── Canvas 初始化与 DPR ──────────────────────────────
 
@@ -205,57 +208,37 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ─── 缩放补偿 ────────────────────────────────────────
+  // ─── 坐标计算辅助 ────────────────────────────────────
 
-  const getZoomCompensation = useCallback((groupIndex: number): number => {
+  const getMaxScrollY = useCallback((): number => {
     const currentLayout = layoutRef.current;
-    const page = currentLayout.pages[groupIndex];
-    if (!page || !currentLayout.baseColumnWidth || !page.columnWidth) return 1.0;
-    return currentLayout.baseColumnWidth / page.columnWidth;
-  }, []);
-
-  const getActualZoom = useCallback((groupIndex: number): number => {
-    return zoomLevelRef.current * getZoomCompensation(groupIndex);
-  }, [getZoomCompensation]);
-
-  // ─── 坐标计算 ────────────────────────────────────────
-
-  const computeVerticalOffset = useCallback((groupIndex: number, zoom: number): number => {
-    const currentLayout = layoutRef.current;
-    if (!currentLayout.pages[groupIndex]) return 0;
-
-    const page = currentLayout.pages[groupIndex];
     const screenHeight = screenHeightRef.current;
-    const { paddingTop, paddingBottom } = DEFAULT_LAYOUT_CONFIG;
-    const pureContentHeight = (page.contentHeight - paddingTop - paddingBottom) * zoom;
-
-    if (pureContentHeight < screenHeight) {
-      return (screenHeight - pureContentHeight) / 2 - paddingTop * zoom;
-    }
-    return 0;
+    const zoom = zoomLevelRef.current;
+    return Math.max(0, currentLayout.totalHeight - screenHeight / zoom);
   }, []);
 
-  const computeGroupX = useCallback((groupIndex: number, zoom: number): number => {
-    const currentLayout = layoutRef.current;
-    const screenWidth = screenWidthRef.current;
-    if (screenWidth === 0) return -(groupIndex * currentLayout.pageWidth * zoom);
-    return screenWidth / 2 - (groupIndex + 0.5) * currentLayout.pageWidth * zoom;
-  }, []);
+  const clampScrollY = useCallback((y: number): number => {
+    return Math.max(0, Math.min(y, getMaxScrollY()));
+  }, [getMaxScrollY]);
 
   // ─── 视口更新 ────────────────────────────────────────
 
   const updateViewport = useCallback(() => {
-    const az = actualZoomRef.current;
-    if (az === 0) return;
+    const zoom = zoomLevelRef.current;
+    if (zoom === 0) return;
+
+    const scrollY = scrollYRef.current;
+    const screenWidth = screenWidthRef.current;
+    const screenHeight = screenHeightRef.current;
 
     const viewport: ViewportRect = {
-      x: -offsetXRef.current / az,
-      y: -offsetYRef.current / az,
-      width: screenWidthRef.current / az,
-      height: screenHeightRef.current / az,
+      x: 0,
+      y: scrollY,
+      width: screenWidth / zoom,
+      height: screenHeight / zoom,
     };
 
-    setViewport(-offsetXRef.current / az, -offsetYRef.current / az);
+    setViewport(0, scrollY);
     setViewportRect(viewport);
 
     const currentLayout = layoutRef.current;
@@ -263,15 +246,13 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
     const newVisible = getVisibleItems(
       currentLayout.pages,
-      currentLayout.pageWidth,
+      0, // pageWidth 在纵向模式下不使用
       viewport,
     );
     const prevVisible = visibleItemsRef.current;
     const diff = diffVisibleItems(prevVisible, newVisible);
 
     // 处理离开视口的元素
-    // 仅 unpin，不主动 evict —— 让 LRU 在容量不足时自然淘汰。
-    // 这样用户小幅滚动回来时可以直接命中缓存，避免占位块闪烁。
     for (const item of diff.leave) {
       const canvasItem = canvasItemsRef.current.get(item.hash);
       if (canvasItem) {
@@ -283,16 +264,6 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
     // 处理进入视口的元素
     const imageLoader = imageLoaderRef.current;
-    const activeGroupIdx = useCanvasStore.getState().currentGroupIndex;
-    const transitioning = useCanvasStore.getState().isTransitioning;
-
-    const calcActualZoom = (groupIndex: number): number => {
-      const page = currentLayout.pages[groupIndex];
-      if (!page || !currentLayout.baseColumnWidth || !page.columnWidth) {
-        return zoomLevelRef.current;
-      }
-      return zoomLevelRef.current * (currentLayout.baseColumnWidth / page.columnWidth);
-    };
 
     for (const item of diff.enter) {
       if (canvasItemsRef.current.has(item.hash)) continue;
@@ -301,7 +272,6 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       const fileName = fileNamesRef.current.get(item.hash) ?? item.hash;
       const meta = metadataMapRef.current.get(item.hash);
       canvasItem.setImageInfo(fileName, meta);
-      canvasItem.updateZoomVisibility(calcActualZoom(item.groupIndex));
 
       // 同步选中 + 检测框状态
       const { selectedHashes } = useSelectionStore.getState();
@@ -313,31 +283,14 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       }
 
       canvasItem.setSelected(selectedHashes.has(item.hash));
-
-      if (!transitioning) {
-        canvasItem.alpha = item.groupIndex === activeGroupIdx ? 1 : 0;
-      } else {
-        // 动画期间新进入的 item：根据当前过渡状态设置 alpha
-        const ts = transitionStateRef.current;
-        if (ts) {
-          if (item.groupIndex === ts.targetGroupIndex) {
-            canvasItem.alpha = 0; // 将在下一帧由 applyGroupAlpha 设置
-          } else if (item.groupIndex === ts.prevGroupIndex) {
-            canvasItem.alpha = 1;
-          } else {
-            canvasItem.alpha = 0;
-          }
-        } else {
-          canvasItem.alpha = 0;
-        }
-      }
+      canvasItem.alpha = 1;
 
       canvasItemsRef.current.set(item.hash, canvasItem);
       imageLoader?.pinImage(item.hash);
 
       if (imageLoader) {
         imageLoader
-          .loadImage(item.hash, item.width * calcActualZoom(item.groupIndex))
+          .loadImage(item.hash, item.width * zoom)
           .then((result) => {
             if (!result || destroyedRef.current || !imageLoaderRef.current) return;
             if (!imageLoaderRef.current.getCache().isImageValid(result.key, result.version)) return;
@@ -345,7 +298,6 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
             if (ci) {
               const itemMeta = metadataMapRef.current.get(item.hash);
               ci.setImage(result.image, itemMeta?.orientation ?? 1);
-              // 恢复检测框状态
               const { showDetectionOverlay: showOverlay } = useCanvasStore.getState();
               if (showOverlay) {
                 const bboxes = itemMeta?.detectionBboxes ?? [];
@@ -360,23 +312,24 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
     visibleItemsRef.current = newVisible;
 
-    // 同步维护 groupIndexMap
-    const groupMap = groupIndexMapRef.current;
-    groupMap.clear();
-    for (const item of newVisible) {
-      groupMap.set(item.hash, item.groupIndex);
+    // 更新当前分组索引
+    const currentGroupIdx = getCurrentGroupIndex(scrollY, currentLayout.pages);
+    const storeState = useCanvasStore.getState();
+    if (storeState.currentGroupIndex !== currentGroupIdx) {
+      internalGroupUpdateRef.current = true;
+      useCanvasStore.setState({ currentGroupIndex: currentGroupIdx });
     }
   }, [setViewport, setViewportRect, markDirty]);
 
   // ─── 缩放阈值切换 ──────────────────────────────────────
 
   const handleZoomThresholdChange = useCallback(
-    (newActualZoom: number) => {
+    (newZoom: number) => {
       const visibleItems = visibleItemsRef.current;
       if (visibleItems.length === 0) return;
 
       const representativeWidth = visibleItems[0].width;
-      const displayWidth = representativeWidth * newActualZoom;
+      const displayWidth = representativeWidth * newZoom;
       const newSize = getSizeForDisplay(displayWidth);
       if (newSize === prevSizeRef.current) return;
       prevSizeRef.current = newSize;
@@ -386,7 +339,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
       const entries = visibleItems.map((item) => ({
         hash: item.hash,
-        displayWidth: item.width * newActualZoom,
+        displayWidth: item.width * newZoom,
       }));
       imageLoader.reloadForZoomChange(
         entries,
@@ -404,146 +357,6 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     },
     [markDirty],
   );
-
-  // ─── 分组 alpha / 可见性 ────────────────────────────────
-
-  const applyGroupAlpha = useCallback((activeGroupIdx: number, prevGroupIdx: number, t: number) => {
-    const groupMap = groupIndexMapRef.current;
-    for (const [hash, canvasItem] of canvasItemsRef.current) {
-      const gi = groupMap.get(hash);
-      if (gi === undefined) continue;
-      if (gi === activeGroupIdx) {
-        canvasItem.alpha = t;
-      } else if (gi === prevGroupIdx) {
-        canvasItem.alpha = 1 - t;
-      } else {
-        canvasItem.alpha = 0;
-      }
-    }
-  }, []);
-
-  const ensureOnlyGroupVisible = useCallback((groupIndex: number) => {
-    const groupMap = groupIndexMapRef.current;
-    for (const [hash, ci] of canvasItemsRef.current) {
-      const gi = groupMap.get(hash);
-      ci.alpha = gi === groupIndex ? 1 : 0;
-    }
-  }, []);
-
-  // ─── 定位到分组 ──────────────────────────────────────
-
-  const positionToGroup = useCallback((groupIndex: number, animated: boolean) => {
-    const currentLayout = layoutRef.current;
-    if (!currentLayout.pages || currentLayout.pages.length === 0) return;
-    if (screenWidthRef.current === 0) return;
-
-    const targetActualZoom = getActualZoom(groupIndex);
-    const targetX = computeGroupX(groupIndex, targetActualZoom);
-    const verticalOffset = computeVerticalOffset(groupIndex, targetActualZoom);
-    const targetY = verticalOffset;
-    scrollYRef.current = 0;
-
-    if (!animated || GROUP_TRANSITION_MS === 0) {
-      transitionStateRef.current = null;
-      actualZoomRef.current = targetActualZoom;
-      offsetXRef.current = targetX;
-      offsetYRef.current = targetY;
-      setTransitioning(false);
-      updateViewport();
-      ensureOnlyGroupVisible(groupIndex);
-      prevGroupIndexRef.current = groupIndex;
-      markDirty();
-      return;
-    }
-
-    // 取消正在进行的动画
-    transitionStateRef.current = null;
-
-    const prevIdx = prevGroupIndexRef.current;
-
-    // ── 预计算目标组 items，一次性加入 canvasItems ──
-    const targetViewport: ViewportRect = {
-      x: -targetX / targetActualZoom,
-      y: -targetY / targetActualZoom,
-      width: screenWidthRef.current / targetActualZoom,
-      height: screenHeightRef.current / targetActualZoom,
-    };
-    const targetVisible = getVisibleItems(
-      currentLayout.pages,
-      currentLayout.pageWidth,
-      targetViewport,
-    );
-
-    const imageLoader = imageLoaderRef.current;
-    const groupMap = groupIndexMapRef.current;
-
-    for (const item of targetVisible) {
-      if (canvasItemsRef.current.has(item.hash)) continue;
-
-      const canvasItem = new CanvasImageItem(item);
-      const fileName = fileNamesRef.current.get(item.hash) ?? item.hash;
-      const meta = metadataMapRef.current.get(item.hash);
-      canvasItem.setImageInfo(fileName, meta);
-
-      const itemZoom = getActualZoom(item.groupIndex);
-      canvasItem.updateZoomVisibility(itemZoom);
-
-      const { selectedHashes } = useSelectionStore.getState();
-      canvasItem.setSelected(selectedHashes.has(item.hash));
-
-      // 同步检测框状态
-      const { showDetectionOverlay: showOverlay } = useCanvasStore.getState();
-      if (showOverlay) {
-        const bboxes = meta?.detectionBboxes ?? [];
-        canvasItem.setDetectionBoxes(bboxes);
-        canvasItem.setDetectionVisible(bboxes.length > 0);
-      }
-
-      // 目标组 alpha=0（动画中渐入），其他 alpha=0
-      canvasItem.alpha = 0;
-
-      canvasItemsRef.current.set(item.hash, canvasItem);
-      groupMap.set(item.hash, item.groupIndex);
-      imageLoader?.pinImage(item.hash);
-
-      if (imageLoader) {
-        imageLoader
-          .loadImage(item.hash, item.width * itemZoom)
-          .then((result) => {
-            if (!result || destroyedRef.current || !imageLoaderRef.current) return;
-            if (!imageLoaderRef.current.getCache().isImageValid(result.key, result.version)) return;
-            const ci = canvasItemsRef.current.get(item.hash);
-            if (ci) {
-              const itemMeta = metadataMapRef.current.get(item.hash);
-              ci.setImage(result.image, itemMeta?.orientation ?? 1);
-              // 恢复检测框状态
-              const { showDetectionOverlay: showOverlay } = useCanvasStore.getState();
-              if (showOverlay) {
-                const bboxes = itemMeta?.detectionBboxes ?? [];
-                ci.setDetectionBoxes(bboxes);
-                ci.setDetectionVisible(bboxes.length > 0);
-              }
-              markDirty();
-            }
-          });
-      }
-    }
-
-    // ── 设置动画状态，由 renderFrame 统一驱动 ──
-    transitionStateRef.current = {
-      startTime: performance.now(),
-      startX: offsetXRef.current,
-      startY: offsetYRef.current,
-      startScale: actualZoomRef.current,
-      targetX,
-      targetY,
-      targetScale: targetActualZoom,
-      targetGroupIndex: groupIndex,
-      prevGroupIndex: prevIdx,
-    };
-
-    markDirty();
-  }, [updateViewport, setTransitioning, ensureOnlyGroupVisible, computeVerticalOffset, computeGroupX, getActualZoom, markDirty]);
 
   // ─── 选中同步 ──────────────────────────────────────────
 
@@ -571,28 +384,22 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     const dpr = dprRef.current;
     const now = performance.now();
 
-    // ── 处理过渡动画（统一在 renderFrame 中驱动） ──
-    const ts = transitionStateRef.current;
-    if (ts) {
-      const elapsed = now - ts.startTime;
-      const progress = Math.min(elapsed / GROUP_TRANSITION_MS, 1);
-      const eased = 1 - Math.pow(1 - progress, 4); // easeOutQuart
+    // ── 处理滚动动画 ──
+    const scrollAnim = scrollAnimRef.current;
+    if (scrollAnim) {
+      const elapsed = now - scrollAnim.startTime;
+      const duration = SCROLL_ANIMATION_MS;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = easeOutQuart(progress);
 
-      actualZoomRef.current = ts.startScale + (ts.targetScale - ts.startScale) * eased;
-      offsetXRef.current = ts.startX + (ts.targetX - ts.startX) * eased;
-      offsetYRef.current = ts.startY + (ts.targetY - ts.startY) * eased;
-
-      applyGroupAlpha(ts.targetGroupIndex, ts.prevGroupIndex, eased);
+      scrollYRef.current = scrollAnim.startScrollY + (scrollAnim.targetScrollY - scrollAnim.startScrollY) * eased;
 
       if (progress >= 1) {
-        // 动画完成
-        transitionStateRef.current = null;
-        setTransitioning(false);
-        prevGroupIndexRef.current = ts.targetGroupIndex;
-        // 动画结束后执行一次完整的 viewport 同步（清理离屏 items）
-        updateViewport();
-        ensureOnlyGroupVisible(ts.targetGroupIndex);
+        scrollAnimRef.current = null;
+        scrollYRef.current = scrollAnim.targetScrollY;
       }
+
+      updateViewport();
     }
 
     // 重置变换（DPR scale 已在 setupCanvas 中设置）
@@ -610,19 +417,23 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     }
 
     // 3. 应用内容坐标变换
-    const az = actualZoomRef.current;
-    const ox = offsetXRef.current;
-    const oy = offsetYRef.current;
+    const zoom = zoomLevelRef.current;
+    const scrollY = scrollYRef.current;
+    const offsetY = -scrollY * zoom + DEFAULT_LAYOUT_CONFIG.paddingTop;
 
     ctx.save();
-    ctx.translate(ox, oy);
-    ctx.scale(az, az);
+    ctx.translate(0, offsetY);
+    ctx.scale(zoom, zoom);
 
-    // 3a. 绘制所有可见 CanvasImageItem
+    // 3a. 绘制分组标题
+    const currentLayout = layoutRef.current;
+    drawGroupTitles(ctx, currentLayout.groupTitles);
+
+    // 3b. 绘制所有可见 CanvasImageItem
     let needsNextFrame = false;
     const itemsToReload: CanvasImageItem[] = [];
     for (const item of canvasItemsRef.current.values()) {
-      const itemNeedsFrame = item.draw(ctx, az, now);
+      const itemNeedsFrame = item.draw(ctx, zoom, now);
       needsNextFrame = needsNextFrame || itemNeedsFrame;
       if (item.needsReload) {
         itemsToReload.push(item);
@@ -639,7 +450,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         for (const item of itemsToReload) {
           item.needsReload = false;
           imageLoader
-            .loadImage(item.hash, item.getWidth() * az)
+            .loadImage(item.hash, item.getWidth() * zoom)
             .then((result) => {
               if (!result || destroyedRef.current || !imageLoaderRef.current) return;
               if (!imageLoaderRef.current.getCache().isImageValid(result.key, result.version)) return;
@@ -647,7 +458,6 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
               if (ci) {
                 const itemMeta = metadataMapRef.current.get(item.hash);
                 ci.setImage(result.image, itemMeta?.orientation ?? 1);
-                // 恢复检测框状态
                 const { showDetectionOverlay: showOverlay } = useCanvasStore.getState();
                 if (showOverlay) {
                   const bboxes = itemMeta?.detectionBboxes ?? [];
@@ -661,8 +471,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       }
     }
 
-    // 如果有动画进行中（过渡动画或 item 选中动画），继续请求下一帧
-    if (transitionStateRef.current || needsNextFrame) {
+    // 如果有动画进行中，继续请求下一帧
+    if (scrollAnimRef.current || needsNextFrame) {
       dirtyRef.current = true;
       rafIdRef.current = requestAnimationFrame(renderFrame);
     }
@@ -705,51 +515,36 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
       if (destroyedRef.current) return;
-      if (useCanvasStore.getState().isTransitioning) return;
+
+      // 中断正在进行的滚动动画
+      if (scrollAnimRef.current) {
+        scrollAnimRef.current = null;
+      }
 
       if (e.ctrlKey || e.metaKey) {
-        // Ctrl+滚轮：缩放
+        // Ctrl+滚轮：缩放（Y 轴锚点）
         const oldZoom = zoomLevelRef.current;
-        // 触控板 pinch 的 deltaY 通常是小浮点数（±1~5），鼠标滚轮是大整数（±100+）
         const isTrackpadPinch = Math.abs(e.deltaY) < 50;
         const sensitivity = isTrackpadPinch ? TRACKPAD_ZOOM_SENSITIVITY : ZOOM_SENSITIVITY;
         const delta = -e.deltaY * sensitivity;
         const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, oldZoom * (1 + delta)));
         if (newZoom === oldZoom) return;
 
-        const { currentGroupIndex } = useCanvasStore.getState();
-        const compensation = getZoomCompensation(currentGroupIndex);
-        const oldActualZoom = oldZoom * compensation;
-        const newActualZoom = newZoom * compensation;
-
         // 鼠标锚点缩放（Y 轴）
         const rect = canvas.getBoundingClientRect();
         const mouseY = e.clientY - rect.top;
-        const contentMouseY = (mouseY - offsetYRef.current) / oldActualZoom;
-
-        actualZoomRef.current = newActualZoom;
-
-        // X 轴：内容中心对齐窗口中心
-        offsetXRef.current = computeGroupX(currentGroupIndex, newActualZoom);
-
-        // Y 轴：锚点缩放 + clamp
-        const page = layoutRef.current.pages[currentGroupIndex];
-        const screenHeight = screenHeightRef.current;
-        const maxScrollY = page ? Math.max(0, page.contentHeight - screenHeight / newActualZoom) : 0;
-        const newContentY = mouseY - contentMouseY * newActualZoom;
-        const vertOffset = computeVerticalOffset(currentGroupIndex, newActualZoom);
-        const rawScrollY = -(newContentY - vertOffset) / newActualZoom;
-        scrollYRef.current = Math.max(0, Math.min(maxScrollY, rawScrollY));
-        offsetYRef.current = -scrollYRef.current * newActualZoom + vertOffset;
+        const contentMouseY = (mouseY - DEFAULT_LAYOUT_CONFIG.paddingTop) / oldZoom + scrollYRef.current;
 
         zoomLevelRef.current = newZoom;
+
+        // 调整 scrollY 以保持鼠标下方内容不变
+        scrollYRef.current = clampScrollY(
+          contentMouseY - (mouseY - DEFAULT_LAYOUT_CONFIG.paddingTop) / newZoom,
+        );
+
         setZoom(newZoom);
 
-        for (const item of canvasItemsRef.current.values()) {
-          item.updateZoomVisibility(newActualZoom);
-        }
-
-        handleZoomThresholdChange(newActualZoom);
+        handleZoomThresholdChange(newZoom);
         const now = performance.now();
         if (now - lastWheelUpdateTimeRef.current >= WHEEL_THROTTLE_MS) {
           updateViewport();
@@ -757,21 +552,9 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         }
         markDirty();
       } else {
-        // 普通滚轮：组内纵向滚动
-        const { currentGroupIndex } = useCanvasStore.getState();
-        const page = layoutRef.current.pages[currentGroupIndex];
-        if (!page) return;
-
-        const az = getActualZoom(currentGroupIndex);
-        const screenHeight = screenHeightRef.current;
-        const maxScrollY = Math.max(0, page.contentHeight - screenHeight / az);
-
-        scrollYRef.current = Math.max(0, Math.min(maxScrollY, scrollYRef.current + e.deltaY / az));
-
-        const vertOffset = computeVerticalOffset(currentGroupIndex, az);
-        offsetYRef.current = -scrollYRef.current * az + vertOffset;
-        offsetXRef.current = computeGroupX(currentGroupIndex, az);
-        actualZoomRef.current = az;
+        // 普通滚轮：纵向滚动
+        const zoom = zoomLevelRef.current;
+        scrollYRef.current = clampScrollY(scrollYRef.current + e.deltaY / zoom);
 
         const now = performance.now();
         if (now - lastWheelUpdateTimeRef.current >= WHEEL_THROTTLE_MS) {
@@ -787,50 +570,46 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       isDraggingRef.current = true;
       hasDraggedRef.current = false;
       dragStartRef.current = { x: e.clientX, y: e.clientY };
-      offsetStartRef.current = { x: offsetXRef.current, y: offsetYRef.current };
+      scrollYStartRef.current = scrollYRef.current;
+
+      // 拖拽期间隐藏放大镜
+      setMagnifierState(prev => prev.visible ? { ...prev, visible: false } : prev);
     };
 
     const handlePointerMove = (e: PointerEvent) => {
       if (isDraggingRef.current) {
-        // 拖拽模式
+        // 拖拽模式：仅纵向
         if (destroyedRef.current) return;
-        if (useCanvasStore.getState().isTransitioning) return;
 
-        const dx = e.clientX - dragStartRef.current.x;
         const dy = e.clientY - dragStartRef.current.y;
 
         if (!hasDraggedRef.current) {
-          if (Math.abs(dx) < DRAG_DEAD_ZONE && Math.abs(dy) < DRAG_DEAD_ZONE) {
+          if (Math.abs(dy) < DRAG_DEAD_ZONE) {
             return;
           }
           hasDraggedRef.current = true;
         }
 
-        offsetXRef.current = offsetStartRef.current.x + dx;
-        offsetYRef.current = offsetStartRef.current.y + dy;
+        scrollYRef.current = clampScrollY(scrollYStartRef.current - dy / zoomLevelRef.current);
 
         updateViewport();
         markDirty();
       } else {
-        // 悬停模式
+        // 悬停模式 → hitTest + 通知 Magnifier
         if (destroyedRef.current) return;
-        if (useCanvasStore.getState().isTransitioning) return;
 
         const rect = canvas.getBoundingClientRect();
         const screenX = e.clientX - rect.left;
         const screenY = e.clientY - rect.top;
-        const activeGroupIdx = useCanvasStore.getState().currentGroupIndex;
-        const az = actualZoomRef.current;
-        const contentX = (screenX - offsetXRef.current) / az;
-        const contentY = (screenY - offsetYRef.current) / az;
+        const zoom = zoomLevelRef.current;
+        const offsetY = -scrollYRef.current * zoom + DEFAULT_LAYOUT_CONFIG.paddingTop;
+        const contentX = screenX / zoom;
+        const contentY = (screenY - offsetY) / zoom;
 
         let newHoveredHash: string | null = null;
 
         for (const [hash, item] of canvasItemsRef.current) {
           if (item.alpha <= 0) continue;
-          const layoutItem = visibleItemsRef.current.find(li => li.hash === hash);
-          if (!layoutItem || layoutItem.groupIndex !== activeGroupIdx) continue;
-
           if (item.hitTest(contentX, contentY)) {
             newHoveredHash = hash;
             break;
@@ -838,18 +617,25 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         }
 
         if (newHoveredHash !== hoveredHashRef.current) {
-          // 清除旧悬停
-          if (hoveredHashRef.current) {
-            const oldItem = canvasItemsRef.current.get(hoveredHashRef.current);
-            if (oldItem) oldItem.setHovered(false);
-          }
-          // 设置新悬停
-          if (newHoveredHash) {
-            const newItem = canvasItemsRef.current.get(newHoveredHash);
-            if (newItem) newItem.setHovered(true);
-          }
           hoveredHashRef.current = newHoveredHash;
-          markDirty();
+
+          if (newHoveredHash) {
+            setMagnifierState({
+              visible: true,
+              hash: newHoveredHash,
+              mouseX: e.clientX - rect.left,
+              mouseY: e.clientY - rect.top,
+            });
+          } else {
+            setMagnifierState(prev => prev.visible ? { ...prev, visible: false } : prev);
+          }
+        } else if (newHoveredHash) {
+          // 更新鼠标位置
+          setMagnifierState(prev => ({
+            ...prev,
+            mouseX: e.clientX - rect.left,
+            mouseY: e.clientY - rect.top,
+          }));
         }
       }
     };
@@ -860,31 +646,20 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
       if (wasDragging && !hasDraggedRef.current) {
         handleCanvasClick(e);
-      } else if (wasDragging && hasDraggedRef.current) {
-        // 从 offset 反推 scrollY
-        const { currentGroupIndex } = useCanvasStore.getState();
-        const az = getActualZoom(currentGroupIndex);
-        const vertOffset = computeVerticalOffset(currentGroupIndex, az);
-        scrollYRef.current = -(offsetYRef.current - vertOffset) / az;
       }
     };
 
     const handleCanvasClick = (e: PointerEvent) => {
-      if (useCanvasStore.getState().isTransitioning) return;
-
-      const activeGroupIdx = useCanvasStore.getState().currentGroupIndex;
       const rect = canvas.getBoundingClientRect();
       const screenX = e.clientX - rect.left;
       const screenY = e.clientY - rect.top;
-      const az = actualZoomRef.current;
-      const contentX = (screenX - offsetXRef.current) / az;
-      const contentY = (screenY - offsetYRef.current) / az;
+      const zoom = zoomLevelRef.current;
+      const offsetY = -scrollYRef.current * zoom + DEFAULT_LAYOUT_CONFIG.paddingTop;
+      const contentX = screenX / zoom;
+      const contentY = (screenY - offsetY) / zoom;
 
       for (const [hash, item] of canvasItemsRef.current) {
         if (item.alpha <= 0) continue;
-        const layoutItem = visibleItemsRef.current.find(li => li.hash === hash);
-        if (!layoutItem || layoutItem.groupIndex !== activeGroupIdx) continue;
-
         if (item.hitTest(contentX, contentY)) {
           useSelectionStore.getState().toggleSelection(hash);
           syncSelectionVisuals();
@@ -905,10 +680,10 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
       switch (e.key.toLowerCase()) {
         case 'w':
-          useCanvasStore.getState().prevGroup();
+          scrollToAdjacentGroup(-1);
           break;
         case 's':
-          useCanvasStore.getState().nextGroup();
+          scrollToAdjacentGroup(1);
           break;
         case 'q':
           useSelectionStore.getState().clearSelection();
@@ -917,9 +692,10 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         case 'a':
           if (e.ctrlKey || e.metaKey) {
             e.preventDefault();
-            const { currentGroupIndex } = useCanvasStore.getState();
+            // 全选当前分组
             const currentLayout = layoutRef.current;
-            const page = currentLayout.pages[currentGroupIndex];
+            const idx = useCanvasStore.getState().currentGroupIndex;
+            const page = currentLayout.pages[idx];
             if (page) {
               const hashes = page.items.map(item => item.hash);
               useSelectionStore.getState().selectAllInGroup(hashes);
@@ -930,6 +706,46 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       }
     };
 
+    /** 滚动到上/下一组 */
+    function scrollToAdjacentGroup(direction: 1 | -1) {
+      const currentLayout = layoutRef.current;
+      const pages = currentLayout.pages;
+      if (pages.length === 0) return;
+
+      // 中断当前动画
+      scrollAnimRef.current = null;
+
+      const currentIdx = useCanvasStore.getState().currentGroupIndex;
+      let targetIdx = currentIdx + direction;
+
+      // 循环
+      if (targetIdx < 0) targetIdx = pages.length - 1;
+      if (targetIdx >= pages.length) targetIdx = 0;
+
+      scrollToGroupIndex(targetIdx);
+    }
+
+    /** 滚动到指定分组（带动画） */
+    function scrollToGroupIndex(groupIndex: number) {
+      const currentLayout = layoutRef.current;
+      const page = currentLayout.pages[groupIndex];
+      if (!page) return;
+
+      if (SCROLL_ANIMATION_MS === 0) {
+        scrollYRef.current = page.offsetY;
+        updateViewport();
+        markDirty();
+        return;
+      }
+
+      scrollAnimRef.current = {
+        startTime: performance.now(),
+        startScrollY: scrollYRef.current,
+        targetScrollY: page.offsetY,
+      };
+      markDirty();
+    }
+
     // ── 绑定事件 ──
     canvas.addEventListener('wheel', handleWheel, { passive: false });
     canvas.addEventListener('pointerdown', handlePointerDown);
@@ -937,13 +753,11 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     window.addEventListener('pointerup', handlePointerUp);
     window.addEventListener('keydown', handleKeyDown);
 
-    // ── Resize / DPR 统一处理（rAF 去重，避免竞态） ──
-    // Mac 上拔外接显示器时 ResizeObserver 和 DPR listener 几乎同时触发，
-    // 合并到同一帧执行，避免多次 setupCanvas 导致白块闪烁。
+    // ── Resize / DPR 统一处理 ──
     let reinitRafId = 0;
     const scheduleReinit = () => {
       if (destroyedRef.current) return;
-      if (reinitRafId) return; // 已调度，去重
+      if (reinitRafId) return;
       reinitRafId = requestAnimationFrame(() => {
         reinitRafId = 0;
         if (destroyedRef.current) return;
@@ -952,14 +766,6 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         if (newCtx && bgLayerRef.current) {
           bgLayerRef.current.updateTheme(useThemeStore.getState().theme, newCtx);
         }
-        // 重新定位当前分组（DPR 或尺寸变化后坐标系已改变）
-        const { currentGroupIndex } = useCanvasStore.getState();
-        const az = getActualZoom(currentGroupIndex);
-        actualZoomRef.current = az;
-        offsetXRef.current = computeGroupX(currentGroupIndex, az);
-        const vertOffset = computeVerticalOffset(currentGroupIndex, az);
-        offsetYRef.current = -scrollYRef.current * az + vertOffset;
-
         updateViewport();
         markDirty();
       });
@@ -975,7 +781,6 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     let dprMediaQuery: MediaQueryList | null = null;
     const handleDprChange = () => {
       scheduleReinit();
-      // 重新监听新 DPR
       dprMediaQuery?.removeEventListener('change', handleDprChange);
       dprMediaQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
       dprMediaQuery.addEventListener('change', handleDprChange);
@@ -983,10 +788,9 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     dprMediaQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
     dprMediaQuery.addEventListener('change', handleDprChange);
 
-    // ── 初始定位 ──
-    positionToGroup(useCanvasStore.getState().currentGroupIndex, false);
-
     // ── 首帧渲染 ──
+    scrollYRef.current = 0;
+    updateViewport();
     dirtyRef.current = true;
     rafIdRef.current = requestAnimationFrame(renderFrame);
 
@@ -994,7 +798,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     return () => {
       destroyedRef.current = true;
 
-      transitionStateRef.current = null;
+      scrollAnimRef.current = null;
       cancelAnimationFrame(rafIdRef.current);
       cancelAnimationFrame(reinitRafId);
 
@@ -1023,25 +827,45 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setZoom]);
 
-  // ── 监听 currentGroupIndex 变化 → 带动画切换 ──
-  useEffect(() => {
-    if (isTransitioning) {
-      positionToGroup(currentGroupIndex, true);
-    }
-  }, [currentGroupIndex, isTransitioning, positionToGroup]);
-
-  // ── layout 变化时重置到第一组 ──
+  // ── layout 变化时重置到顶部 ──
   useEffect(() => {
     const currentLayout = layoutRef.current;
     if (!currentLayout.pages || currentLayout.pages.length === 0) return;
 
     useCanvasStore.getState().setGroupCount(currentLayout.pages.length);
-    useCanvasStore.setState({
-      currentGroupIndex: 0,
-      isTransitioning: false,
-    });
-    positionToGroup(0, false);
-  }, [layout, positionToGroup]);
+    scrollYRef.current = 0;
+    scrollAnimRef.current = null;
+    internalGroupUpdateRef.current = true;
+    useCanvasStore.setState({ currentGroupIndex: 0 });
+    updateViewport();
+    markDirty();
+  }, [layout, updateViewport, markDirty]);
+
+  // ── 外部分组导航（useKeyboard A/D 键触发）→ 纵向滚动到目标分组 ──
+  const internalGroupUpdateRef = useRef(false);
+  useEffect(() => {
+    if (internalGroupUpdateRef.current) {
+      internalGroupUpdateRef.current = false;
+      return;
+    }
+    const currentLayout = layoutRef.current;
+    const page = currentLayout.pages[currentGroupIndex];
+    if (!page) return;
+
+    // 带动画滚动到目标分组
+    if (SCROLL_ANIMATION_MS === 0) {
+      scrollYRef.current = page.offsetY;
+      updateViewport();
+      markDirty();
+    } else {
+      scrollAnimRef.current = {
+        startTime: performance.now(),
+        startScrollY: scrollYRef.current,
+        targetScrollY: page.offsetY,
+      };
+      markDirty();
+    }
+  }, [currentGroupIndex, updateViewport, markDirty]);
 
   // ── 暴露 handle ──
   useImperativeHandle(ref, () => ({
@@ -1049,11 +873,16 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       syncSelectionVisualsRef.current?.();
     },
     scrollToY: (y: number) => {
-      const { currentGroupIndex } = useCanvasStore.getState();
-      const az = getActualZoom(currentGroupIndex);
-      scrollYRef.current = y;
-      const vertOffset = computeVerticalOffset(currentGroupIndex, az);
-      offsetYRef.current = -y * az + vertOffset;
+      scrollYRef.current = clampScrollY(y);
+      updateViewport();
+      markDirty();
+    },
+    scrollToGroup: (groupIndex: number) => {
+      const currentLayout = layoutRef.current;
+      const page = currentLayout.pages[groupIndex];
+      if (!page) return;
+      scrollYRef.current = page.offsetY;
+      scrollAnimRef.current = null;
       updateViewport();
       markDirty();
     },
@@ -1063,14 +892,13 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       const meta = metadataMapRef.current.get(hash);
       const fileName = fileNamesRef.current.get(hash) ?? hash;
       canvasItem.setImageInfo(fileName, meta);
-      // 桥接检测框数据到渲染管线
       const bboxes = meta?.detectionBboxes ?? [];
       canvasItem.setDetectionBoxes(bboxes);
       const { showDetectionOverlay } = useCanvasStore.getState();
       canvasItem.setDetectionVisible(showDetectionOverlay && bboxes.length > 0);
       markDirty();
     },
-  }), [updateViewport, getActualZoom, computeVerticalOffset, markDirty]);
+  }), [updateViewport, clampScrollY, markDirty]);
 
   // ── 检测框可见性切换：批量回填/清除 ──
   useEffect(() => {
@@ -1093,76 +921,38 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     if (screenWidthRef.current === 0) return;
     if (Math.abs(storeZoomLevel - zoomLevelRef.current) < 0.001) return;
 
-    const newZoom = storeZoomLevel;
-    const { currentGroupIndex } = useCanvasStore.getState();
-    const az = newZoom * getZoomCompensation(currentGroupIndex);
-
-    actualZoomRef.current = az;
-    offsetXRef.current = computeGroupX(currentGroupIndex, az);
-
-    const page = layoutRef.current.pages[currentGroupIndex];
-    const screenHeight = screenHeightRef.current;
-    const maxScrollY = page ? Math.max(0, page.contentHeight - screenHeight / az) : 0;
-    scrollYRef.current = Math.min(scrollYRef.current, maxScrollY);
-    const vertOffset = computeVerticalOffset(currentGroupIndex, az);
-    offsetYRef.current = -scrollYRef.current * az + vertOffset;
-
-    zoomLevelRef.current = newZoom;
-
-    for (const item of canvasItemsRef.current.values()) {
-      item.updateZoomVisibility(az);
-    }
-
-    handleZoomThresholdChange(az);
+    zoomLevelRef.current = storeZoomLevel;
+    handleZoomThresholdChange(storeZoomLevel);
     updateViewport();
     markDirty();
-  }, [storeZoomLevel, handleZoomThresholdChange, updateViewport, computeVerticalOffset, computeGroupX, getZoomCompensation, markDirty]);
+  }, [storeZoomLevel, handleZoomThresholdChange, updateViewport, markDirty]);
 
   // ── fitToWindow ──
   useEffect(() => {
     if (fitCounter === 0) return;
     if (screenWidthRef.current === 0) return;
 
-    const { currentGroupIndex } = useCanvasStore.getState();
     const currentLayout = layoutRef.current;
-    const page = currentLayout.pages[currentGroupIndex];
+    if (currentLayout.totalHeight <= 0) return;
 
-    const FIT_PADDING_X = 40;
     const FIT_PADDING_Y = 20;
-    const screenWidth = screenWidthRef.current;
     const screenHeight = screenHeightRef.current;
-    const effectiveWidth = screenWidth - FIT_PADDING_X * 2;
     const effectiveHeight = screenHeight - FIT_PADDING_Y * 2;
 
-    const compensation = getZoomCompensation(currentGroupIndex);
-    let az = 1.0;
-    if (page && currentLayout.pageWidth > 0 && page.contentHeight > 0) {
-      const pureContentHeight = page.contentHeight
-        - DEFAULT_LAYOUT_CONFIG.paddingTop
-        - DEFAULT_LAYOUT_CONFIG.paddingBottom;
-      const zoomX = effectiveWidth / currentLayout.pageWidth;
-      const zoomY = effectiveHeight / (pureContentHeight > 0 ? pureContentHeight : page.contentHeight);
-      az = Math.max(MIN_ZOOM * compensation, Math.min(Math.min(zoomX, zoomY), MAX_ZOOM * compensation));
-    }
+    // 缩放使全部内容适应窗口高度
+    const newZoom = Math.max(
+      MIN_ZOOM,
+      Math.min(effectiveHeight / currentLayout.totalHeight, MAX_ZOOM),
+    );
 
-    const newZoom = az / compensation;
-
-    actualZoomRef.current = az;
     zoomLevelRef.current = newZoom;
     scrollYRef.current = 0;
     setZoom(newZoom);
 
-    offsetXRef.current = computeGroupX(currentGroupIndex, az);
-    offsetYRef.current = computeVerticalOffset(currentGroupIndex, az);
-
-    for (const item of canvasItemsRef.current.values()) {
-      item.updateZoomVisibility(az);
-    }
-
-    handleZoomThresholdChange(az);
+    handleZoomThresholdChange(newZoom);
     updateViewport();
     markDirty();
-  }, [fitCounter, layout, handleZoomThresholdChange, updateViewport, computeVerticalOffset, computeGroupX, setZoom, getZoomCompensation, markDirty]);
+  }, [fitCounter, layout, handleZoomThresholdChange, updateViewport, setZoom, markDirty]);
 
   // ── 选中数量播报 ──
   const selectedCount = useSelectionStore((s) => s.selectedCount);
@@ -1205,6 +995,17 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
           height: '100%',
         }}
       />
+      <Magnifier
+        visible={magnifierState.visible}
+        hash={magnifierState.hash}
+        mouseX={magnifierState.mouseX}
+        mouseY={magnifierState.mouseY}
+        metadataMap={metadataMap}
+        fileNames={fileNames}
+        viewportWidth={screenWidthRef.current}
+        viewportHeight={screenHeightRef.current}
+        isDragging={isDraggingRef.current}
+      />
       {/* 屏幕阅读器播报区：选中变化 */}
       <div
         role="status"
@@ -1219,5 +1020,32 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     </div>
   );
 });
+
+// ─── 辅助函数 ─────────────────────────────────────────
+
+/**
+ * 根据 scrollY 在 layout pages 的 offsetY 中做二分查找，
+ * 确定当前视口所在的分组索引。
+ */
+function getCurrentGroupIndex(
+  scrollY: number,
+  pages: { offsetY: number; contentHeight: number }[],
+): number {
+  if (pages.length === 0) return 0;
+
+  let lo = 0;
+  let hi = pages.length - 1;
+
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >>> 1;
+    if (pages[mid].offsetY <= scrollY) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+
+  return lo;
+}
 
 export default InfiniteCanvas;

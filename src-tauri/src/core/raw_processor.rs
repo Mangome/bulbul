@@ -1,12 +1,11 @@
 //! RAW 图像处理器
 //!
 //! 协调 NEF 解析与 Exif 提取，将嵌入 JPEG 解码并保存为 medium 图片，
-//! 生成 200px 宽缩略图。
+//! 生成 600px 长边缩略图。
 //!
 //! 性能关键路径：
 //! - 使用 seek 而非全量读取来提取嵌入 JPEG（避免 30-60MB 全量 IO）
 //! - Exif 解析仅读取文件头部
-//! - 缩略图使用 CatmullRom 而非 Lanczos3（速度提升 ~3x，质量差异肉眼不可见）
 //! - 图像处理使用 spawn_blocking 避免阻塞 tokio 异步运行时
 
 use std::io::Cursor;
@@ -21,15 +20,16 @@ use crate::utils::cache;
 use crate::utils::paths::compute_path_hash;
 
 /// 缩略图最大宽度（像素）
-const THUMBNAIL_WIDTH: u32 = 200;
+/// 600px 长边适合画布默认展示，兼顾清晰度与内存
+const THUMBNAIL_WIDTH: u32 = 600;
 
 /// Medium 图片最大宽度（像素）
 /// 对应 1920p 显示器 + 缩放因子 1.25（125%)
 /// 降低这个值可进一步减少内存，但可能影响清晰度
 const MEDIUM_WIDTH: u32 = 1920;
 
-/// 缩略图 JPEG 质量（200px 宽不需要太高质量）
-const THUMBNAIL_QUALITY: u8 = 75;
+/// 缩略图 JPEG 质量（600px 需要较高质量以保持清晰）
+const THUMBNAIL_QUALITY: u8 = 80;
 
 /// Medium JPEG 质量（1920px 显示用，80% 是高质量与文件大小的平衡）
 const MEDIUM_QUALITY: u8 = 80;
@@ -171,11 +171,9 @@ async fn read_exif_from_header(file_path: &Path) -> Result<ImageMetadata, AppErr
 
 /// 生成 200px 宽缩略图
 ///
-/// 解码 JPEG → 按比例缩放到 200px 宽（CatmullRom）→ 编码为 JPEG
+/// 解码 JPEG → 按比例缩放到 600px 长边（Lanczos3）→ 编码为 JPEG
 ///
-/// 使用 CatmullRom 而非 Lanczos3：
-/// - 缩略图 200px 宽，质量差异肉眼不可见
-/// - CatmullRom 速度约为 Lanczos3 的 3 倍
+/// 600px 需要高质量缩放，使用 Lanczos3 保证清晰度
 pub fn generate_thumbnail(jpeg_data: &[u8]) -> Result<Vec<u8>, AppError> {
     let img = image::load_from_memory(jpeg_data)
         .map_err(|e| AppError::ImageProcessError(format!("JPEG 解码失败: {}", e)))?;
@@ -191,7 +189,7 @@ pub fn generate_thumbnail(jpeg_data: &[u8]) -> Result<Vec<u8>, AppError> {
         (THUMBNAIL_WIDTH, new_height.max(1))
     };
 
-    let resized = img.resize_exact(new_width, new_height, FilterType::CatmullRom);
+    let resized = img.resize_exact(new_width, new_height, FilterType::Lanczos3);
 
     let mut buf = Cursor::new(Vec::with_capacity(32 * 1024)); // 预分配 32KB
     let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, THUMBNAIL_QUALITY);

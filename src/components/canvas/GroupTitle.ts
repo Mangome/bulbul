@@ -1,5 +1,5 @@
 // ============================================================
-// 分组标题渲染
+// 分组标题渲染（缩略图模式）
 //
 // 在每个分组区域顶部显示"分组 N（M 张）"文本
 // 使用 Canvas 2D fillText 直接绘制，无 PixiJS 依赖。
@@ -9,8 +9,8 @@ import type { GroupTitleItem } from '../../utils/layout';
 
 // ─── 配置 ─────────────────────────────────────────────
 
-const TITLE_PADDING = 16;
-const TITLE_FONT = '700 16px system-ui, -apple-system, sans-serif';
+const TITLE_PADDING = 8;
+const TITLE_FONT = '600 14px system-ui, -apple-system, sans-serif';
 const TITLE_COLOR = '#374151';
 
 // ─── 绘制函数 ─────────────────────────────────────────
@@ -31,7 +31,7 @@ export function drawGroupTitles(
     const maxWidth = Math.max(100, item.width - TITLE_PADDING * 2);
     const label = truncateGroupLabel(item.label, maxWidth);
     const cy = item.y + item.height / 2;
-    ctx.fillText(label, item.x, cy);
+    ctx.fillText(label, item.x + TITLE_PADDING, cy);
   }
 }
 
@@ -40,7 +40,7 @@ export function drawGroupTitles(
  * 使用字符宽度估算，避免每帧调用 measureText。
  */
 function truncateGroupLabel(label: string, maxWidthPx: number): string {
-  const estimatedCharWidth = 10;
+  const estimatedCharWidth = 8;
   const estimatedMaxChars = Math.floor(maxWidthPx / estimatedCharWidth);
 
   if (label.length <= estimatedMaxChars) return label;

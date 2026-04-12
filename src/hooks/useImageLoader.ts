@@ -14,8 +14,8 @@ import * as imageService from '../services/imageService';
 /** 默认内存上限 200MB（RGBA 4 字节/像素计） */
 const DEFAULT_MEMORY_LIMIT = 200 * 1024 * 1024;
 
-/** 缩略图的原始像素宽度（与后端 THUMBNAIL_WIDTH 保持一致） */
-const THUMBNAIL_PIXEL_WIDTH = 200;
+/** 缩略图的长边像素宽度（与后端 THUMBNAIL_WIDTH 保持一致） */
+const THUMBNAIL_PIXEL_WIDTH = 600;
 
 /** 估算单个 ImageBitmap 的内存占用（RGBA 4 bytes/pixel） */
 export function estimateImageBytes(image: ImageBitmap): number {

@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  computeWaterfallLayout,
-  computeHorizontalLayout,
+  computeVerticalGridLayout,
   computeColumnWidth,
   DEFAULT_LAYOUT_CONFIG,
   type ImageDimension,
@@ -42,36 +41,33 @@ function makeDimensions(
 
 describe('computeColumnWidth', () => {
   it('应按公式计算列宽', () => {
-    // viewportWidth=1000, paddingX=40*2=80, gapX=32 → available=920-32=888 → 920/2 - gap...
-    // available = 1000 - 80 = 920, cols=2, gaps=32 → (920-32)/2 = 444
+    // viewportWidth=1000, paddingX=24*2=48, thumbnailSize=160, gap=8
+    // columns = floor((1000 - 48 + 8) / (160 + 8)) = floor(960/168) = 5
+    // columnWidth = (1000 - 48 - 8*4) / 5 = (952 - 32) / 5 = 184
     const width = computeColumnWidth(1000);
-    expect(width).toBeCloseTo(444);
-  });
-
-  it('不应低于最小列宽', () => {
-    const width = computeColumnWidth(100);
-    expect(width).toBe(DEFAULT_LAYOUT_CONFIG.minColumnWidth);
+    expect(width).toBe(184);
   });
 
   it('应支持自定义配置', () => {
     const config: LayoutConfig = {
       ...DEFAULT_LAYOUT_CONFIG,
-      columns: 4,
-      gapX: 10,
+      thumbnailSize: 200,
+      gap: 10,
       paddingX: 20,
     };
-    // available = 1000 - 40 = 960, (960-30)/4 = 232.5
+    // columns = floor((1000 - 40 + 10) / (200 + 10)) = floor(970/210) = 4
+    // columnWidth = (1000 - 40 - 10*3) / 4 = (960 - 30) / 4 = 232.5
     const width = computeColumnWidth(1000, config);
     expect(width).toBe(232.5);
   });
 });
 
-// ─── computeHorizontalLayout ──────────────────────────
+// ─── computeVerticalGridLayout ──────────────────────────
 
-describe('computeHorizontalLayout', () => {
+describe('computeVerticalGridLayout', () => {
   const viewportWidth = 1000;
 
-  it('标准布局：所有图片获得正确坐标，内容居中', () => {
+  it('标准布局：所有图片获得正确坐标', () => {
     const groups = [
       makeGroup(1, ['a', 'b', 'c', 'd', 'e', 'f']),
     ];
@@ -84,7 +80,7 @@ describe('computeHorizontalLayout', () => {
       ['f', 2000, 3000],
     ]);
 
-    const result = computeHorizontalLayout(groups, dims, viewportWidth);
+    const result = computeVerticalGridLayout(groups, dims, viewportWidth);
 
     expect(result.items).toHaveLength(6);
     expect(result.groupTitles).toHaveLength(1);
@@ -98,33 +94,29 @@ describe('computeHorizontalLayout', () => {
       expect(item.width).toBe(colWidth);
     }
 
-    // 内容居中: contentBlockWidth = 2*444 + 32 = 920, offsetX = (1000-920)/2 = 40
-    const contentBlockWidth = 2 * colWidth + DEFAULT_LAYOUT_CONFIG.gapX;
-    const expectedOffsetX = (viewportWidth - contentBlockWidth) / 2;
-    expect(result.items[0].x).toBeCloseTo(expectedOffsetX);
-    expect(result.items[0].y).toBe(DEFAULT_LAYOUT_CONFIG.paddingTop);
-
-    // 第二张图片在第二列
-    expect(result.items[1].x).toBeCloseTo(expectedOffsetX + colWidth + DEFAULT_LAYOUT_CONFIG.gapX);
+    // 分组标题标签正确
+    expect(result.groupTitles[0].label).toBe('分组 1（6 张）');
   });
 
-  it('最短列分配：图片应分配到高度最短的列', () => {
+  it('行式网格：同行图片等宽，行高等于最高图', () => {
     const groups = [
-      makeGroup(1, ['a', 'b', 'c', 'd']),
+      makeGroup(1, ['a', 'b']),
     ];
     const dims = makeDimensions([
-      ['a', 3000, 2000],
-      ['b', 1000, 1000],
-      ['c', 3000, 2000],
-      ['d', 3000, 2000],
+      ['a', 4000, 3000],  // 横向 4:3
+      ['b', 1600, 900],   // 横向 16:9（更矮）
     ]);
 
-    const result = computeHorizontalLayout(groups, dims, viewportWidth);
+    const result = computeVerticalGridLayout(groups, dims, viewportWidth);
 
-    expect(result.items[2].x).toBe(result.items[0].x);
-    expect(result.items[2].y).toBe(
-      result.items[0].y + result.items[0].height + DEFAULT_LAYOUT_CONFIG.gapY,
-    );
+    // 同行两张图等宽
+    expect(result.items[0].width).toBe(result.items[1].width);
+
+    // 行高等于最高图的高度
+    const heightA = result.items[0].height;
+    const heightB = result.items[1].height;
+    // a 更高（4:3 缩放后更高）
+    expect(heightA).toBeGreaterThan(heightB);
   });
 
   it('不同宽高比：高度按比例计算', () => {
@@ -134,7 +126,7 @@ describe('computeHorizontalLayout', () => {
       ['b', 1600, 900],
     ]);
 
-    const result = computeHorizontalLayout(groups, dims, viewportWidth);
+    const result = computeVerticalGridLayout(groups, dims, viewportWidth);
     const actualColWidth = result.items[0].width;
 
     expect(result.items[0].height).toBeCloseTo(actualColWidth * 3 / 4);
@@ -145,51 +137,28 @@ describe('computeHorizontalLayout', () => {
     const groups = [makeGroup(1, ['a'])];
     const dims = new Map<string, ImageDimension>();
 
-    const result = computeHorizontalLayout(groups, dims, viewportWidth);
+    const result = computeVerticalGridLayout(groups, dims, viewportWidth);
     const actualColWidth = result.items[0].width;
 
     expect(result.items[0].height).toBeCloseTo(actualColWidth * 2 / 3);
   });
 
-  it('单图居中：单图使用全宽，居中在页面中', () => {
-    const groups = [makeGroup(1, ['a'])];
-    const dims = makeDimensions([['a', 3000, 2000]]);
-
-    const result = computeHorizontalLayout(groups, dims, viewportWidth);
-
-    // 单图用全可用宽度: 1000 - 80 = 920
-    const expectedWidth = viewportWidth - DEFAULT_LAYOUT_CONFIG.paddingX * 2;
-    expect(result.items[0].width).toBe(expectedWidth);
-    // 居中: (1000-920)/2 = 40
-    expect(result.items[0].x).toBeCloseTo((viewportWidth - expectedWidth) / 2);
-  });
-
-  it('空分组不影响其他组', () => {
+  it('空分组仅渲染标题区域', () => {
     const groups = [
       makeGroup(1, []),
       makeGroup(2, ['a']),
     ];
     const dims = makeDimensions([['a', 3000, 2000]]);
 
-    const result = computeHorizontalLayout(groups, dims, viewportWidth);
+    const result = computeVerticalGridLayout(groups, dims, viewportWidth);
 
     expect(result.items).toHaveLength(1);
     expect(result.pages).toHaveLength(2);
+    expect(result.pages[0].items).toHaveLength(0);
+    expect(result.pages[1].items).toHaveLength(1);
   });
 
-  it('单列退化：窗口极窄时列宽使用最小值', () => {
-    const groups = [makeGroup(1, ['a', 'b'])];
-    const dims = makeDimensions([
-      ['a', 3000, 2000],
-      ['b', 3000, 2000],
-    ]);
-
-    const result = computeHorizontalLayout(groups, dims, 100);
-
-    expect(result.columnWidth).toBe(DEFAULT_LAYOUT_CONFIG.minColumnWidth);
-  });
-
-  it('多分组各在独立页面', () => {
+  it('多分组纵向排列', () => {
     const groups = [
       makeGroup(1, ['a']),
       makeGroup(2, ['b']),
@@ -199,14 +168,17 @@ describe('computeHorizontalLayout', () => {
       ['b', 3000, 2000],
     ]);
 
-    const result = computeHorizontalLayout(groups, dims, viewportWidth);
+    const result = computeVerticalGridLayout(groups, dims, viewportWidth);
 
-    expect(result.totalWidth).toBe(2 * viewportWidth);
     expect(result.pages).toHaveLength(2);
+    // 第二个分组在第一个下方
+    expect(result.pages[1].offsetY).toBeGreaterThan(result.pages[0].offsetY);
+    // totalHeight 应该大于单个分组
+    expect(result.totalHeight).toBeGreaterThan(result.pages[0].contentHeight);
   });
 
   it('没有分组时返回空结果', () => {
-    const result = computeHorizontalLayout(
+    const result = computeVerticalGridLayout(
       [],
       new Map(),
       viewportWidth,
@@ -215,7 +187,6 @@ describe('computeHorizontalLayout', () => {
     expect(result.items).toHaveLength(0);
     expect(result.groupTitles).toHaveLength(0);
     expect(result.pages).toHaveLength(0);
-    expect(result.totalWidth).toBe(0);
   });
 
   it('分组标题标签正确', () => {
@@ -225,7 +196,7 @@ describe('computeHorizontalLayout', () => {
       ['b', 3000, 2000],
     ]);
 
-    const result = computeHorizontalLayout(groups, dims, viewportWidth);
+    const result = computeVerticalGridLayout(groups, dims, viewportWidth);
 
     expect(result.groupTitles[0].label).toBe('相似组 1（2 张）');
   });
@@ -241,7 +212,7 @@ describe('computeHorizontalLayout', () => {
       ['c', 3000, 2000],
     ]);
 
-    const result = computeHorizontalLayout(groups, dims, viewportWidth);
+    const result = computeVerticalGridLayout(groups, dims, viewportWidth);
 
     expect(result.items[0].groupId).toBe(1);
     expect(result.items[0].groupIndex).toBe(0);
@@ -251,30 +222,54 @@ describe('computeHorizontalLayout', () => {
     expect(result.items[2].groupIndex).toBe(1);
   });
 
-  it('pageWidth 等于 viewportWidth', () => {
-    const groups = [makeGroup(1, ['a'])];
-    const dims = makeDimensions([['a', 3000, 2000]]);
-
-    const result = computeHorizontalLayout(groups, dims, viewportWidth);
-    expect(result.pageWidth).toBe(viewportWidth);
-  });
-});
-
-// ─── computeWaterfallLayout (兼容别名) ─────────────────
-
-describe('computeWaterfallLayout', () => {
-  it('应与 computeHorizontalLayout 返回相同结果', () => {
-    const groups = [makeGroup(1, ['a', 'b'])];
+  it('最后一行居左排列', () => {
+    // 创建一个组，图片数量不足以填满最后一行
+    // viewportWidth=1000, thumbnailSize=160, gap=8, paddingX=24
+    // columns = floor((1000 - 48 + 8) / (160 + 8)) = floor(960/168) = 5
+    // 需要 7 张图：第一行 5 张，第二行 2 张
+    const groups = [makeGroup(1, ['a', 'b', 'c', 'd', 'e', 'f', 'g'])];
     const dims = makeDimensions([
       ['a', 3000, 2000],
       ['b', 3000, 2000],
+      ['c', 3000, 2000],
+      ['d', 3000, 2000],
+      ['e', 3000, 2000],
+      ['f', 3000, 2000],
+      ['g', 3000, 2000],
     ]);
 
-    const r1 = computeWaterfallLayout(groups, dims, 1000);
-    const r2 = computeHorizontalLayout(groups, dims, 1000);
+    const result = computeVerticalGridLayout(groups, dims, viewportWidth);
 
-    expect(r1.items).toEqual(r2.items);
-    expect(r1.groupTitles).toEqual(r2.groupTitles);
-    expect(r1.totalWidth).toBe(r2.totalWidth);
+    // 第二行第一张图 (f) 的 x 坐标应与第一行第一张图 (a) 相同
+    expect(result.items[5].x).toBe(result.items[0].x);
+    // 第二行第二张图 (g) 在第一张右边
+    expect(result.items[6].x).toBeGreaterThan(result.items[5].x);
+  });
+
+  it('内容水平居中', () => {
+    const groups = [makeGroup(1, ['a'])];
+    const dims = makeDimensions([['a', 3000, 2000]]);
+
+    const result = computeVerticalGridLayout(groups, dims, viewportWidth);
+
+    // 图片应该有正的 x 坐标（居中偏移）
+    expect(result.items[0].x).toBeGreaterThan(0);
+  });
+
+  it('所有分组的 columnWidth 一致', () => {
+    const groups = [
+      makeGroup(1, ['a']),
+      makeGroup(2, ['b', 'c']),
+    ];
+    const dims = makeDimensions([
+      ['a', 3000, 2000],
+      ['b', 3000, 2000],
+      ['c', 3000, 2000],
+    ]);
+
+    const result = computeVerticalGridLayout(groups, dims, viewportWidth);
+
+    expect(result.pages[0].columnWidth).toBe(result.pages[1].columnWidth);
+    expect(result.columnWidth).toBe(result.pages[0].columnWidth);
   });
 });

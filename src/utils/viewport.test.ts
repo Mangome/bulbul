@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   getVisibleItems,
-  getVisibleItemsInPage,
   diffVisibleItems,
   type ViewportRect,
 } from './viewport';
@@ -24,33 +23,33 @@ function makeItem(
 function makePage(
   groupIndex: number,
   items: LayoutItem[],
-  pageWidth: number = 1000,
+  offsetY: number = 0,
 ): GroupPageLayout {
   const sortedItems = [...items].sort((a, b) => a.y - b.y);
   const maxY = items.length > 0 ? Math.max(...items.map(i => i.y + i.height)) : 0;
   const titleItem: GroupTitleItem = {
     groupId: groupIndex + 1,
     label: `Group ${groupIndex + 1}`,
-    x: groupIndex * pageWidth,
-    y: 0,
-    width: pageWidth,
-    height: 48,
+    x: 0,
+    y: offsetY,
+    width: 1000,
+    height: 40,
   };
   return {
     groupIndex,
     groupId: groupIndex + 1,
-    offsetX: groupIndex * pageWidth,
-    contentHeight: maxY,
-    columnWidth: 400,
+    offsetY,
+    contentHeight: maxY - offsetY,
+    columnWidth: 160,
     items,
     groupTitle: titleItem,
     sortedItems,
   };
 }
 
-// ─── getVisibleItemsInPage ─────────────────────────────
+// ─── getVisibleItems (纵向模式) ──────────────────────────
 
-describe('getVisibleItemsInPage', () => {
+describe('getVisibleItems', () => {
   const items = [
     makeItem('a', 0, 0, 100, 100),
     makeItem('b', 0, 200, 100, 100),
@@ -59,101 +58,87 @@ describe('getVisibleItemsInPage', () => {
     makeItem('e', 0, 800, 100, 100),
     makeItem('f', 0, 1000, 100, 100),
   ];
-  const page = makePage(0, items);
 
   it('视口内元素正确返回', () => {
-    // 视口 y=300~700, 缓冲区 20% → 80px, 有效范围 y=220~780
-    const visible = getVisibleItemsInPage(page, 300, 400);
+    const page = makePage(0, items, 0);
+    const viewport: ViewportRect = { x: 0, y: 300, width: 1000, height: 400 };
+    const visible = getVisibleItems([page], 0, viewport);
     const hashes = visible.map((v) => v.hash);
-    expect(hashes).toContain('b');
+    // 缓冲区 1.0 * 400 = 400, 有效范围 y=-100 ~ 1100
+    // 所有元素都应可见
+    expect(hashes).toContain('a');
     expect(hashes).toContain('c');
     expect(hashes).toContain('d');
-    expect(hashes).not.toContain('e');
   });
 
   it('视口外元素不返回', () => {
-    const visible = getVisibleItemsInPage(page, 300, 400);
-    const hashes = visible.map((v) => v.hash);
-    expect(hashes).not.toContain('f');
-  });
-
-  it('缓冲区边界判定', () => {
-    // 视口 y=500~700, 缓冲区 20% → 40px, 有效范围 y=460~740
-    const visible = getVisibleItemsInPage(page, 500, 200);
+    const page = makePage(0, items, 0);
+    // 无缓冲区模式
+    const viewport: ViewportRect = { x: 0, y: 500, width: 1000, height: 200 };
+    const visible = getVisibleItems([page], 0, viewport, 0);
     const hashes = visible.map((v) => v.hash);
     expect(hashes).toContain('c');
     expect(hashes).toContain('d');
-    expect(hashes).not.toContain('e');
-  });
-
-  it('无缓冲区模式', () => {
-    const visible = getVisibleItemsInPage(page, 350, 200, 0);
-    const hashes = visible.map((v) => v.hash);
-    expect(hashes).not.toContain('b');
-    expect(hashes).toContain('c');
-    expect(hashes).not.toContain('d');
-  });
-
-  it('极端缩放：视口覆盖所有元素', () => {
-    const visible = getVisibleItemsInPage(page, -1000, 5000);
-    expect(visible).toHaveLength(6);
-  });
-
-  it('空页面返回空', () => {
-    const emptyPage = makePage(0, []);
-    const visible = getVisibleItemsInPage(emptyPage, 0, 500);
-    expect(visible).toHaveLength(0);
-  });
-});
-
-// ─── getVisibleItems (多分组) ──────────────────────────
-
-describe('getVisibleItems', () => {
-  const pageWidth = 1000;
-
-  // 3 个分组，每组在不同 X 偏移
-  const page0Items = [
-    makeItem('a0', 0, 0, 100, 100, 1, 0),
-    makeItem('a1', 0, 200, 100, 100, 1, 0),
-  ];
-  const page1Items = [
-    makeItem('b0', 1000, 0, 100, 100, 2, 1),
-    makeItem('b1', 1000, 200, 100, 100, 2, 1),
-  ];
-  const page2Items = [
-    makeItem('c0', 2000, 0, 100, 100, 3, 2),
-  ];
-
-  const pages = [
-    makePage(0, page0Items, pageWidth),
-    makePage(1, page1Items, pageWidth),
-    makePage(2, page2Items, pageWidth),
-  ];
-
-  it('只返回当前可见分组的元素', () => {
-    // 视口完全在第一组范围内 (x=0~800, 不触碰第二组边界)
-    const viewport: ViewportRect = { x: 0, y: 0, width: 800, height: 500 };
-    const visible = getVisibleItems(pages, pageWidth, viewport);
-    const hashes = visible.map(v => v.hash);
-    expect(hashes).toContain('a0');
-    expect(hashes).toContain('a1');
-    expect(hashes).not.toContain('b0');
-  });
-
-  it('视口跨两组时返回两组元素', () => {
-    // 视口在 500~1500 之间，跨第一组和第二组
-    const viewport: ViewportRect = { x: 500, y: 0, width: 1000, height: 500 };
-    const visible = getVisibleItems(pages, pageWidth, viewport);
-    const hashes = visible.map(v => v.hash);
-    expect(hashes).toContain('a0');
-    expect(hashes).toContain('b0');
-    expect(hashes).not.toContain('c0');
+    expect(hashes).not.toContain('a');
+    expect(hashes).not.toContain('f');
   });
 
   it('空 pages 返回空', () => {
     const viewport: ViewportRect = { x: 0, y: 0, width: 500, height: 500 };
-    const visible = getVisibleItems([], pageWidth, viewport);
+    const visible = getVisibleItems([], 0, viewport);
     expect(visible).toHaveLength(0);
+  });
+
+  it('多分组纵向排列：只返回视口范围内的分组元素', () => {
+    // 分组 0：y=0~500
+    const page0Items = [
+      makeItem('a0', 0, 0, 100, 100, 1, 0),
+      makeItem('a1', 0, 200, 100, 100, 1, 0),
+    ];
+    // 分组 1：y=600~1100
+    const page1Items = [
+      makeItem('b0', 0, 600, 100, 100, 2, 1),
+      makeItem('b1', 0, 800, 100, 100, 2, 1),
+    ];
+    // 分组 2：y=1200~1700
+    const page2Items = [
+      makeItem('c0', 0, 1200, 100, 100, 3, 2),
+    ];
+
+    const pages = [
+      makePage(0, page0Items, 0),
+      makePage(1, page1Items, 600),
+      makePage(2, page2Items, 1200),
+    ];
+
+    // 视口在 y=700~900，只应看到分组 1 的元素
+    const viewport: ViewportRect = { x: 0, y: 700, width: 1000, height: 200 };
+    const visible = getVisibleItems(pages, 0, viewport, 0);
+    const hashes = visible.map(v => v.hash);
+    expect(hashes).toContain('b0');
+    expect(hashes).toContain('b1');
+    expect(hashes).not.toContain('a0');
+    expect(hashes).not.toContain('c0');
+  });
+
+  it('视口跨多组时返回所有可见元素', () => {
+    const page0Items = [
+      makeItem('a0', 0, 0, 100, 100, 1, 0),
+    ];
+    const page1Items = [
+      makeItem('b0', 0, 500, 100, 100, 2, 1),
+    ];
+
+    const pages = [
+      makePage(0, page0Items, 0),
+      makePage(1, page1Items, 500),
+    ];
+
+    const viewport: ViewportRect = { x: 0, y: 0, width: 1000, height: 700 };
+    const visible = getVisibleItems(pages, 0, viewport, 0);
+    const hashes = visible.map(v => v.hash);
+    expect(hashes).toContain('a0');
+    expect(hashes).toContain('b0');
   });
 });
 

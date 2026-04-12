@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ── 必须在所有其他导入之前设置 matchMedia mock ──
-// vi.hoisted 确保代码在模块解析前执行
 const { mockMatchMedia } = vi.hoisted(() => {
   const mockMatchMedia = vi.fn().mockImplementation((query: string) => ({
     matches: false,
@@ -101,57 +100,68 @@ HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue(createMockConte
   width: 300, height: 200, close: vi.fn(),
 });
 
-// ── Helper：创建测试布局 ──
+// ── Helper：创建测试布局（纵向模式） ──
 function createTestLayout(numGroups = 1, itemsPerGroup = 2): LayoutResult {
   const pages = [];
   const allItems = [];
   const groupTitles = [];
-  const pageWidth = 800;
+  const columnWidth = 160;
+  let currentY = 80; // paddingTop
 
   for (let gi = 0; gi < numGroups; gi++) {
+    const pageStartY = currentY;
     const items = [];
+
+    // 分组标题
+    groupTitles.push({
+      groupId: gi,
+      label: `分组 ${gi + 1}（${itemsPerGroup} 张）`,
+      x: 24,
+      y: currentY,
+      width: 952,
+      height: 40,
+    });
+
+    currentY += 40 + 16; // groupTitleHeight + paddingY
+
     for (let i = 0; i < itemsPerGroup; i++) {
       items.push({
         hash: `hash-${gi}-${i}`,
         groupId: gi,
         groupIndex: gi,
-        x: gi * pageWidth + 40 + (i % 2) * 200,
-        y: 80 + Math.floor(i / 2) * 200,
-        width: 180,
-        height: 120,
+        x: 24 + (i % 5) * 168,
+        y: currentY + Math.floor(i / 5) * 120,
+        width: columnWidth,
+        height: 100,
       });
     }
+
+    currentY += Math.ceil(itemsPerGroup / 5) * 108 + 16; // 行高 + paddingY
     allItems.push(...items);
     const sortedItems = [...items].sort((a, b) => a.y - b.y);
-    groupTitles.push({
-      groupId: gi,
-      label: `分组 ${gi + 1}（${itemsPerGroup} 张）`,
-      x: gi * pageWidth + 40,
-      y: 0,
-      width: 360,
-      height: 0,
-    });
+
     pages.push({
       groupIndex: gi,
       groupId: gi,
-      offsetX: gi * pageWidth,
-      contentHeight: 80 + Math.ceil(itemsPerGroup / 2) * 200 + 88,
-      columnWidth: 180,
+      offsetY: pageStartY,
+      contentHeight: currentY - pageStartY,
+      columnWidth,
       items,
       groupTitle: groupTitles[gi],
       sortedItems,
     });
+
+    currentY += 40; // groupGap
   }
+
+  const totalHeight = currentY - 40 + 88; // 减去最后一个 groupGap + paddingBottom
 
   return {
     items: allItems,
     groupTitles,
     pages,
-    totalWidth: numGroups * pageWidth,
-    pageWidth,
-    columnWidth: 180,
-    baseColumnWidth: 180,
-    totalHeight: pages[0]?.contentHeight ?? 0,
+    columnWidth,
+    totalHeight,
   };
 }
 
@@ -172,7 +182,6 @@ describe('InfiniteCanvas', () => {
       zoomLevel: 1.0,
       currentGroupIndex: 0,
       groupCount: 0,
-      isTransitioning: false,
       fitCounter: 0,
     });
     useSelectionStore.setState({
@@ -221,6 +230,7 @@ describe('InfiniteCanvas', () => {
     expect(ref.current).toBeTruthy();
     expect(typeof ref.current?.syncSelectionVisuals).toBe('function');
     expect(typeof ref.current?.scrollToY).toBe('function');
+    expect(typeof ref.current?.scrollToGroup).toBe('function');
     expect(typeof ref.current?.updateItemMetadata).toBe('function');
   });
 
@@ -251,7 +261,6 @@ describe('InfiniteCanvas', () => {
   });
 
   it('无 pixi.js 模块导入', () => {
-    // 如果 pixi.js 已卸载且代码无 import，则不会报错
     expect(InfiniteCanvas).toBeTruthy();
   });
 });

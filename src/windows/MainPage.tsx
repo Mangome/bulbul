@@ -11,7 +11,7 @@ import { ProgressDialog } from '../components/dialogs/ProgressDialog';
 import InfiniteCanvas, { type InfiniteCanvasHandle } from '../components/canvas/InfiniteCanvas';
 import { TopNavBar } from '../components/panels/TopNavBar';
 import { RightControlPanel } from '../components/panels/RightControlPanel';
-import { computeHorizontalLayout, type LayoutResult, type ImageDimension } from '../utils/layout';
+import { computeVerticalGridLayout, type LayoutResult, type ImageDimension } from '../utils/layout';
 import * as imageService from '../services/imageService';
 import { runExportFlow } from '../services/exportService';
 import type { ImageMetadata, FocusScoringMethod } from '../types';
@@ -227,9 +227,9 @@ function MainPage() {
         }
       }
 
-      // 计算水平分组布局
+      // 计算纵向缩略图网格布局
       const viewportWidth = canvasContainerRef.current?.clientWidth ?? window.innerWidth;
-      const layoutResult = computeHorizontalLayout(groups, imageDims, viewportWidth);
+      const layoutResult = computeVerticalGridLayout(groups, imageDims, viewportWidth);
 
       if (cancelled) return;
 
