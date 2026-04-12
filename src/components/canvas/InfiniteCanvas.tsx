@@ -14,7 +14,7 @@
 //
 // 交互模式:
 // - 普通滚轮 → 纵向滚动
-// - 左键拖拽 → 纵向平移
+// - 左键在图片上拖拽 → 放大镜
 // - 点击 → 选中/取消图片
 // - W/S → 纵向滚动到上/下一组
 // ============================================================
@@ -45,7 +45,7 @@ import type { ItemRect } from './Loupe';
 
 const DRAG_DEAD_ZONE = 5;
 const BG_COLOR_LIGHT = '#FFFFFF';
-const BG_COLOR_DARK = '#0A0E1A';
+const BG_COLOR_DARK = '#000000';
 const SCROLL_ANIMATION_MS =
   typeof window !== 'undefined' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -122,11 +122,12 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
   // ── 纵向滚动状态 ──
   const scrollYRef = useRef(0);
 
-  // ── Drag state ──
-  const isDraggingRef = useRef(false);
-  const dragStartRef = useRef({ x: 0, y: 0 });
-  const scrollYStartRef = useRef(0);
+  // ── Pointer press state (用于区分点击 vs 图片上拖拽放大镜) ──
+  const isPointerDownRef = useRef(false);
+  const pointerStartRef = useRef({ x: 0, y: 0 });
   const hasDraggedRef = useRef(false);
+  /** 按下时是否命中了图片 */
+  const pressedOnImageRef = useRef<{ hash: string; itemRect: ItemRect } | null>(null);
 
   // ── 滚动动画状态 ──
   const scrollAnimRef = useRef<{
@@ -134,9 +135,6 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     startScrollY: number;
     targetScrollY: number;
   } | null>(null);
-
-  // ── 悬停状态 ──
-  const hoveredHashRef = useRef<string | null>(null);
 
   // ── Magnifier 状态 ──
   const [magnifierState, setMagnifierState] = useState<{
@@ -490,39 +488,48 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
     const handlePointerDown = (e: PointerEvent) => {
       if (e.button !== 0) return;
-      isDraggingRef.current = true;
+      isPointerDownRef.current = true;
       hasDraggedRef.current = false;
-      dragStartRef.current = { x: e.clientX, y: e.clientY };
-      scrollYStartRef.current = scrollYRef.current;
+      pointerStartRef.current = { x: e.clientX, y: e.clientY };
 
-      // 拖拽期间隐藏放大镜
-      setMagnifierState(prev => prev.visible ? { ...prev, visible: false } : prev);
-      loupeSourceRectRef.current = null;
-      markDirty();
+      // hitTest：判断是否按在图片上
+      const rect = canvas.getBoundingClientRect();
+      const screenX = e.clientX - rect.left;
+      const screenY = e.clientY - rect.top;
+      const offsetY = -scrollYRef.current + DEFAULT_LAYOUT_CONFIG.paddingTop;
+      const contentX = screenX;
+      const contentY = screenY - offsetY;
+
+      let hitImage: { hash: string; itemRect: ItemRect } | null = null;
+      for (const [hash, item] of canvasItemsRef.current) {
+        if (item.alpha <= 0) continue;
+        if (item.hitTest(contentX, contentY)) {
+          hitImage = {
+            hash,
+            itemRect: { x: item.x, y: item.y, width: item.getWidth(), height: item.getHeight() },
+          };
+          break;
+        }
+      }
+      pressedOnImageRef.current = hitImage;
     };
 
     const handlePointerMove = (e: PointerEvent) => {
-      if (isDraggingRef.current) {
-        // 拖拽模式：仅纵向
-        if (destroyedRef.current) return;
+      if (destroyedRef.current) return;
 
-        const dy = e.clientY - dragStartRef.current.y;
+      if (isPointerDownRef.current && pressedOnImageRef.current) {
+        // 左键按在图片上拖动 → 放大镜
+        const dx = e.clientX - pointerStartRef.current.x;
+        const dy = e.clientY - pointerStartRef.current.y;
 
         if (!hasDraggedRef.current) {
-          if (Math.abs(dy) < DRAG_DEAD_ZONE) {
+          if (Math.abs(dx) < DRAG_DEAD_ZONE && Math.abs(dy) < DRAG_DEAD_ZONE) {
             return;
           }
           hasDraggedRef.current = true;
         }
 
-        scrollYRef.current = clampScrollY(scrollYStartRef.current - dy);
-
-        updateViewport();
-        markDirty();
-      } else {
-        // 悬停模式 → hitTest + 通知 Magnifier
-        if (destroyedRef.current) return;
-
+        // 实时 hitTest 取得当前 itemRect（图片可能因滚动而移动）
         const rect = canvas.getBoundingClientRect();
         const screenX = e.clientX - rect.left;
         const screenY = e.clientY - rect.top;
@@ -530,57 +537,53 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         const contentX = screenX;
         const contentY = screenY - offsetY;
 
-        let newHoveredHash: string | null = null;
-        let hitItemRect: ItemRect | null = null;
-
-        for (const [hash, item] of canvasItemsRef.current) {
-          if (item.alpha <= 0) continue;
-          if (item.hitTest(contentX, contentY)) {
-            newHoveredHash = hash;
-            hitItemRect = { x: item.x, y: item.y, width: item.getWidth(), height: item.getHeight() };
-            break;
-          }
-        }
-
-        // 放大镜区域方框由 Loupe onSourceRectChange 回调控制
-        if (!newHoveredHash && loupeSourceRectRef.current !== null) {
+        // 检查鼠标是否仍在图片范围内
+        const pressedHash = pressedOnImageRef.current.hash;
+        const ci = canvasItemsRef.current.get(pressedHash);
+        if (ci && ci.hitTest(contentX, contentY)) {
+          const itemRect = { x: ci.x, y: ci.y, width: ci.getWidth(), height: ci.getHeight() };
+          setMagnifierState({
+            visible: true,
+            hash: pressedHash,
+            mouseX: screenX,
+            mouseY: screenY,
+            itemRect,
+          });
+        } else {
+          // 鼠标移出图片范围，隐藏放大镜
+          setMagnifierState(prev => prev.visible ? { ...prev, visible: false } : prev);
           loupeSourceRectRef.current = null;
           markDirty();
         }
-
-        if (newHoveredHash !== hoveredHashRef.current) {
-          hoveredHashRef.current = newHoveredHash;
-
-          if (newHoveredHash) {
-            setMagnifierState({
-              visible: true,
-              hash: newHoveredHash,
-              mouseX: e.clientX - rect.left,
-              mouseY: e.clientY - rect.top,
-              itemRect: hitItemRect,
-            });
-          } else {
-            setMagnifierState(prev => prev.visible ? { ...prev, visible: false } : prev);
+      } else {
+        // 非拖拽模式：鼠标移出画布时清理放大镜方框
+        const target = e.target as Node | null;
+        if (!target || !container.contains(target)) {
+          if (loupeSourceRectRef.current !== null) {
+            loupeSourceRectRef.current = null;
+            markDirty();
           }
-        } else if (newHoveredHash) {
-          // 更新鼠标位置和 itemRect
-          setMagnifierState(prev => ({
-            ...prev,
-            mouseX: e.clientX - rect.left,
-            mouseY: e.clientY - rect.top,
-            itemRect: hitItemRect ?? prev.itemRect,
-          }));
         }
       }
     };
 
     const handlePointerUp = (e: PointerEvent) => {
-      const wasDragging = isDraggingRef.current;
-      isDraggingRef.current = false;
+      const wasDown = isPointerDownRef.current;
+      isPointerDownRef.current = false;
 
-      if (wasDragging && !hasDraggedRef.current) {
+      // 隐藏放大镜
+      if (hasDraggedRef.current) {
+        setMagnifierState(prev => prev.visible ? { ...prev, visible: false } : prev);
+        loupeSourceRectRef.current = null;
+        markDirty();
+      }
+
+      // 未超过死区 → 按点击处理
+      if (wasDown && !hasDraggedRef.current) {
         handleCanvasClick(e);
       }
+
+      pressedOnImageRef.current = null;
     };
 
     const handleCanvasClick = (e: PointerEvent) => {

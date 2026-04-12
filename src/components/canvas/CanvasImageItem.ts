@@ -6,7 +6,7 @@
 // - 占位色块（图片加载前）
 // - 图片绘制（应用 EXIF Orientation 变换）
 // - 信息覆盖层（文件名 + 拍摄参数）
-// - 选中效果：半透明蓝色遮罩 + 右上角小对勾
+// - 选中效果：内缩边框 + 右上角精致角标
 // - 检测框覆盖层
 // - AABB 命中检测
 // ============================================================
@@ -22,8 +22,12 @@ const PLACEHOLDER_COLOR = '#E0E4EB';
 
 /** 选中色（品牌靛蓝，在画布背景上辨识度高） */
 const SELECTION_COLOR = '#2563A8';
-/** 选中叠加层透明度 */
-const SELECTION_OVERLAY_ALPHA = 0.08;
+/** 选中边框宽度（屏幕像素） */
+const SELECTION_BORDER_WIDTH = 2.5;
+/** 对勾角标半径（屏幕像素） */
+const SELECTION_BADGE_RADIUS = 10;
+/** 角标距离图片边缘的偏移（屏幕像素） */
+const SELECTION_BADGE_OFFSET = 8;
 /** 选中动画时长（ms）— 尊重 prefers-reduced-motion */
 const getSelAnimDuration = (): number => {
   if (typeof window === 'undefined') return 200;
@@ -194,7 +198,7 @@ export class CanvasImageItem {
       const animNeedsFrame = this._updateSelectionAnimation(now);
       needsNextFrame = needsNextFrame || animNeedsFrame;
 
-      this._drawSelection(ctx);
+      this._drawSelection(ctx, zoom);
     }
 
     ctx.restore();
@@ -406,9 +410,10 @@ export class CanvasImageItem {
   }
 
   /**
-   * 绘制选中效果：半透明蓝色遮罩 + 右上角小对勾
+   * 绘制选中效果：内缩品牌色边框 + 右上角精致角标
+   * 使用反向缩放保证边框和角标在任意 zoom 下像素大小恒定
    */
-  private _drawSelection(ctx: CanvasRenderingContext2D): void {
+  private _drawSelection(ctx: CanvasRenderingContext2D, zoom: number): void {
     const now = performance.now();
     const elapsed = now - this.selectionAnimStartTime;
     const duration = getSelAnimDuration();
@@ -420,36 +425,56 @@ export class CanvasImageItem {
       progress = 1 - progress;
     }
 
+    // ease-out-cubic 缓动，让动画更自然
+    const eased = 1 - Math.pow(1 - progress, 3);
     const baseAlpha = this.alpha;
+    const invZoom = 1 / zoom;
+
     ctx.save();
+    ctx.globalAlpha = baseAlpha * eased;
 
-    // 半透明蓝色遮罩
-    ctx.globalAlpha = baseAlpha * progress * SELECTION_OVERLAY_ALPHA;
-    ctx.fillStyle = SELECTION_COLOR;
-    ctx.fillRect(0, 0, this.width, this.height);
+    // ─── 内缩边框（恒定屏幕像素宽度）───
+    const borderW = SELECTION_BORDER_WIDTH * invZoom;
+    const halfBorder = borderW / 2;
+    ctx.strokeStyle = SELECTION_COLOR;
+    ctx.lineWidth = borderW;
+    ctx.strokeRect(halfBorder, halfBorder, this.width - borderW, this.height - borderW);
 
-    // 右上角小对勾
-    const checkSize = Math.min(this.width, this.height) * 0.15;
-    const cx = this.width - checkSize;
-    const cy = checkSize;
+    // ─── 右上角圆形角标 + 对勾 ───
+    // 切换到屏幕像素坐标绘制，保证大小恒定
+    const badgeR = SELECTION_BADGE_RADIUS;
+    const offset = SELECTION_BADGE_OFFSET;
+    // 角标中心（内容坐标）
+    const badgeCx = this.width - (offset + badgeR) * invZoom;
+    const badgeCy = (offset + badgeR) * invZoom;
 
-    ctx.globalAlpha = baseAlpha * progress;
+    // 阴影（提升在亮/暗图片上的辨识度）
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+    ctx.shadowBlur = 4 * invZoom;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 1 * invZoom;
 
     // 品牌色圆形背景
     ctx.fillStyle = SELECTION_COLOR;
     ctx.beginPath();
-    ctx.arc(cx, cy, checkSize * 0.7, 0, Math.PI * 2);
+    ctx.arc(badgeCx, badgeCy, badgeR * invZoom, 0, Math.PI * 2);
     ctx.fill();
 
-    // 白色对勾
+    // 关闭阴影，绘制白色对勾
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+
+    const r = badgeR * invZoom; // 角标半径（内容坐标）
     ctx.strokeStyle = '#FFFFFF';
-    ctx.lineWidth = Math.max(1.5, checkSize * 0.15);
+    ctx.lineWidth = Math.max(1, 1.8 * invZoom);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.beginPath();
-    ctx.moveTo(cx - checkSize * 0.25, cy);
-    ctx.lineTo(cx - checkSize * 0.05, cy + checkSize * 0.2);
-    ctx.lineTo(cx + checkSize * 0.3, cy - checkSize * 0.25);
+    ctx.moveTo(badgeCx - r * 0.35, badgeCy + r * 0.02);
+    ctx.lineTo(badgeCx - r * 0.05, badgeCy + r * 0.32);
+    ctx.lineTo(badgeCx + r * 0.38, badgeCy - r * 0.30);
     ctx.stroke();
 
     ctx.restore();

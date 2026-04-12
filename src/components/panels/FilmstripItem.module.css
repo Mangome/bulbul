@@ -1,0 +1,89 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   FilmstripItem - 胶片条单项
+
+   48x48 缩略图 + 图片数量标签。
+   激活态：主色边框 + 选中背景。
+════════════════════════════════════════════════════════════════════════════ */
+
+.item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+
+  transition: background-color var(--transition-fast);
+}
+
+.item:hover {
+  background-color: var(--color-bg-tertiary);
+}
+
+.item:active {
+  transform: scale(0.96);
+}
+
+/* 激活态 */
+.active {
+  background-color: var(--color-selected-bg);
+}
+
+.active .thumb {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-light);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   缩略图
+──────────────────────────────────────────────────────────────── */
+
+.thumb {
+  width: var(--filmstrip-thumb-size, 48px);
+  height: var(--filmstrip-thumb-size, 48px);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1.5px solid transparent;
+  background: var(--color-bg-tertiary);
+
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.thumbImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.thumbPlaceholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    135deg,
+    var(--color-bg-secondary) 0%,
+    var(--color-bg-tertiary) 100%
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────
+   数量标签
+──────────────────────────────────────────────────────────────── */
+
+.count {
+  font-size: 10px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.active .count {
+  color: var(--color-primary);
+  font-weight: var(--font-weight-semibold);
+}

@@ -11,9 +11,9 @@ import type { GroupTitleItem } from '../../utils/layout';
 
 const TITLE_PADDING = 8;
 const TITLE_FONT = '600 14px system-ui, -apple-system, sans-serif';
-const TITLE_COLOR = '#374151';
-const COMPACT_TITLE_FONT = '500 12px system-ui, -apple-system, sans-serif';
-const COMPACT_TITLE_COLOR = '#6B7280';
+const TITLE_COLOR = '#1D1D1F';
+const COMPACT_TITLE_FONT = '500 11px system-ui, -apple-system, sans-serif';
+const COMPACT_TITLE_COLOR = '#AEAEB2';
 
 // ─── 绘制函数 ─────────────────────────────────────────
 

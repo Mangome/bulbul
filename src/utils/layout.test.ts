@@ -299,7 +299,7 @@ describe('computeVerticalGridLayout', () => {
 
     const result = computeVerticalGridLayout(groups, dims, viewportWidth);
 
-    expect(result.groupTitles[0].height).toBe(28);
+    expect(result.groupTitles[0].height).toBe(24);
     expect(result.groupTitles[1].height).toBe(DEFAULT_LAYOUT_CONFIG.groupTitleHeight);
   });
 

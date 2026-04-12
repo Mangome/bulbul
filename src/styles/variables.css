@@ -42,22 +42,27 @@
   /* ────────────────────────────────────────────────────────────────
      中性色系 (高对比度，文字清晰)
   ──────────────────────────────────────────────────────────────── */
-  --color-text-primary: #0F1729;
-  --color-text-secondary: #4A5568;
-  --color-text-muted: #94A3B8;
+  --color-text-primary: #1D1D1F;
+  --color-text-secondary: #6E6E73;
+  --color-text-muted: #AEAEB2;
   --color-bg-primary: #FFFFFF;
-  --color-bg-secondary: #F8FAFB;
-  --color-bg-tertiary: #F0F3F8;
-  --color-border: #E0E4EB;
-  --color-border-light: #EDF0F5;
+  --color-bg-secondary: #F5F5F7;
+  --color-bg-tertiary: #E8E8ED;
+  --color-border: #D2D2D7;
+  --color-border-light: #E8E8ED;
 
   /* ────────────────────────────────────────────────────────────────
      面板样式 (毛玻璃效果)
   ──────────────────────────────────────────────────────────────── */
-  --panel-bg: rgba(255, 255, 255, 0.95);
-  --panel-border: rgba(30, 58, 95, 0.08);
-  --panel-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.08);
-  --panel-radius: 10px;
+  --panel-bg: rgba(255, 255, 255, 0.88);
+  --panel-border: rgba(0, 0, 0, 0.06);
+  --panel-shadow: 0 0.5px 0 rgba(0, 0, 0, 0.05);
+  --panel-radius: 8px;
+
+  /* 胶片条 */
+  --filmstrip-height: 72px;
+  --filmstrip-thumb-size: 48px;
+  --filmstrip-bg: rgba(255, 255, 255, 0.92);
 
   /* ────────────────────────────────────────────────────────────────
      间距系统 (模块化，创造节奏)
@@ -145,22 +150,24 @@
   /* ────────────────────────────────────────────────────────────────
      中性色系 (深靛背景 + 高对比文字)
   ──────────────────────────────────────────────────────────────── */
-  --color-text-primary: #F0F4F8;
-  --color-text-secondary: #B0B8C4;
-  --color-text-muted: #5A6370;
-  --color-bg-primary: #0A0E1A;
-  --color-bg-secondary: #111827;
-  --color-bg-tertiary: #1A2237;
-  --color-border: #232D40;
-  --color-border-light: #1C2535;
+  --color-text-primary: #F5F5F7;
+  --color-text-secondary: #A1A1A6;
+  --color-text-muted: #636366;
+  --color-bg-primary: #000000;
+  --color-bg-secondary: #1C1C1E;
+  --color-bg-tertiary: #2C2C2E;
+  --color-border: #38383A;
+  --color-border-light: #2C2C2E;
 
   /* ────────────────────────────────────────────────────────────────
      面板样式 (深靛毛玻璃)
   ──────────────────────────────────────────────────────────────── */
-  --panel-bg: rgba(10, 14, 26, 0.92);
-  --panel-border: rgba(74, 144, 226, 0.1);
-  --panel-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.2);
-  --panel-radius: 10px;
+  --panel-bg: rgba(28, 28, 30, 0.90);
+  --panel-border: rgba(255, 255, 255, 0.06);
+  --panel-shadow: 0 0.5px 0 rgba(0, 0, 0, 0.3);
+  --panel-radius: 8px;
+
+  --filmstrip-bg: rgba(28, 28, 30, 0.92);
 
   /* ────────────────────────────────────────────────────────────────
      阴影系统 (暗色优化)

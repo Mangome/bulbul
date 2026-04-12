@@ -10,7 +10,7 @@ import { useTauriEvents } from '../hooks/useTauriEvents';
 import { ProgressDialog } from '../components/dialogs/ProgressDialog';
 import InfiniteCanvas, { type InfiniteCanvasHandle } from '../components/canvas/InfiniteCanvas';
 import { TopNavBar } from '../components/panels/TopNavBar';
-import { RightControlPanel } from '../components/panels/RightControlPanel';
+import { BottomFilmstrip } from '../components/panels/BottomFilmstrip';
 import { computeVerticalGridLayout, type LayoutResult, type ImageDimension } from '../utils/layout';
 import * as imageService from '../services/imageService';
 import { runExportFlow } from '../services/exportService';
@@ -110,6 +110,16 @@ function MainPage() {
     }
     canvasRef.current?.syncSelectionVisuals();
   }, []);
+
+  // ── 胶片条分组点击回调 ──
+  const handleGroupClick = useCallback((groupIndex: number) => {
+    useCanvasStore.getState().goToGroup(groupIndex);
+    const group = groups[groupIndex];
+    if (group) {
+      useAppStore.getState().selectGroup(group.id);
+    }
+    canvasRef.current?.syncSelectionVisuals();
+  }, [groups]);
 
   // ── 键盘快捷键 ──
   useKeyboard({
@@ -280,10 +290,14 @@ function MainPage() {
               folderPath={currentFolder}
               onExport={handleExport}
               onSelectAll={handleSelectAll}
+              onSwitchFolder={handleOpenFolder}
             />
 
-            {/* 右侧控制面板 */}
-            <RightControlPanel onSwitchFolder={handleOpenFolder} />
+            {/* 底部胶片条 */}
+            <BottomFilmstrip
+              groups={groups}
+              onGroupClick={handleGroupClick}
+            />
           </>
         ) : (
           <div className={cls.placeholder}>

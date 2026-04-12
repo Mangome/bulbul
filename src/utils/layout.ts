@@ -37,10 +37,10 @@ export const DEFAULT_LAYOUT_CONFIG: LayoutConfig = {
   gap: 12,
   paddingX: 32,
   paddingY: 20,
-  groupGap: 48,
+  groupGap: 36,
   groupTitleHeight: 48,
-  paddingTop: 80,     // 为顶部浮动栏预留空间
-  paddingBottom: 88,   // 为底部浮动栏预留空间
+  paddingTop: 56,     // 44px TopNavBar + 12px 安全距离
+  paddingBottom: 84,   // 72px BottomFilmstrip + 12px 安全距离
 };
 
 // ─── 类型定义 ─────────────────────────────────────────
@@ -173,12 +173,20 @@ export function computeVerticalGridLayout(
     const isSingleImage = group.pictureHashes.length === 1;
 
     // 单图分组使用紧凑参数
-    const titleHeight = isSingleImage ? 28 : config.groupTitleHeight;
-    const paddingY = isSingleImage ? 8 : config.paddingY;
-    const groupGap = isSingleImage ? 24 : config.groupGap;
+    const titleHeight = isSingleImage ? 24 : config.groupTitleHeight;
+    const paddingY = isSingleImage ? 4 : config.paddingY;
+    const groupGap = isSingleImage ? 16 : config.groupGap;
+
+    // 单图分组限制最大宽度，避免占满整行
+    const effectiveColumnWidth = isSingleImage
+      ? Math.min(columnWidth, Math.min(600, viewportWidth * 0.5))
+      : columnWidth;
 
     // 内容块宽度，水平居中
-    const contentBlockWidth = columns * columnWidth + (columns - 1) * config.gap;
+    const groupColumnWidth = isSingleImage ? effectiveColumnWidth : columnWidth;
+    const contentBlockWidth = isSingleImage
+      ? effectiveColumnWidth
+      : columns * columnWidth + (columns - 1) * config.gap;
     const contentOffsetX = config.paddingX + (viewportWidth - config.paddingX * 2 - contentBlockWidth) / 2;
 
     // 分组标题
@@ -219,19 +227,14 @@ export function computeVerticalGridLayout(
     let rowStartY = currentY;
     let rowMaxHeight = 0;
 
-    // 单图分组居中偏移量
-    const singleImageCenterOffset = isSingleImage
-      ? (contentBlockWidth - columnWidth) / 2
-      : 0;
-
     for (const hash of group.pictureHashes) {
       const dim = imageDimensions.get(hash);
       const aspectRatio = dim ? dim.width / dim.height : DEFAULT_ASPECT_RATIO;
 
-      const renderWidth = columnWidth;
-      const renderHeight = columnWidth / aspectRatio;
+      const renderWidth = groupColumnWidth;
+      const renderHeight = groupColumnWidth / aspectRatio;
 
-      const x = contentOffsetX + singleImageCenterOffset + colIdx * (columnWidth + config.gap);
+      const x = contentOffsetX + colIdx * (groupColumnWidth + config.gap);
       const item: LayoutItem = {
         hash,
         groupId: group.id,
