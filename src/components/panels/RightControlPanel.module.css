@@ -76,43 +76,6 @@
 }
 
 /* ────────────────────────────────────────────────────────────────
-   缩放滑块
-──────────────────────────────────────────────────────────────── */
-
-.sliderWrapper {
-  width: 32px;
-  height: 140px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  /* 旋转水平 Slider 为垂直 */
-  transform: rotate(-90deg);
-  transform-origin: center center;
-}
-
-.sliderWrapper > * {
-  width: 130px !important;
-  min-width: 130px;
-}
-
-/* ────────────────────────────────────────────────────────────────
-   缩放百分比文字
-──────────────────────────────────────────────────────────────── */
-
-.zoomText {
-  font-size: 10px;
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-muted);
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.3px;
-  line-height: 1;
-  padding: 2px 0;
-  user-select: none;
-}
-
-/* ────────────────────────────────────────────────────────────────
    分隔线
 ──────────────────────────────────────────────────────────────── */
 

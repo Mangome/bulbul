@@ -12,6 +12,8 @@ import type { GroupTitleItem } from '../../utils/layout';
 const TITLE_PADDING = 8;
 const TITLE_FONT = '600 14px system-ui, -apple-system, sans-serif';
 const TITLE_COLOR = '#374151';
+const COMPACT_TITLE_FONT = '500 12px system-ui, -apple-system, sans-serif';
+const COMPACT_TITLE_COLOR = '#6B7280';
 
 // ─── 绘制函数 ─────────────────────────────────────────
 
@@ -23,11 +25,16 @@ export function drawGroupTitles(
   ctx: CanvasRenderingContext2D,
   titles: GroupTitleItem[],
 ): void {
-  ctx.font = TITLE_FONT;
-  ctx.fillStyle = TITLE_COLOR;
   ctx.textBaseline = 'middle';
 
   for (const item of titles) {
+    if (item.compact) {
+      ctx.font = COMPACT_TITLE_FONT;
+      ctx.fillStyle = COMPACT_TITLE_COLOR;
+    } else {
+      ctx.font = TITLE_FONT;
+      ctx.fillStyle = TITLE_COLOR;
+    }
     const maxWidth = Math.max(100, item.width - TITLE_PADDING * 2);
     const label = truncateGroupLabel(item.label, maxWidth);
     const cy = item.y + item.height / 2;

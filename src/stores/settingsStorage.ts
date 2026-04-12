@@ -10,7 +10,6 @@ import type { Theme } from './useThemeStore';
 
 /** 持久化设置的结构 */
 export interface PersistedSettings {
-  zoomLevel: number;
   theme: Theme;
   showDetectionOverlay: boolean;
   similarityThreshold: number;
@@ -18,7 +17,6 @@ export interface PersistedSettings {
 }
 
 const DEFAULTS: PersistedSettings = {
-  zoomLevel: 1.0,
   theme: 'light',
   showDetectionOverlay: false,
   similarityThreshold: 90.0,
@@ -46,7 +44,6 @@ export async function loadSettings(): Promise<PersistedSettings> {
     });
     const parsed = JSON.parse(raw) as Partial<PersistedSettings>;
     const result = {
-      zoomLevel: typeof parsed.zoomLevel === 'number' ? parsed.zoomLevel : DEFAULTS.zoomLevel,
       theme: parsed.theme === 'light' || parsed.theme === 'dark' ? parsed.theme : DEFAULTS.theme,
       showDetectionOverlay: typeof parsed.showDetectionOverlay === 'boolean' ? parsed.showDetectionOverlay : DEFAULTS.showDetectionOverlay,
       similarityThreshold: typeof parsed.similarityThreshold === 'number' ? parsed.similarityThreshold : DEFAULTS.similarityThreshold,

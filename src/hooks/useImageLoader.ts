@@ -11,8 +11,8 @@ import * as imageService from '../services/imageService';
 
 // ─── 常量 ─────────────────────────────────────────────
 
-/** 默认内存上限 200MB（RGBA 4 字节/像素计） */
-const DEFAULT_MEMORY_LIMIT = 200 * 1024 * 1024;
+/** 默认内存上限 400MB（RGBA 4 字节/像素计） */
+const DEFAULT_MEMORY_LIMIT = 400 * 1024 * 1024;
 
 /** 缩略图的长边像素宽度（与后端 THUMBNAIL_WIDTH 保持一致） */
 const THUMBNAIL_PIXEL_WIDTH = 600;

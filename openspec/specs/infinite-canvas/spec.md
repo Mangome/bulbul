@@ -1,7 +1,7 @@
 ## Requirements
 
 ### Requirement: 主 InfiniteCanvas React 组件
-系统 SHALL 提供 InfiniteCanvas React 组件，管理原生 Canvas DOM 元素、渲染循环、事件监听、CanvasImageItem 池、Magnifier 组件、与 Zustand store 的同步。
+系统 SHALL 提供 InfiniteCanvas React 组件，管理原生 Canvas DOM 元素、渲染循环、事件监听、CanvasImageItem 池、Loupe 组件、与 Zustand store 的同步。
 
 #### Scenario: 组件挂载与初始化
 - **WHEN** InfiniteCanvas 组件挂载
@@ -19,9 +19,9 @@
 - **AND** ImageLoader.destroy()
 - **AND** ResizeObserver.disconnect()
 
-#### Scenario: JSX 包含 Magnifier 组件
+#### Scenario: JSX 包含 Loupe 组件
 - **WHEN** InfiniteCanvas 组件 render
-- **THEN** 返回的 JSX 中 SHALL 包含 Magnifier 组件，作为 Canvas 的兄弟元素
+- **THEN** 返回的 JSX 中 SHALL 包含 Loupe 放大镜组件，作为 Canvas 的兄弟元素
 
 ### Requirement: Canvas 2D 渲染循环
 系统 SHALL 使用 dirty flag + requestAnimationFrame 按需渲染驱动画布，静止时零 CPU 开销。
@@ -48,29 +48,17 @@
 - **AND** 布局 SHALL 重新计算，markDirty() 触发重绘
 
 ### Requirement: 坐标系统与层级结构
-画布 SHALL 维护 scrollY/zoomLevel 状态变量，通过 ctx.save/translate/scale/restore 管理两层绘制。offsetX 恒为 0，仅纵向滚动。
+画布 SHALL 维护 scrollY 状态变量，通过 ctx.save/translate/restore 管理两层绘制。offsetX 恒为 0，仅纵向滚动。不再使用缩放变换。
 
 #### Scenario: 屏幕坐标转内容坐标
 - **WHEN** 需要将屏幕坐标转换为内容坐标
-- **THEN** 使用公式 contentX = (screenX - contentOffsetX) / zoomLevel, contentY = (screenY - offsetY) / zoomLevel
-- **AND** contentOffsetX 由布局居中计算得出
+- **THEN** 使用公式 contentX = screenX, contentY = screenY - offsetY
+- **AND** offsetY = -scrollY + paddingTop
 
 #### Scenario: 纵向滚动偏移
 - **WHEN** 用户滚轮或拖拽纵向滚动
-- **THEN** offsetY = -scrollY * zoomLevel + verticalPadding
-- **AND** scrollY 范围为 [0, maxScrollY]，maxScrollY = max(0, totalHeight - screenHeight / zoomLevel)
-
-### Requirement: 滚轮缩放
-系统 SHALL 支持以鼠标 Y 轴位置为锚点的滚轮缩放，缩放范围 10%~300%。
-
-#### Scenario: 鼠标锚点缩放
-- **WHEN** 用户 Ctrl+滚轮缩放
-- **THEN** 以鼠标 Y 位置为锚点调整 zoomLevel，缩放后鼠标下方的内容 Y 坐标保持不变
-- **AND** 无缩放补偿机制，actualZoom = zoomLevel
-
-#### Scenario: 缩放范围限制
-- **WHEN** 缩放级别达到 10% 或 300%
-- **THEN** 继续滚动不再改变缩放级别
+- **THEN** offsetY = -scrollY + verticalPadding
+- **AND** scrollY 范围为 [0, maxScrollY]，maxScrollY = max(0, totalHeight - screenHeight)
 
 ### Requirement: 拖拽纵向平移
 系统 SHALL 支持鼠标左键拖拽纵向平移画布内容。
@@ -84,12 +72,28 @@
 - **THEN** 不触发拖拽，保留为点击事件
 
 ### Requirement: 命中检测
-系统 SHALL 通过手动 AABB 坐标计算实现命中检测，将屏幕坐标转换为内容坐标后遍历可见 CanvasImageItem 调用 hitTest(contentX, contentY)。
+系统 SHALL 通过手动 AABB 坐标计算实现命中检测，将屏幕坐标转换为内容坐标后遍历可见 CanvasImageItem 调用 hitTest(contentX, contentY)。悬停命中时 SHALL 通知 Loupe 组件并传递缩略图位置信息。
 
-#### Scenario: 悬停命中与放大镜联动
+#### Scenario: 点击命中
+- **WHEN** 用户点击画布
+- **THEN** 系统将屏幕坐标转换为内容坐标，遍历当前分组的可见 CanvasImageItem 调用 hitTest()
+
+#### Scenario: 悬停命中
 - **WHEN** 鼠标在画布上移动（非拖拽状态）
-- **THEN** 系统 SHALL 使用坐标转换和 hitTest() 逻辑检测悬停目标
-- **AND** 命中时将悬停图片信息传递给 Magnifier 组件
+- **THEN** 系统使用相同的坐标转换和 hitTest() 逻辑检测悬停目标
+- **AND** 命中时将 item 的 { x, y, width, height } 传递给 Loupe 组件
+- **AND** 持续更新鼠标位置给 Loupe 组件
+
+### Requirement: 滚轮行为
+系统 SHALL 根据放大镜可见状态决定滚轮事件的响应方式。
+
+#### Scenario: 放大镜可见时滚轮调节倍率
+- **WHEN** 放大镜可见且用户滚动普通滚轮（无 Ctrl/Meta 修饰键）
+- **THEN** 滚轮事件 SHALL 调节放大镜倍率而非滚动画布
+
+#### Scenario: 放大镜不可见时滚轮正常滚动
+- **WHEN** 放大镜不可见且用户滚动普通滚轮
+- **THEN** 画布 SHALL 正常纵向滚动
 
 ### Requirement: 虚拟化渲染
 系统 SHALL 通过 getVisibleItems() 二分查找和 diffVisibleItems() 增量更新实现虚拟化，仅绘制视口内的图片项。
@@ -103,8 +107,8 @@
 系统 SHALL 实时追踪当前视口矩形（x, y, width, height），用于虚拟化渲染。
 
 #### Scenario: 视口更新
-- **WHEN** 缩放或平移操作完成
-- **THEN** 视口矩形 SHALL 更新，反映内容坐标系中的可见区域
+- **WHEN** 平移操作完成
+- **THEN** 视口矩形 SHALL 更新，viewport.width = screenWidth, viewport.height = screenHeight
 
 ### Requirement: useImperativeHandle 接口
 系统 SHALL 暴露一个 ref handle，允许父组件调用特定的 imperative 方法。

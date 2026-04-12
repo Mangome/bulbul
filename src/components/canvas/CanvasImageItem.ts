@@ -5,6 +5,7 @@
 // 包含：
 // - 占位色块（图片加载前）
 // - 图片绘制（应用 EXIF Orientation 变换）
+// - 信息覆盖层（文件名 + 拍摄参数）
 // - 选中效果：半透明蓝色遮罩 + 右上角小对勾
 // - 检测框覆盖层
 // - AABB 命中检测
@@ -29,6 +30,25 @@ const getSelAnimDuration = (): number => {
   const prefersReduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   return prefersReduced ? 0 : 200;
 };
+
+// ─── 信息覆盖层常量 ─────────────────────────────────
+
+/** 文字视觉大小（不随缩放变化） */
+const INFO_FONT_SIZE = 11;
+const INFO_FONT_NAME = `600 ${INFO_FONT_SIZE}px system-ui, -apple-system, sans-serif`;
+const INFO_FONT_PARAMS = `400 ${INFO_FONT_SIZE}px system-ui, -apple-system, sans-serif`;
+const INFO_TEXT_COLOR = '#FFFFFF';
+const INFO_TEXT_SECONDARY = 'rgba(255, 255, 255, 0.85)';
+/** 渐变背景高度占图片高度的比例 */
+const INFO_GRADIENT_RATIO = 0.30;
+/** 内边距（屏幕像素，会被反向缩放） */
+const INFO_PADDING_X = 8;
+const INFO_PADDING_BOTTOM = 6;
+const INFO_LINE_GAP = 3;
+/** 估算字符宽度（用于截断，避免 measureText） */
+const INFO_CHAR_WIDTH = 6.5;
+const STAR_FILLED = '\u2605'; // ★
+const STAR_EMPTY = '\u2606';  // ☆
 
 // ─── CanvasImageItem ─────────────────────────────────
 
@@ -57,6 +77,12 @@ export class CanvasImageItem {
   // 检测框
   private detectionBoxes: DetectionBox[] = [];
   private detectionVisible: boolean = false;
+
+  // 信息覆盖层数据（预计算字符串，避免每帧格式化）
+  private infoFileName: string = '';
+  private infoCaptureTime: string = '';
+  private infoParams: string = '';
+  private infoVisible: boolean = false;
 
   // 重新加载标志：图片被 LRU 淘汰后需要重新加载
   needsReload: boolean = false;
@@ -96,11 +122,13 @@ export class CanvasImageItem {
 
   /**
    * 设置图片信息（文件名 + 拍摄参数）
-   * 缩略图模式不绘制信息覆盖层，此方法仅保留元数据引用
+   * 预格式化参数字符串，避免 draw() 中每帧重复计算
    */
-  setImageInfo(_fileName: string, _metadata?: ImageMetadata | null): void {
-    // 缩略图模式下不使用文件名和元数据渲染
-    // 元数据信息由 Magnifier 组件展示
+  setImageInfo(fileName: string, metadata?: ImageMetadata | null): void {
+    this.infoFileName = fileName;
+    this.infoCaptureTime = CanvasImageItem._formatCaptureTime(metadata?.captureTime);
+    this.infoParams = CanvasImageItem._formatParams(metadata);
+    this.infoVisible = fileName.length > 0;
   }
 
   /**
@@ -153,8 +181,11 @@ export class CanvasImageItem {
       this._drawPlaceholder(ctx);
     }
 
-    // 绘制检测框覆盖层（缩放低于 0.4 时隐藏，避免视觉混乱）
-    if (this.detectionVisible && this.detectionBoxes.length > 0 && zoom >= 0.4) {
+    // 绘制信息覆盖层（文件名 + 拍摄参数）
+    this._drawInfoOverlay(ctx, zoom);
+
+    // 绘制检测框覆盖层
+    if (this.detectionVisible && this.detectionBoxes.length > 0) {
       drawDetectionOverlay(ctx, this.detectionBoxes, this.width, this.height);
     }
 
@@ -209,13 +240,6 @@ export class CanvasImageItem {
     this.detectionVisible = visible;
   }
 
-  /**
-   * 更新缩放可见性 — 缩略图模式下为 no-op
-   */
-  updateZoomVisibility(_zoomLevel: number): void {
-    // no-op: 缩略图模式无信息覆盖层，无需缩放可见性更新
-  }
-
   get isSelected(): boolean {
     return this._isSelected;
   }
@@ -245,6 +269,76 @@ export class CanvasImageItem {
   private _drawPlaceholder(ctx: CanvasRenderingContext2D): void {
     ctx.fillStyle = PLACEHOLDER_COLOR;
     ctx.fillRect(0, 0, this.width, this.height);
+  }
+
+  /**
+   * 绘制信息覆盖层（文件名 + 拍摄参数）
+   * 使用反向缩放补偿保持文字恒定大小
+   */
+  private _drawInfoOverlay(ctx: CanvasRenderingContext2D, zoom: number): void {
+    if (!this.infoVisible) return;
+    if (!this.infoFileName && !this.infoParams) return;
+
+    const w = this.width;
+    const h = this.height;
+    const invZoom = 1 / zoom;
+
+    const hasParams = this.infoParams.length > 0;
+    const lineCount = hasParams ? 2 : 1;
+
+    // 覆盖层高度（屏幕像素 → 内容坐标）
+    const overlayLogicalH = lineCount * INFO_FONT_SIZE + (lineCount - 1) * INFO_LINE_GAP + INFO_PADDING_BOTTOM * 2;
+    const overlayContentH = overlayLogicalH * invZoom;
+    const gradientContentH = Math.max(overlayContentH, h * INFO_GRADIENT_RATIO);
+
+    ctx.save();
+
+    // 绘制渐变背景
+    const gradientY = h - gradientContentH;
+    const gradient = ctx.createLinearGradient(0, gradientY, 0, h);
+    gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    gradient.addColorStop(0.4, 'rgba(0, 0, 0, 0.3)');
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0.6)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, gradientY, w, gradientContentH);
+
+    // 反向缩放：移到图片底部，1 单位 = 1 屏幕像素
+    ctx.translate(0, h);
+    ctx.scale(invZoom, invZoom);
+
+    const textX = INFO_PADDING_X;
+    const maxTextWidth = w * zoom - INFO_PADDING_X * 2;
+
+    // 文件名 + 拍摄时间拼接为一行
+    const nameWithTime = this.infoCaptureTime
+      ? `${this.infoFileName}  ${this.infoCaptureTime}`
+      : this.infoFileName;
+
+    if (hasParams) {
+      // 参数行（底部）
+      const paramsY = -INFO_PADDING_BOTTOM;
+      ctx.font = INFO_FONT_PARAMS;
+      ctx.fillStyle = INFO_TEXT_SECONDARY;
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(this.infoParams, textX, paramsY, maxTextWidth);
+
+      // 文件名 + 时间行（参数行上方）
+      const nameY = paramsY - INFO_FONT_SIZE - INFO_LINE_GAP;
+      ctx.font = INFO_FONT_NAME;
+      ctx.fillStyle = INFO_TEXT_COLOR;
+      const truncatedName = CanvasImageItem._truncateText(nameWithTime, maxTextWidth);
+      ctx.fillText(truncatedName, textX, nameY, maxTextWidth);
+    } else {
+      // 仅文件名 + 时间
+      const nameY = -INFO_PADDING_BOTTOM;
+      ctx.font = INFO_FONT_NAME;
+      ctx.fillStyle = INFO_TEXT_COLOR;
+      ctx.textBaseline = 'bottom';
+      const truncatedName = CanvasImageItem._truncateText(nameWithTime, maxTextWidth);
+      ctx.fillText(truncatedName, textX, nameY, maxTextWidth);
+    }
+
+    ctx.restore();
   }
 
   /**
@@ -361,7 +455,7 @@ export class CanvasImageItem {
     ctx.restore();
   }
 
-  // ── 私有方法：动画和计算 ────────────────────────────────────────
+  // ── 私有方法：动画、计算与格式化 ────────────────────────────────────────
 
   /**
    * 更新选中动画状态
@@ -374,5 +468,45 @@ export class CanvasImageItem {
       : getSelAnimDuration() * 0.6;
 
     return elapsed < duration;
+  }
+
+  /** 格式化拍摄参数为显示字符串 */
+  private static _formatParams(meta?: ImageMetadata | null): string {
+    if (!meta) return '';
+    const parts: string[] = [];
+
+    if (meta.fNumber != null) parts.push(`f/${meta.fNumber}`);
+    if (meta.exposureTime != null) parts.push(`${meta.exposureTime}s`);
+    if (meta.isoSpeed != null) parts.push(`ISO ${meta.isoSpeed}`);
+    if (meta.focalLength != null) parts.push(`${meta.focalLength}mm`);
+    if (meta.focusScore != null) {
+      const score = Math.round(Math.max(1, Math.min(5, meta.focusScore)));
+      parts.push(STAR_FILLED.repeat(score) + STAR_EMPTY.repeat(5 - score));
+    }
+
+    return parts.join(' \u00B7 ');
+  }
+
+  /** 格式化拍摄时间：ISO 字符串 → YYYY-MM-DD HH:mm:ss */
+  private static _formatCaptureTime(captureTime?: string | null): string {
+    if (!captureTime) return '';
+    // captureTime 为 ISO 格式如 "2024-01-01T14:30:00"
+    const d = new Date(captureTime);
+    if (isNaN(d.getTime())) return '';
+    const yyyy = d.getFullYear();
+    const MM = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    const ss = String(d.getSeconds()).padStart(2, '0');
+    return `${yyyy}-${MM}-${dd} ${hh}:${mm}:${ss}`;
+  }
+
+  /** 基于字符宽度估算截断文本（避免每帧 measureText） */
+  private static _truncateText(text: string, maxWidthPx: number): string {
+    const maxChars = Math.floor(maxWidthPx / INFO_CHAR_WIDTH);
+    if (text.length <= maxChars) return text;
+    if (maxChars < 8) return text.substring(0, 5) + '...';
+    return text.substring(0, maxChars - 3) + '...';
   }
 }

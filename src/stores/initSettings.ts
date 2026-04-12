@@ -10,7 +10,6 @@ let initializationPromise: Promise<void> | null = null;
 function collectSettings(): PersistedSettings {
   return {
     theme: useThemeStore.getState().theme,
-    zoomLevel: useCanvasStore.getState().zoomLevel,
     showDetectionOverlay: useCanvasStore.getState().showDetectionOverlay,
     similarityThreshold: useGroupingStore.getState().similarityThreshold,
     timeGapSeconds: useGroupingStore.getState().timeGapSeconds,
@@ -45,7 +44,6 @@ export async function initSettings(): Promise<void> {
 
     // 应用到各 store
     useThemeStore.getState().setTheme(saved.theme);
-    useCanvasStore.getState().setZoom(saved.zoomLevel);
     if (saved.showDetectionOverlay) {
       useCanvasStore.getState().toggleDetectionOverlay();
     }
@@ -63,7 +61,7 @@ export async function initSettings(): Promise<void> {
 
     useCanvasStore.subscribe(
       (state, prev) => {
-        if (state.zoomLevel !== prev.zoomLevel || state.showDetectionOverlay !== prev.showDetectionOverlay) {
+        if (state.showDetectionOverlay !== prev.showDetectionOverlay) {
           scheduleSave();
         }
       },

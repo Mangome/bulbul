@@ -51,7 +51,6 @@ describe('useKeyboard', () => {
       selectedCount: 0,
     });
     useCanvasStore.setState({
-      zoomLevel: 1.0,
       currentGroupIndex: 0,
       groupCount: 2,
     });
@@ -169,18 +168,6 @@ describe('useKeyboard', () => {
     const state = useSelectionStore.getState();
     expect(state.selectedCount).toBe(3);
     expect(state.selectedHashes.has('h1')).toBe(true);
-  });
-
-  it('Ctrl+= 放大', () => {
-    mount();
-    fireKey('=', { ctrlKey: true });
-    expect(useCanvasStore.getState().zoomLevel).toBeCloseTo(1.1, 1);
-  });
-
-  it('Ctrl+- 缩小', () => {
-    mount();
-    fireKey('-', { ctrlKey: true });
-    expect(useCanvasStore.getState().zoomLevel).toBeCloseTo(0.9, 1);
   });
 
   it('Escape 有选中时清除选择', () => {

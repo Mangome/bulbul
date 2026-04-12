@@ -179,10 +179,8 @@ describe('InfiniteCanvas', () => {
     }
 
     useCanvasStore.setState({
-      zoomLevel: 1.0,
       currentGroupIndex: 0,
       groupCount: 0,
-      fitCounter: 0,
     });
     useSelectionStore.setState({
       selectedHashes: new Set(),

@@ -1,37 +1,4 @@
-## MODIFIED Requirements
-
-### Requirement: 控制栏缩放控件
-
-FloatingControlBar SHALL 在主窗口底部居中悬浮显示，包含缩放滑块（范围 10%~300%）、`[-]` 缩小按钮、`[+]` 放大按钮、当前缩放百分比文本。所有缩放操作 SHALL 同步到 useCanvasStore。样式 SHALL 使用 CSS Module（`FloatingControlBar.module.css`）实现，支持亮色/暗色主题自动适配。SHALL 在挂载时播放从底部滑入的入场动画。
-
-#### Scenario: 拖动滑块调整缩放
-
-- **WHEN** 用户拖动缩放滑块到 150% 位置
-- **THEN** useCanvasStore 的 zoomLevel 更新为 1.5，画布缩放同步变化
-
-#### Scenario: 点击放大/缩小按钮
-
-- **WHEN** 用户点击 `[+]` 按钮
-- **THEN** zoomLevel 按步长 0.1 增加，不超过 3.0
-
-#### Scenario: 缩放百分比实时显示
-
-- **WHEN** 缩放级别为 1.5
-- **THEN** 控制栏显示 "150%"
-
-### Requirement: 适应窗口和实际大小
-
-控制栏 SHALL 提供「适应窗口」和「实际大小」按钮。
-
-#### Scenario: 点击适应窗口
-
-- **WHEN** 用户点击「适应窗口」按钮
-- **THEN** 调用 useCanvasStore 的 fitToWindow 方法，画布缩放至所有内容可见
-
-#### Scenario: 点击实际大小
-
-- **WHEN** 用户点击「实际大小」按钮
-- **THEN** 调用 useCanvasStore 的 resetZoom 方法，缩放重置为 100%
+## Requirements
 
 ### Requirement: 导出按钮入口
 

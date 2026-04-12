@@ -41,11 +41,11 @@ function makeDimensions(
 
 describe('computeColumnWidth', () => {
   it('应按公式计算列宽', () => {
-    // viewportWidth=1000, paddingX=24*2=48, thumbnailSize=160, gap=8
-    // columns = floor((1000 - 48 + 8) / (160 + 8)) = floor(960/168) = 5
-    // columnWidth = (1000 - 48 - 8*4) / 5 = (952 - 32) / 5 = 184
+    // viewportWidth=1000, paddingX=32*2=64, thumbnailSize=450, gap=12
+    // columns = floor((1000 - 64 + 12) / (450 + 12)) = floor(948/462) = 2
+    // columnWidth = (1000 - 64 - 12*1) / 2 = 924 / 2 = 462
     const width = computeColumnWidth(1000);
-    expect(width).toBe(184);
+    expect(width).toBe(462);
   });
 
   it('应支持自定义配置', () => {
@@ -224,26 +224,20 @@ describe('computeVerticalGridLayout', () => {
 
   it('最后一行居左排列', () => {
     // 创建一个组，图片数量不足以填满最后一行
-    // viewportWidth=1000, thumbnailSize=160, gap=8, paddingX=24
-    // columns = floor((1000 - 48 + 8) / (160 + 8)) = floor(960/168) = 5
-    // 需要 7 张图：第一行 5 张，第二行 2 张
-    const groups = [makeGroup(1, ['a', 'b', 'c', 'd', 'e', 'f', 'g'])];
+    // viewportWidth=1000, thumbnailSize=450, gap=12, paddingX=32
+    // columns = floor((1000 - 64 + 12) / (450 + 12)) = floor(948/462) = 2
+    // 需要 3 张图：第一行 2 张，第二行 1 张
+    const groups = [makeGroup(1, ['a', 'b', 'c'])];
     const dims = makeDimensions([
       ['a', 3000, 2000],
       ['b', 3000, 2000],
       ['c', 3000, 2000],
-      ['d', 3000, 2000],
-      ['e', 3000, 2000],
-      ['f', 3000, 2000],
-      ['g', 3000, 2000],
     ]);
 
     const result = computeVerticalGridLayout(groups, dims, viewportWidth);
 
-    // 第二行第一张图 (f) 的 x 坐标应与第一行第一张图 (a) 相同
-    expect(result.items[5].x).toBe(result.items[0].x);
-    // 第二行第二张图 (g) 在第一张右边
-    expect(result.items[6].x).toBeGreaterThan(result.items[5].x);
+    // 第二行第一张图 (c) 的 x 坐标应与第一行第一张图 (a) 相同
+    expect(result.items[2].x).toBe(result.items[0].x);
   });
 
   it('内容水平居中', () => {
@@ -271,5 +265,105 @@ describe('computeVerticalGridLayout', () => {
 
     expect(result.pages[0].columnWidth).toBe(result.pages[1].columnWidth);
     expect(result.columnWidth).toBe(result.pages[0].columnWidth);
+  });
+
+  // ─── 单图分组紧凑布局 ─────────────────────────────────
+
+  it('单图分组标题使用紧凑模式', () => {
+    const groups = [
+      makeGroup(1, ['a']),        // 单图
+      makeGroup(2, ['b', 'c']),   // 多图
+    ];
+    const dims = makeDimensions([
+      ['a', 3000, 2000],
+      ['b', 3000, 2000],
+      ['c', 3000, 2000],
+    ]);
+
+    const result = computeVerticalGridLayout(groups, dims, viewportWidth);
+
+    expect(result.groupTitles[0].compact).toBe(true);
+    expect(result.groupTitles[1].compact).toBe(false);
+  });
+
+  it('单图分组标题高度小于多图分组', () => {
+    const groups = [
+      makeGroup(1, ['a']),
+      makeGroup(2, ['b', 'c']),
+    ];
+    const dims = makeDimensions([
+      ['a', 3000, 2000],
+      ['b', 3000, 2000],
+      ['c', 3000, 2000],
+    ]);
+
+    const result = computeVerticalGridLayout(groups, dims, viewportWidth);
+
+    expect(result.groupTitles[0].height).toBe(28);
+    expect(result.groupTitles[1].height).toBe(DEFAULT_LAYOUT_CONFIG.groupTitleHeight);
+  });
+
+  it('单图分组图片在内容块内居中', () => {
+    const groups = [makeGroup(1, ['a'])];
+    const dims = makeDimensions([['a', 3000, 2000]]);
+
+    const result = computeVerticalGridLayout(groups, dims, viewportWidth);
+    const item = result.items[0];
+    const title = result.groupTitles[0];
+
+    // 图片应在内容块的水平中心
+    const itemCenterX = item.x + item.width / 2;
+    const blockCenterX = title.x + title.width / 2;
+    expect(itemCenterX).toBeCloseTo(blockCenterX);
+  });
+
+  it('多图分组不受紧凑布局影响', () => {
+    const groups = [makeGroup(1, ['a', 'b', 'c'])];
+    const dims = makeDimensions([
+      ['a', 3000, 2000],
+      ['b', 3000, 2000],
+      ['c', 3000, 2000],
+    ]);
+
+    const result = computeVerticalGridLayout(groups, dims, viewportWidth);
+
+    // 多图分组使用标准标题高度
+    expect(result.groupTitles[0].height).toBe(DEFAULT_LAYOUT_CONFIG.groupTitleHeight);
+    expect(result.groupTitles[0].compact).toBe(false);
+  });
+
+  it('单图分组间距更紧凑', () => {
+    const groups = [
+      makeGroup(1, ['a']),
+      makeGroup(2, ['b']),
+    ];
+    const dims = makeDimensions([
+      ['a', 3000, 2000],
+      ['b', 3000, 2000],
+    ]);
+
+    const singleResult = computeVerticalGridLayout(groups, dims, viewportWidth);
+
+    // 对比多图分组间距
+    const multiGroups = [
+      makeGroup(1, ['a', 'x']),
+      makeGroup(2, ['b', 'y']),
+    ];
+    const multiDims = makeDimensions([
+      ['a', 3000, 2000],
+      ['x', 3000, 2000],
+      ['b', 3000, 2000],
+      ['y', 3000, 2000],
+    ]);
+
+    const multiResult = computeVerticalGridLayout(multiGroups, multiDims, viewportWidth);
+
+    // 单图分组之间的间距应小于多图分组
+    const singleGap = singleResult.pages[1].offsetY
+      - singleResult.pages[0].offsetY - singleResult.pages[0].contentHeight;
+    const multiGap = multiResult.pages[1].offsetY
+      - multiResult.pages[0].offsetY - multiResult.pages[0].contentHeight;
+
+    expect(singleGap).toBeLessThan(multiGap);
   });
 });

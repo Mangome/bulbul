@@ -120,16 +120,6 @@ describe('CanvasImageItem', () => {
     });
   });
 
-  describe('updateZoomVisibility', () => {
-    it('更新缩放可见性不抛异常', () => {
-      expect(() => {
-        canvasItem.updateZoomVisibility(0.5);
-        canvasItem.updateZoomVisibility(1.0);
-        canvasItem.updateZoomVisibility(2.0);
-      }).not.toThrow();
-    });
-  });
-
   describe('destroy', () => {
     it('destroy 清理资源不抛异常', () => {
       canvasItem.setImageInfo('test.nef');

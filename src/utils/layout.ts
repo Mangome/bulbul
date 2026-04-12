@@ -77,6 +77,8 @@ export interface GroupTitleItem {
   y: number;
   width: number;
   height: number;
+  /** 紧凑模式（单图分组），使用更小的字体和更淡的颜色 */
+  compact?: boolean;
 }
 
 /** 单个分组页面的布局 */
@@ -163,10 +165,17 @@ export function computeVerticalGridLayout(
   const pages: GroupPageLayout[] = [];
 
   let currentY = config.paddingTop;
+  let lastGroupGap = config.groupGap;
 
   for (let gi = 0; gi < groups.length; gi++) {
     const group = groups[gi];
     const pageStartY = currentY;
+    const isSingleImage = group.pictureHashes.length === 1;
+
+    // 单图分组使用紧凑参数
+    const titleHeight = isSingleImage ? 28 : config.groupTitleHeight;
+    const paddingY = isSingleImage ? 8 : config.paddingY;
+    const groupGap = isSingleImage ? 24 : config.groupGap;
 
     // 内容块宽度，水平居中
     const contentBlockWidth = columns * columnWidth + (columns - 1) * config.gap;
@@ -179,11 +188,12 @@ export function computeVerticalGridLayout(
       x: contentOffsetX,
       y: currentY,
       width: contentBlockWidth,
-      height: config.groupTitleHeight,
+      height: titleHeight,
+      compact: isSingleImage,
     };
     groupTitles.push(titleItem);
 
-    currentY += config.groupTitleHeight + config.paddingY;
+    currentY += titleHeight + paddingY;
 
     const pageItems: LayoutItem[] = [];
 
@@ -209,6 +219,11 @@ export function computeVerticalGridLayout(
     let rowStartY = currentY;
     let rowMaxHeight = 0;
 
+    // 单图分组居中偏移量
+    const singleImageCenterOffset = isSingleImage
+      ? (contentBlockWidth - columnWidth) / 2
+      : 0;
+
     for (const hash of group.pictureHashes) {
       const dim = imageDimensions.get(hash);
       const aspectRatio = dim ? dim.width / dim.height : DEFAULT_ASPECT_RATIO;
@@ -216,7 +231,7 @@ export function computeVerticalGridLayout(
       const renderWidth = columnWidth;
       const renderHeight = columnWidth / aspectRatio;
 
-      const x = contentOffsetX + colIdx * (columnWidth + config.gap);
+      const x = contentOffsetX + singleImageCenterOffset + colIdx * (columnWidth + config.gap);
       const item: LayoutItem = {
         hash,
         groupId: group.id,
@@ -257,7 +272,7 @@ export function computeVerticalGridLayout(
       rowStartY += rowMaxHeight;
     }
 
-    const contentBottomY = rowStartY + config.paddingY;
+    const contentBottomY = rowStartY + paddingY;
     const contentHeight = contentBottomY - pageStartY;
 
     allItems.push(...pageItems);
@@ -276,10 +291,11 @@ export function computeVerticalGridLayout(
     });
 
     // 分组间间距
-    currentY = contentBottomY + config.groupGap;
+    currentY = contentBottomY + groupGap;
+    lastGroupGap = groupGap;
   }
 
-  const totalHeight = currentY - config.groupGap + config.paddingBottom;
+  const totalHeight = currentY - lastGroupGap + config.paddingBottom;
 
   return {
     items: allItems,

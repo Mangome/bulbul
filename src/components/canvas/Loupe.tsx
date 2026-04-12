@@ -14,11 +14,11 @@ import styles from './Loupe.module.css';
 // ─── 常量 ─────────────────────────────────────────────
 
 /** 放大镜长边占视口短边的比例 */
-const LOUPE_RATIO = 0.40;
+const LOUPE_RATIO = 0.60;
 /** 放大镜长边最小像素 */
-const LOUPE_MIN = 200;
+const LOUPE_MIN = 300;
 /** 放大镜长边最大像素 */
-const LOUPE_MAX = 600;
+const LOUPE_MAX = 900;
 
 const OFFSET_X = 20;
 const OFFSET_Y = 20;
@@ -59,7 +59,6 @@ export interface LoupeProps {
   mouseX: number;
   mouseY: number;
   itemRect: ItemRect | null;
-  zoom: number;
   scrollY: number;
   onSourceRectChange: (rect: LoupeSourceRect | null) => void;
   metadataMap: Map<string, ImageMetadata>;
@@ -108,7 +107,6 @@ export const Loupe = forwardRef<LoupeHandle, LoupeProps>(function Loupe(
     mouseX,
     mouseY,
     itemRect,
-    zoom,
     scrollY,
     onSourceRectChange,
     metadataMap,
@@ -247,9 +245,9 @@ export const Loupe = forwardRef<LoupeHandle, LoupeProps>(function Loupe(
     const src = orientedCanvasRef.current;
 
     // 坐标映射：屏幕 → 内容 → 缩略图相对 → medium 像素坐标
-    const offsetY = -scrollY * zoom + DEFAULT_LAYOUT_CONFIG.paddingTop;
-    const contentX = mouseX / zoom;
-    const contentY = (mouseY - offsetY) / zoom;
+    const offsetY = -scrollY + DEFAULT_LAYOUT_CONFIG.paddingTop;
+    const contentX = mouseX;
+    const contentY = mouseY - offsetY;
     const relX = (contentX - itemRect.x) / itemRect.width;
     const relY = (contentY - itemRect.y) / itemRect.height;
 
@@ -283,7 +281,7 @@ export const Loupe = forwardRef<LoupeHandle, LoupeProps>(function Loupe(
     const thumbW = (sourceW / srcW) * itemRect.width;
     const thumbH = (sourceH / srcH) * itemRect.height;
     onSourceRectChange({ x: thumbX, y: thumbY, w: thumbW, h: thumbH });
-  }, [opacity, mouseX, mouseY, itemRect, zoom, scrollY, hash, metadataMap, onSourceRectChange, loupeSize.w, loupeSize.h]);
+  }, [opacity, mouseX, mouseY, itemRect, scrollY, hash, metadataMap, onSourceRectChange, loupeSize.w, loupeSize.h]);
 
   // ── 定位计算 ──
 

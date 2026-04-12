@@ -2,7 +2,7 @@
 // 右侧控制面板 (RightControlPanel)
 //
 // 紧凑的垂直图标工具栏。
-// 包含：缩放控件、视图快捷、主题切换。
+// 包含：检测框切换、分组参数、切换目录、主题切换。
 // ============================================================
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -15,44 +15,7 @@ import { useAppStore } from '../../stores/useAppStore';
 import { useProcessing } from '../../hooks/useProcessing';
 import cls from './RightControlPanel.module.css';
 
-// ─── 常量 ─────────────────────────────────────────────
-
-const MIN_ZOOM_PERCENT = 10;
-const MAX_ZOOM_PERCENT = 500;
-
 // ─── SVG 图标 ────────────────────────────────────────
-
-function IconMinus() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <path d="M3 7h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function IconPlus() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <path d="M7 3v8M3 7h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function IconFit() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <path d="M2 5V3a1 1 0 0 1 1-1h2M9 2h2a1 1 0 0 1 1 1v2M12 9v2a1 1 0 0 1-1 1H9M5 12H3a1 1 0 0 1-1-1V9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function IconActual() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-      <text x="1" y="10" fontSize="8" fontWeight="700" fill="currentColor" fontFamily="system-ui" textAnchor="start">1:1</text>
-    </svg>
-  );
-}
 
 function IconSun() {
   return (
@@ -103,13 +66,6 @@ interface RightControlPanelProps {
 }
 
 export function RightControlPanel({ onSwitchFolder }: RightControlPanelProps) {
-  const zoomLevel = useCanvasStore((s) => s.zoomLevel);
-  const setZoom = useCanvasStore((s) => s.setZoom);
-  const zoomIn = useCanvasStore((s) => s.zoomIn);
-  const zoomOut = useCanvasStore((s) => s.zoomOut);
-  const fitToWindow = useCanvasStore((s) => s.fitToWindow);
-  const resetZoom = useCanvasStore((s) => s.resetZoom);
-
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
 
@@ -169,15 +125,6 @@ export function RightControlPanel({ onSwitchFolder }: RightControlPanelProps) {
     [setTimeGapSeconds, scheduleRegroup],
   );
 
-  const handleSliderChange = useCallback(
-    (value: number) => {
-      setZoom(value / 100);
-    },
-    [setZoom],
-  );
-
-  const zoomPercent = Math.round(zoomLevel * 100);
-
   return (
     <motion.div
       className={cls.panel}
@@ -187,38 +134,7 @@ export function RightControlPanel({ onSwitchFolder }: RightControlPanelProps) {
       role="toolbar"
       aria-label="画布控制面板"
     >
-      {/* 缩放 −/+ */}
-      <button className={cls.iconBtn} onClick={zoomOut} title="缩小">
-        <IconMinus />
-      </button>
-
-      <div className={cls.sliderWrapper}>
-        <Slider
-          min={MIN_ZOOM_PERCENT}
-          max={MAX_ZOOM_PERCENT}
-          value={zoomPercent}
-          step={5}
-          onChange={handleSliderChange}
-          style={{ width: 130 }}
-          aria-label="缩放比例"
-        />
-      </div>
-
-      <button className={cls.iconBtn} onClick={zoomIn} title="放大">
-        <IconPlus />
-      </button>
-
-      <span className={cls.zoomText}>{zoomPercent}%</span>
-
-      <div className={cls.sep} />
-
-      {/* 视图 */}
-      <button className={cls.iconBtn} onClick={fitToWindow} title="适应窗口">
-        <IconFit />
-      </button>
-      <button className={cls.iconBtn} onClick={resetZoom} title="实际大小">
-        <IconActual />
-      </button>
+      {/* 检测框切换 */}
       <button
         className={`${cls.iconBtn} ${showDetectionOverlay ? cls.iconBtnActive : ''}`}
         onClick={toggleDetectionOverlay}

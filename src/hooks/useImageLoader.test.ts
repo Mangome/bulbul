@@ -91,13 +91,14 @@ describe('ImageLRUCache', () => {
 // ─── getSizeForDisplay ───────────────────────────────
 
 describe('getSizeForDisplay', () => {
-  it('显示宽度 ≤ 200px 返回 thumbnail', () => {
+  it('显示宽度 ≤ 600px 返回 thumbnail', () => {
     expect(getSizeForDisplay(50)).toBe('thumbnail');
     expect(getSizeForDisplay(200)).toBe('thumbnail');
+    expect(getSizeForDisplay(600)).toBe('thumbnail');
   });
 
-  it('显示宽度 > 200px 返回 medium', () => {
-    expect(getSizeForDisplay(201)).toBe('medium');
+  it('显示宽度 > 600px 返回 medium', () => {
+    expect(getSizeForDisplay(601)).toBe('medium');
     expect(getSizeForDisplay(900)).toBe('medium');
   });
 });

@@ -77,23 +77,6 @@ export function useKeyboard({
             }
             return;
           }
-          case '0':
-            e.preventDefault();
-            useCanvasStore.getState().fitToWindow();
-            return;
-          case '1':
-            e.preventDefault();
-            useCanvasStore.getState().resetZoom();
-            return;
-          case '=':
-          case '+':
-            e.preventDefault();
-            useCanvasStore.getState().zoomIn();
-            return;
-          case '-':
-            e.preventDefault();
-            useCanvasStore.getState().zoomOut();
-            return;
         }
         return;
       }

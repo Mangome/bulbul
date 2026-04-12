@@ -1,13 +1,12 @@
 ## Requirements
 
 ### Requirement: Canvas 2D 图片绘制
-系统 SHALL 通过 `CanvasImageItem.draw(ctx, zoom, now)` 方法将图片项绘制到指定的 `CanvasRenderingContext2D` 上。当 `alpha <= 0` 时 SHALL 跳过绘制。
+系统 SHALL 通过 `CanvasImageItem.draw(ctx, zoom, now)` 方法将图片项绘制到指定的 `CanvasRenderingContext2D` 上。当 `alpha <= 0` 时 SHALL 跳过绘制。检测框覆盖层在 `detectionVisible` 为 true 且有检测数据时 SHALL 始终绘制（不再有缩放阈值条件）。
 
 绘制顺序 SHALL 为：
 1. 占位色块或图片（应用 EXIF Orientation）
 2. 检测框覆盖层（当 `detectionVisible` 为 true 且有检测数据时）
-3. 信息覆盖层（缩放阈值控制可见性）
-4. 选中/悬停视觉效果
+3. 选中视觉效果
 
 #### Scenario: 正常图片绘制
 - **WHEN** `draw()` 被调用且 `image` 不为 null 且 `alpha > 0`
@@ -21,9 +20,9 @@
 - **WHEN** `draw()` 被调用且 `alpha <= 0`
 - **THEN** 系统 SHALL 立即返回，不执行任何绘制操作
 
-#### Scenario: 检测框在信息覆盖层之下绘制
+#### Scenario: 检测框始终绘制
 - **WHEN** `draw()` 被调用且 `detectionVisible` 为 true 且 `detectionBoxes` 非空
-- **THEN** 系统 SHALL 在图片/占位色块之后、信息覆盖层之前调用检测框绘制函数
+- **THEN** 系统 SHALL 绘制检测框覆盖层，不受 zoom 值限制
 
 ### Requirement: EXIF Orientation Canvas 2D 变换
 系统 SHALL 根据 EXIF Orientation 值（1-8）对图片应用正确的 `ctx.translate/rotate/scale` 变换，使图片在画布上按正确方向显示。
@@ -92,45 +91,6 @@
 #### Scenario: 选中时不绘制悬停边框
 - **WHEN** item 同时处于悬停和选中状态
 - **THEN** 系统 SHALL 不绘制悬停边框（选中边框已覆盖）
-
-### Requirement: 信息覆盖层绘制（内联）
-系统 SHALL 在图片底部绘制渐变信息覆盖层，包含文件名和拍摄参数 Badge。覆盖层可见性受缩放级别控制。
-
-#### Scenario: 渐变背景
-- **WHEN** 信息覆盖层可见
-- **THEN** 系统 SHALL 在图片底部绘制线性渐变（从 rgba(0,0,0,0) 到 rgba(0,0,0,0.6)），覆盖底部区域
-
-#### Scenario: 文件名绘制
-- **WHEN** 信息覆盖层可见且已设置文件名
-- **THEN** 系统 SHALL 使用 `600 11px system-ui` 字体在左下角绘制白色文件名，padding 为 8px
-
-#### Scenario: 参数 Badge
-- **WHEN** 信息覆盖层可见且有元数据
-- **THEN** 系统 SHALL 绘制光圈/快门/ISO/焦段 Badge（黑色 alpha=0.5 圆角背景，白色 10px 字体），Badge 间距 4px
-
-#### Scenario: 合焦评分 Badge
-- **WHEN** 信息覆盖层可见且有 focusScore
-- **THEN** 系统 SHALL 绘制星级 Badge（★/☆），背景色按评分：5=绿#4CAF50, 4=蓝#2196F3, 3=橙#FF9800, 2/1=红#F44336, alpha=0.75
-
-#### Scenario: 未检测到主体 Badge
-- **WHEN** 信息覆盖层可见且 focusScoreMethod 为 'Undetected'
-- **THEN** 系统 SHALL 绘制灰色（#999999, alpha=0.75）背景的"未检测到主体"Badge
-
-#### Scenario: 缩放淡入
-- **WHEN** zoom >= 0.4
-- **THEN** 信息覆盖层 alpha SHALL 为 1.0
-
-#### Scenario: 缩放过渡
-- **WHEN** 0.3 <= zoom < 0.4
-- **THEN** 信息覆盖层 alpha SHALL 线性从 0 过渡到 1
-
-#### Scenario: 缩放隐藏
-- **WHEN** zoom < 0.3
-- **THEN** 信息覆盖层 SHALL 不绘制
-
-#### Scenario: 文字大小缩放补偿
-- **WHEN** 信息覆盖层绘制
-- **THEN** 系统 SHALL 通过 `ctx.scale(1/zoom, 1/zoom)` 反向补偿画布缩放，使文字保持恒定视觉大小
 
 ### Requirement: AABB 命中检测
 系统 SHALL 通过 `hitTest(contentX, contentY)` 方法判断给定的内容坐标是否落在图片项的矩形区域内。

@@ -24,9 +24,8 @@ use crate::utils::paths::compute_path_hash;
 const THUMBNAIL_WIDTH: u32 = 600;
 
 /// Medium 图片最大宽度（像素）
-/// 对应 1920p 显示器 + 缩放因子 1.25（125%)
-/// 降低这个值可进一步减少内存，但可能影响清晰度
-const MEDIUM_WIDTH: u32 = 1920;
+/// 对应 2560p 显示器，兼顾高分屏清晰度与内存开销
+const MEDIUM_WIDTH: u32 = 2560;
 
 /// 缩略图 JPEG 质量（600px 需要较高质量以保持清晰）
 const THUMBNAIL_QUALITY: u8 = 80;
@@ -251,9 +250,9 @@ mod tests {
 
         // 解码缩略图验证尺寸
         let img = image::load_from_memory(&thumb).unwrap();
-        assert_eq!(img.width(), 200);
-        // 1280 * (200/1920) ≈ 133
-        assert!((img.height() as i32 - 133).abs() <= 1);
+        assert_eq!(img.width(), THUMBNAIL_WIDTH);
+        // 1280 * (600/1920) = 400
+        assert!((img.height() as i32 - 400).abs() <= 1);
     }
 
     #[test]
@@ -262,9 +261,9 @@ mod tests {
         let thumb = generate_thumbnail(&jpeg).unwrap();
 
         let img = image::load_from_memory(&thumb).unwrap();
-        assert_eq!(img.width(), 200);
-        // 1920 * (200/1280) = 300
-        assert!((img.height() as i32 - 300).abs() <= 1);
+        assert_eq!(img.width(), THUMBNAIL_WIDTH);
+        // 1920 * (600/1280) = 900
+        assert!((img.height() as i32 - 900).abs() <= 1);
     }
 
     #[test]

@@ -15,27 +15,8 @@ const noop = vi.fn();
 
 describe('RightControlPanel', () => {
   beforeEach(() => {
-    useCanvasStore.setState({ zoomLevel: 1.0, currentGroupIndex: 0, groupCount: 3 });
+    useCanvasStore.setState({ currentGroupIndex: 0, groupCount: 3 });
     noop.mockClear();
-  });
-
-  it('显示当前缩放百分比', () => {
-    render(<RightControlPanel onSwitchFolder={noop} />);
-    expect(screen.getByText('100%')).toBeDefined();
-  });
-
-  it('点击适应窗口调用 fitToWindow', () => {
-    render(<RightControlPanel onSwitchFolder={noop} />);
-    fireEvent.click(screen.getByTitle('适应窗口'));
-    const state = useCanvasStore.getState();
-    expect(state.zoomLevel).toBe(1.0);
-  });
-
-  it('点击实际大小调用 resetZoom', () => {
-    useCanvasStore.setState({ zoomLevel: 2.0 });
-    render(<RightControlPanel onSwitchFolder={noop} />);
-    fireEvent.click(screen.getByTitle('实际大小'));
-    expect(useCanvasStore.getState().zoomLevel).toBe(1.0);
   });
 
   it('主题切换按钮存在', () => {
@@ -48,5 +29,11 @@ describe('RightControlPanel', () => {
     render(<RightControlPanel onSwitchFolder={noop} />);
     fireEvent.click(screen.getByTitle('切换目录 (Ctrl+O)'));
     expect(noop).toHaveBeenCalledOnce();
+  });
+
+  it('检测框切换按钮存在', () => {
+    render(<RightControlPanel onSwitchFolder={noop} />);
+    const detectionBtn = screen.getByTitle(/显示检测框|隐藏检测框/);
+    expect(detectionBtn).toBeDefined();
   });
 });

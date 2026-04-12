@@ -31,10 +31,6 @@ useKeyboard hook SHALL 监听以下 Ctrl 组合键：
 - `Ctrl+O`: 打开文件夹选择对话框
 - `Ctrl+E`: 导出选中图片
 - `Ctrl+A`: 全选当前分组内所有图片
-- `Ctrl+0`: 适应窗口
-- `Ctrl+1`: 实际大小（100%）
-- `Ctrl+=`: 放大
-- `Ctrl+-`: 缩小
 
 #### Scenario: Ctrl+A 全选当前分组
 
