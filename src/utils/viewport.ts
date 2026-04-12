@@ -116,14 +116,14 @@ export function getVisibleItemsInPage(
  * @param pages 所有分组页面
  * @param pageWidth 单页宽度
  * @param viewport 视口矩形
- * @param bufferRatio 缓冲区比例（默认 0.5）
+ * @param bufferRatio 缓冲区比例（默认 1.0，视口高度的倍数）
  * @returns 所有可见的 LayoutItem 数组
  */
 export function getVisibleItems(
   pages: GroupPageLayout[],
   pageWidth: number,
   viewport: ViewportRect,
-  bufferRatio: number = 0.5,
+  bufferRatio: number = 1.0,
 ): LayoutItem[] {
   if (pages.length === 0) return [];
 

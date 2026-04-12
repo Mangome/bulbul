@@ -270,13 +270,14 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     const diff = diffVisibleItems(prevVisible, newVisible);
 
     // 处理离开视口的元素
+    // 仅 unpin，不主动 evict —— 让 LRU 在容量不足时自然淘汰。
+    // 这样用户小幅滚动回来时可以直接命中缓存，避免占位块闪烁。
     for (const item of diff.leave) {
       const canvasItem = canvasItemsRef.current.get(item.hash);
       if (canvasItem) {
         canvasItem.destroy();
         canvasItemsRef.current.delete(item.hash);
         imageLoaderRef.current?.unpinImage(item.hash);
-        imageLoaderRef.current?.evictImage(item.hash);
       }
     }
 
@@ -936,32 +937,44 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     window.addEventListener('pointerup', handlePointerUp);
     window.addEventListener('keydown', handleKeyDown);
 
+    // ── Resize / DPR 统一处理（rAF 去重，避免竞态） ──
+    // Mac 上拔外接显示器时 ResizeObserver 和 DPR listener 几乎同时触发，
+    // 合并到同一帧执行，避免多次 setupCanvas 导致白块闪烁。
+    let reinitRafId = 0;
+    const scheduleReinit = () => {
+      if (destroyedRef.current) return;
+      if (reinitRafId) return; // 已调度，去重
+      reinitRafId = requestAnimationFrame(() => {
+        reinitRafId = 0;
+        if (destroyedRef.current) return;
+        setupCanvas();
+        const newCtx = ctxRef.current;
+        if (newCtx && bgLayerRef.current) {
+          bgLayerRef.current.updateTheme(useThemeStore.getState().theme, newCtx);
+        }
+        // 重新定位当前分组（DPR 或尺寸变化后坐标系已改变）
+        const { currentGroupIndex } = useCanvasStore.getState();
+        const az = getActualZoom(currentGroupIndex);
+        actualZoomRef.current = az;
+        offsetXRef.current = computeGroupX(currentGroupIndex, az);
+        const vertOffset = computeVerticalOffset(currentGroupIndex, az);
+        offsetYRef.current = -scrollYRef.current * az + vertOffset;
+
+        updateViewport();
+        markDirty();
+      });
+    };
+
     // ── ResizeObserver ──
     const resizeObserver = new ResizeObserver(() => {
-      if (destroyedRef.current) return;
-      setupCanvas();
-      // 重建 DotBackground pattern（因为 ctx 变了）
-      const newCtx = ctxRef.current;
-      if (newCtx && bgLayerRef.current) {
-        bgLayerRef.current.updateTheme(useThemeStore.getState().theme, newCtx);
-      }
-      updateViewport();
-      markDirty();
+      scheduleReinit();
     });
     resizeObserver.observe(container);
 
     // ── DPR 变化监听 ──
     let dprMediaQuery: MediaQueryList | null = null;
     const handleDprChange = () => {
-      if (destroyedRef.current) return;
-      setupCanvas();
-      const newCtx = ctxRef.current;
-      if (newCtx && bgLayerRef.current) {
-        bgLayerRef.current.updateTheme(useThemeStore.getState().theme, newCtx);
-      }
-      updateViewport();
-      markDirty();
-
+      scheduleReinit();
       // 重新监听新 DPR
       dprMediaQuery?.removeEventListener('change', handleDprChange);
       dprMediaQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
@@ -983,6 +996,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
       transitionStateRef.current = null;
       cancelAnimationFrame(rafIdRef.current);
+      cancelAnimationFrame(reinitRafId);
 
       canvas.removeEventListener('wheel', handleWheel);
       canvas.removeEventListener('pointerdown', handlePointerDown);
