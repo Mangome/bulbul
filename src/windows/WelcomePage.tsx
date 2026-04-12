@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { getVersion } from '@tauri-apps/api/app';
 import { selectFolder } from '../services/fileService';
 import appIcon from '../assets/app-icon.png';
 import cls from './WelcomePage.module.css';
@@ -7,6 +8,11 @@ import cls from './WelcomePage.module.css';
 function WelcomePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [version, setVersion] = useState('');
+
+  useEffect(() => {
+    getVersion().then(setVersion);
+  }, []);
 
   const handleSelectFolder = async () => {
     try {
@@ -34,6 +40,7 @@ function WelcomePage() {
         <img src={appIcon} alt="Bulbul" className={cls.icon} draggable={false} />
         <h1 className={cls.title}>Bulbul</h1>
         <p className={cls.subtitle}>RAW 图像快速筛选</p>
+        {version && <p className={cls.version}>v{version}</p>}
         <p className={cls.description}>
         </p>
 

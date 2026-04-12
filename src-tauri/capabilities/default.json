@@ -10,6 +10,7 @@
     "core:window:allow-set-focus",
     "core:window:allow-show",
     "core:event:default",
+    "core:app:default",
     "opener:default",
     "dialog:default",
     "dialog:allow-open",
