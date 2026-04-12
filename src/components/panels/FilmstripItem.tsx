@@ -34,14 +34,25 @@ export const FilmstripItem = memo(function FilmstripItem({
 
   useEffect(() => {
     let cancelled = false;
+    let objectUrl: string | null = null;
+
     imageService
       .getImageUrl(representativeHash, 'thumbnail')
-      .then((url) => {
-        if (!cancelled) setThumbUrl(url);
+      .then((assetUrl) => {
+        if (cancelled) return;
+        // 通过 fetch + blob 加载，避免生产构建中 <img> 直接引用 asset:// 协议失败
+        return fetch(assetUrl).then((r) => r.blob());
+      })
+      .then((blob) => {
+        if (cancelled || !blob) return;
+        objectUrl = URL.createObjectURL(blob);
+        setThumbUrl(objectUrl);
       })
       .catch(() => {});
+
     return () => {
       cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [representativeHash]);
 
