@@ -6,9 +6,10 @@ mod utils;
 
 use std::sync::{Arc, Mutex};
 
-use tauri::{image::Image, Manager};
+use tauri::Manager;
 
 use state::SessionState;
+use utils::icon::set_window_icons;
 use utils::paths::get_cache_base_dir;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -45,12 +46,9 @@ pub fn run() {
             let session = SessionState::with_cache_dir(cache_base);
             app.manage(Arc::new(Mutex::new(session)));
 
-            // 为所有窗口设置图标（dev 模式下 bundle.icon 不会嵌入 exe）
-            let icon_bytes = include_bytes!("../icons/icon.png");
-            if let Ok(icon) = Image::from_bytes(icon_bytes) {
-                for (_label, window) in app.webview_windows() {
-                    let _ = window.set_icon(icon.clone());
-                }
+            // 为所有窗口设置图标（同时设置 ICON_SMALL + ICON_BIG）
+            for (_label, window) in app.webview_windows() {
+                set_window_icons(&window);
             }
 
             Ok(())
