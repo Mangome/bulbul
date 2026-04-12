@@ -39,7 +39,7 @@ import type { ImageMetadata } from '../../types';
 import { useCanvasStore } from '../../stores/useCanvasStore';
 import { useSelectionStore } from '../../stores/useSelectionStore';
 import { useThemeStore } from '../../stores/useThemeStore';
-import { Loupe, type LoupeHandle, type LoupeSourceRect } from './Loupe';
+import { Loupe, type LoupeSourceRect } from './Loupe';
 import type { ItemRect } from './Loupe';
 
 // ─── 常量 ─────────────────────────────────────────────
@@ -155,12 +155,6 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     mouseY: number;
     itemRect: ItemRect | null;
   }>({ visible: false, hash: null, mouseX: 0, mouseY: 0, itemRect: null });
-
-  // ── Loupe ref ──
-  const loupeRef = useRef<LoupeHandle | null>(null);
-
-  // ── 放大镜倍率状态（提升到 InfiniteCanvas 以便 renderFrame 计算方框） ──
-  const loupeMagnificationRef = useRef(3.0);
 
   // ── 放大镜区域方框（由 Loupe 回调设置，renderFrame 中绘制） ──
   const loupeSourceRectRef = useRef<LoupeSourceRect | null>(null);
@@ -573,13 +567,9 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         }
         markDirty();
       } else {
-        // 普通滚轮：放大镜可见时调节倍率，否则纵向滚动
-        if (magnifierState.visible && loupeRef.current) {
-          loupeRef.current.adjustMagnification(e.deltaY);
-        } else {
-          const zoom = zoomLevelRef.current;
-          scrollYRef.current = clampScrollY(scrollYRef.current + e.deltaY / zoom);
-        }
+        // 普通滚轮：纵向滚动
+        const scrollZoom = zoomLevelRef.current;
+        scrollYRef.current = clampScrollY(scrollYRef.current + e.deltaY / scrollZoom);
 
         const now = performance.now();
         if (now - lastWheelUpdateTimeRef.current >= WHEEL_THROTTLE_MS) {
@@ -1033,7 +1023,6 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         }}
       />
       <Loupe
-        ref={loupeRef}
         visible={magnifierState.visible}
         hash={magnifierState.hash}
         mouseX={magnifierState.mouseX}
@@ -1041,8 +1030,6 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         itemRect={magnifierState.itemRect}
         zoom={zoomLevelRef.current}
         scrollY={scrollYRef.current}
-        magnification={loupeMagnificationRef.current}
-        onMagnificationChange={(mag) => { loupeMagnificationRef.current = mag; markDirty(); }}
         onSourceRectChange={(rect) => { loupeSourceRectRef.current = rect; markDirty(); }}
         metadataMap={metadataMap}
         viewportWidth={screenWidthRef.current}

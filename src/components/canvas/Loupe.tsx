@@ -1,24 +1,27 @@
 // ============================================================
 // 放大镜组件 (Loupe)
 //
-// HTML overlay React 组件，跟随鼠标显示方形圆角放大镜视窗。
-// 鼠标在缩略图上的位置精确映射到 medium 质量全图对应区域。
-// 支持滚轮调节放大倍率（1.5x-10x），EXIF orientation 正确处理。
+// HTML overlay React 组件，跟随鼠标显示与原图同比例的放大镜视窗。
+// 直接显示 medium 图 1:1 像素细节，鼠标位置映射到 medium 对应区域。
+// 完整 EXIF orientation 处理。
 // ============================================================
 
-import { useState, useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 'react';
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import type { ImageMetadata } from '../../types';
 import { DEFAULT_LAYOUT_CONFIG } from '../../utils/layout';
 import styles from './Loupe.module.css';
 
 // ─── 常量 ─────────────────────────────────────────────
 
-const LOUPE_SIZE = 200;
+/** 放大镜长边占视口短边的比例 */
+const LOUPE_RATIO = 0.40;
+/** 放大镜长边最小像素 */
+const LOUPE_MIN = 200;
+/** 放大镜长边最大像素 */
+const LOUPE_MAX = 600;
+
 const OFFSET_X = 20;
-const OFFSET_Y = 10;
-const MIN_MAGNIFICATION = 1.5;
-const MAX_MAGNIFICATION = 10;
-const DEFAULT_MAGNIFICATION = 3.0;
+const OFFSET_Y = 20;
 const FADE_IN_MS = 150;
 const FADE_OUT_MS = 100;
 
@@ -58,8 +61,6 @@ export interface LoupeProps {
   itemRect: ItemRect | null;
   zoom: number;
   scrollY: number;
-  magnification: number;
-  onMagnificationChange: (mag: number) => void;
   onSourceRectChange: (rect: LoupeSourceRect | null) => void;
   metadataMap: Map<string, ImageMetadata>;
   viewportWidth: number;
@@ -67,8 +68,35 @@ export interface LoupeProps {
 }
 
 export interface LoupeHandle {
-  adjustMagnification: (deltaY: number) => void;
-  getMagnification: () => number;
+  // 保留接口以免破坏调用方，但不再需要倍率调节
+}
+
+// ─── 放大镜尺寸计算 ───────────────────────────────────
+
+/** 根据图片宽高比和视口大小，计算放大镜的 CSS 尺寸 */
+function computeLoupeSize(
+  imgW: number,
+  imgH: number,
+  vpW: number,
+  vpH: number,
+): { w: number; h: number } {
+  const aspect = imgW / imgH; // > 1 横图，< 1 竖图
+  const vpShort = Math.min(vpW, vpH);
+  let longSide = Math.round(vpShort * LOUPE_RATIO);
+  longSide = Math.max(LOUPE_MIN, Math.min(LOUPE_MAX, longSide));
+
+  let w: number;
+  let h: number;
+  if (aspect >= 1) {
+    // 横图或正方形：宽为长边
+    w = longSide;
+    h = Math.round(longSide / aspect);
+  } else {
+    // 竖图：高为长边
+    h = longSide;
+    w = Math.round(longSide * aspect);
+  }
+  return { w, h };
 }
 
 // ─── Component ────────────────────────────────────────
@@ -82,8 +110,6 @@ export const Loupe = forwardRef<LoupeHandle, LoupeProps>(function Loupe(
     itemRect,
     zoom,
     scrollY,
-    magnification: magnificationProp,
-    onMagnificationChange,
     onSourceRectChange,
     metadataMap,
     viewportWidth,
@@ -95,30 +121,12 @@ export const Loupe = forwardRef<LoupeHandle, LoupeProps>(function Loupe(
   const prevHashRef = useRef<string | null>(null);
   const mediumBitmapRef = useRef<ImageBitmap | null>(null);
   const orientedCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const magnificationRef = useRef(DEFAULT_MAGNIFICATION);
 
-  // 同步外部 magnification
-  useEffect(() => {
-    magnificationRef.current = magnificationProp;
-  }, [magnificationProp]);
   const [opacity, setOpacity] = useState(0);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadAbortRef = useRef<AbortController | null>(null);
 
-  // ── 倍率调节（imperative） ──
-
-  const adjustMagnification = useCallback((deltaY: number) => {
-    const old = magnificationRef.current;
-    const next = old * (1 - deltaY * 0.005);
-    const clamped = Math.min(MAX_MAGNIFICATION, Math.max(MIN_MAGNIFICATION, next));
-    magnificationRef.current = clamped;
-    onMagnificationChange(clamped);
-  }, [onMagnificationChange]);
-
-  useImperativeHandle(ref, () => ({
-    adjustMagnification,
-    getMagnification: () => magnificationRef.current,
-  }), [adjustMagnification]);
+  useImperativeHandle(ref, () => ({}), []);
 
   // ── Medium ImageBitmap 加载 + 离屏 canvas 预旋转 ──
 
@@ -204,6 +212,13 @@ export const Loupe = forwardRef<LoupeHandle, LoupeProps>(function Loupe(
     };
   }, [visible]);
 
+  // ── 计算放大镜尺寸 ──
+
+  const oriented = orientedCanvasRef.current;
+  const loupeSize = oriented
+    ? computeLoupeSize(oriented.width, oriented.height, viewportWidth, viewportHeight)
+    : { w: 300, h: 200 };
+
   // ── 绘制逻辑 ──
 
   useEffect(() => {
@@ -223,66 +238,58 @@ export const Loupe = forwardRef<LoupeHandle, LoupeProps>(function Loupe(
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = LOUPE_SIZE * dpr;
-    canvas.height = LOUPE_SIZE * dpr;
-    canvas.style.width = LOUPE_SIZE + 'px';
-    canvas.style.height = LOUPE_SIZE + 'px';
+    canvas.width = loupeSize.w * dpr;
+    canvas.height = loupeSize.h * dpr;
+    canvas.style.width = loupeSize.w + 'px';
+    canvas.style.height = loupeSize.h + 'px';
     ctx.scale(dpr, dpr);
 
-    const oriented = orientedCanvasRef.current;
-    const M = magnificationRef.current;
-    const meta = hash ? metadataMap.get(hash) : null;
+    const src = orientedCanvasRef.current;
 
-    // 坐标映射：屏幕 → 内容 → 缩略图相对 → medium 逻辑坐标
+    // 坐标映射：屏幕 → 内容 → 缩略图相对 → medium 像素坐标
     const offsetY = -scrollY * zoom + DEFAULT_LAYOUT_CONFIG.paddingTop;
     const contentX = mouseX / zoom;
     const contentY = (mouseY - offsetY) / zoom;
     const relX = (contentX - itemRect.x) / itemRect.width;
     const relY = (contentY - itemRect.y) / itemRect.height;
 
-    // 逻辑尺寸（后端已为 orientation 5-8 交换宽高）
-    const logicalW = meta?.imageWidth ?? oriented.width;
-    const logicalH = meta?.imageHeight ?? oriented.height;
+    const srcW = src.width;
+    const srcH = src.height;
 
-    const logicalX = relX * logicalW;
-    const logicalY = relY * logicalH;
+    const centerX = relX * srcW;
+    const centerY = relY * srcH;
 
-    // 放大源区域大小
-    const sourceW = LOUPE_SIZE * logicalW / (M * itemRect.width * zoom);
-    const sourceH = LOUPE_SIZE * logicalH / (M * itemRect.height * zoom);
+    // 1:1 像素映射：放大镜 CSS 尺寸 = medium 源区域像素数
+    const sourceW = loupeSize.w;
+    const sourceH = loupeSize.h;
 
-    let sx = logicalX - sourceW / 2;
-    let sy = logicalY - sourceH / 2;
+    let sx = centerX - sourceW / 2;
+    let sy = centerY - sourceH / 2;
 
     // 边界 clamp
     if (sx < 0) sx = 0;
     if (sy < 0) sy = 0;
-    if (sx + sourceW > logicalW) sx = logicalW - sourceW;
-    if (sy + sourceH > logicalH) sy = logicalH - sourceH;
+    if (sx + sourceW > srcW) sx = srcW - sourceW;
+    if (sy + sourceH > srcH) sy = srcH - sourceH;
     if (sx < 0) sx = 0;
     if (sy < 0) sy = 0;
 
-    ctx.clearRect(0, 0, LOUPE_SIZE, LOUPE_SIZE);
-    ctx.drawImage(oriented, sx, sy, sourceW, sourceH, 0, 0, LOUPE_SIZE, LOUPE_SIZE);
+    ctx.clearRect(0, 0, loupeSize.w, loupeSize.h);
+    ctx.drawImage(src, sx, sy, sourceW, sourceH, 0, 0, loupeSize.w, loupeSize.h);
 
     // 将源区域映射回缩略图内容坐标，通知 InfiniteCanvas 绘制方框
-    if (itemRect) {
-      const thumbX = itemRect.x + (sx / logicalW) * itemRect.width;
-      const thumbY = itemRect.y + (sy / logicalH) * itemRect.height;
-      const thumbW = (sourceW / logicalW) * itemRect.width;
-      const thumbH = (sourceH / logicalH) * itemRect.height;
-      onSourceRectChange({ x: thumbX, y: thumbY, w: thumbW, h: thumbH });
-    }
-  }, [opacity, mouseX, mouseY, itemRect, zoom, scrollY, hash, metadataMap, onSourceRectChange]);
+    const thumbX = itemRect.x + (sx / srcW) * itemRect.width;
+    const thumbY = itemRect.y + (sy / srcH) * itemRect.height;
+    const thumbW = (sourceW / srcW) * itemRect.width;
+    const thumbH = (sourceH / srcH) * itemRect.height;
+    onSourceRectChange({ x: thumbX, y: thumbY, w: thumbW, h: thumbH });
+  }, [opacity, mouseX, mouseY, itemRect, zoom, scrollY, hash, metadataMap, onSourceRectChange, loupeSize.w, loupeSize.h]);
 
   // ── 定位计算 ──
 
-  const position = calculatePosition(mouseX, mouseY, viewportWidth, viewportHeight);
+  const position = calculatePosition(mouseX, mouseY, loupeSize.w, loupeSize.h, viewportWidth, viewportHeight);
 
   if (opacity <= 0 && !visible) return null;
-
-  const mag = magnificationRef.current;
-  const magLabel = mag >= 10 ? '10x' : mag.toFixed(1) + 'x';
 
   return (
     <div
@@ -294,10 +301,13 @@ export const Loupe = forwardRef<LoupeHandle, LoupeProps>(function Loupe(
         transition: opacity > 0 ? `opacity ${FADE_IN_DURATION}ms ease` : undefined,
       }}
     >
-      <div className={styles.canvasWrap}>
+      <div
+        className={styles.canvasWrap}
+        style={{ width: loupeSize.w, height: loupeSize.h }}
+      >
         <canvas ref={canvasRef} />
       </div>
-      <span className={styles.magnificationLabel}>{magLabel}</span>
+      <span className={styles.magnificationLabel}>1:1</span>
     </div>
   );
 });
@@ -375,21 +385,23 @@ function createOrientedCanvas(
 function calculatePosition(
   mouseX: number,
   mouseY: number,
+  loupeW: number,
+  loupeH: number,
   viewportWidth: number,
   viewportHeight: number,
 ): { x: number; y: number } {
   let x: number;
   let y: number;
 
-  // 默认右上方偏移
-  if (mouseX + OFFSET_X + LOUPE_SIZE < viewportWidth) {
+  // 水平：优先右侧，不够则左侧
+  if (mouseX + OFFSET_X + loupeW < viewportWidth) {
     x = mouseX + OFFSET_X;
   } else {
-    x = mouseX - LOUPE_SIZE - OFFSET_X;
+    x = mouseX - loupeW - OFFSET_X;
   }
 
-  // 默认上方
-  y = mouseY - OFFSET_Y - LOUPE_SIZE;
+  // 垂直：优先上方
+  y = mouseY - OFFSET_Y - loupeH;
 
   // 上方空间不足 → 下方
   if (y < 0) {
@@ -397,15 +409,15 @@ function calculatePosition(
   }
 
   // 下边界
-  if (y + LOUPE_SIZE > viewportHeight) {
-    y = viewportHeight - LOUPE_SIZE;
+  if (y + loupeH > viewportHeight) {
+    y = viewportHeight - loupeH;
   }
   if (y < 0) y = 0;
 
   // 左边界
   if (x < 0) x = 0;
-  if (x + LOUPE_SIZE > viewportWidth) {
-    x = viewportWidth - LOUPE_SIZE;
+  if (x + loupeW > viewportWidth) {
+    x = viewportWidth - loupeW;
   }
 
   return { x, y };
