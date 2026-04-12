@@ -2,7 +2,7 @@
    ProgressDialog 组件 - 处理进度对话框
    
    模态对话框显示扫描/处理/分析/分组进度
-   包含：进度条、时间统计、取消按钮
+   包含：spinner、进度条、时间统计、取消按钮
 ════════════════════════════════════════════════════════════════════════════ */
 
 /* ────────────────────────────────────────────────────────────────
@@ -23,12 +23,8 @@
 }
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -38,10 +34,10 @@
 .dialog {
   background: var(--color-bg-primary);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: var(--spacing-2xl);
+  border-radius: 12px;
+  padding: var(--spacing-2xl) var(--spacing-2xl) var(--spacing-xl);
   min-width: 360px;
-  max-width: 480px;
+  max-width: 420px;
   text-align: center;
   box-shadow: var(--shadow-elevated);
   animation: slideIn 200ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -59,104 +55,161 @@
 }
 
 /* ────────────────────────────────────────────────────────────────
-   阶段标签
+   阶段行 - spinner + 标签
 ──────────────────────────────────────────────────────────────── */
 
+.stageRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-xl);
+}
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .stageLabel {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-  margin: 0 0 var(--spacing-lg);
-  letter-spacing: -0.3px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  letter-spacing: -0.2px;
 }
 
 /* ────────────────────────────────────────────────────────────────
-   计数文本
+   百分比大字 - 视觉焦点
+──────────────────────────────────────────────────────────────── */
+
+.percentText {
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  line-height: 1;
+  margin-bottom: var(--spacing-xs);
+  letter-spacing: -1px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   计数文本 - 辅助信息
 ──────────────────────────────────────────────────────────────── */
 
 .countText {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  margin: 0 0 var(--spacing-md);
-  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  margin: 0 0 var(--spacing-xl);
+  font-weight: var(--font-weight-normal);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ────────────────────────────────────────────────────────────────
-   当前文件名
+   进度条
 ──────────────────────────────────────────────────────────────── */
+
+.progressBarBg {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-bg-tertiary);
+  overflow: hidden;
+  margin-bottom: var(--spacing-lg);
+}
+
+.progressBarFill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--color-primary);
+  transition: width var(--transition-normal);
+  position: relative;
+  background-image: linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.15) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.15) 50%,
+    rgba(255, 255, 255, 0.15) 75%,
+    transparent 75%
+  );
+  background-size: 12px 12px;
+  animation: stripeMove 0.6s linear infinite;
+}
+
+@keyframes stripeMove {
+  from { background-position: 0 0; }
+  to { background-position: 12px 0; }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   辅助信息区 - 文件名 + 时间
+──────────────────────────────────────────────────────────────── */
+
+.detailSection {
+  margin-bottom: var(--spacing-lg);
+}
 
 .fileText {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
-  margin: 0 0 var(--spacing-lg);
+  margin: 0 0 var(--spacing-xs);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: 'Courier New', monospace;
 }
-
-/* ────────────────────────────────────────────────────────────────
-   进度条容器
-──────────────────────────────────────────────────────────────── */
-
-.progressBarBg {
-  height: 4px;
-  border-radius: 2px;
-  background: var(--color-border);
-  overflow: hidden;
-  margin-bottom: var(--spacing-lg);
-}
-
-/* 进度条填充 */
-.progressBarFill {
-  height: 100%;
-  border-radius: 2px;
-  background: linear-gradient(90deg, var(--color-primary), var(--color-primary-hover));
-  transition: width var(--transition-normal) cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 0 8px rgba(45, 90, 79, 0.3);
-}
-
-/* ────────────────────────────────────────────────────────────────
-   时间信息区
-──────────────────────────────────────────────────────────────── */
 
 .timeRow {
   display: flex;
   justify-content: center;
-  gap: var(--spacing-lg);
-  margin-bottom: var(--spacing-lg);
-  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 
 .timeText {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
   font-weight: var(--font-weight-normal);
+  font-variant-numeric: tabular-nums;
+}
+
+.timeSeparator {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  opacity: 0.5;
 }
 
 /* ────────────────────────────────────────────────────────────────
-   取消按钮
+   取消按钮 - Ghost 风格
 ──────────────────────────────────────────────────────────────── */
 
 .cancelButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: var(--spacing-sm) var(--spacing-lg);
+  padding: var(--spacing-sm) var(--spacing-xl);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
-  color: var(--color-danger);
-  background: var(--color-danger-light);
-  border: 1px solid var(--color-danger);
-  border-radius: 4px;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .cancelButton:hover {
-  background: var(--color-danger);
-  color: #FFFFFF;
-  box-shadow: var(--shadow-subtle);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+  border-color: var(--color-text-muted);
 }
 
 .cancelButton:active {
@@ -173,5 +226,13 @@
 }
 
 [data-theme="dark"] .progressBarFill {
-  box-shadow: 0 0 8px rgba(95, 168, 157, 0.4);
+  background-image: linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.08) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.08) 75%,
+    transparent 75%
+  );
 }

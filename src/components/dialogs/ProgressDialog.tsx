@@ -60,20 +60,21 @@ export function ProgressDialog({ processingState, progress, onCancel }: Progress
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.2 }}
           >
-            {/* 阶段标签 */}
-            <h3 className={cls.stageLabel}>{label}</h3>
+            {/* 阶段标签 + spinner */}
+            <div className={cls.stageRow}>
+              {isActive && <span className={cls.spinner} />}
+              <span className={cls.stageLabel}>{label}</span>
+            </div>
+
+            {/* 百分比大字 */}
+            {total > 0 && (
+              <div className={cls.percentText}>{percent.toFixed(1)}%</div>
+            )}
 
             {/* 进度计数 */}
             {total > 0 && (
               <p className={cls.countText}>
-                {current} / {total}（{percent.toFixed(1)}%）
-              </p>
-            )}
-
-            {/* 当前文件名 */}
-            {currentFile && (
-              <p className={cls.fileText} title={currentFile}>
-                {currentFile}
+                {current} / {total}
               </p>
             )}
 
@@ -85,18 +86,28 @@ export function ProgressDialog({ processingState, progress, onCancel }: Progress
               />
             </div>
 
-            {/* 时间信息 */}
-            <div className={cls.timeRow}>
-              {elapsedMs != null && (
-                <span className={cls.timeText}>
-                  已用 {formatDuration(elapsedMs)}
-                </span>
+            {/* 辅助信息区 */}
+            <div className={cls.detailSection}>
+              {currentFile && (
+                <p className={cls.fileText} title={currentFile}>
+                  {currentFile}
+                </p>
               )}
-              {estimatedRemainingMs != null && estimatedRemainingMs > 0 && (
-                <span className={cls.timeText}>
-                  预计剩余 {formatDuration(estimatedRemainingMs)}
-                </span>
-              )}
+              <div className={cls.timeRow}>
+                {elapsedMs != null && (
+                  <span className={cls.timeText}>
+                    已用 {formatDuration(elapsedMs)}
+                  </span>
+                )}
+                {elapsedMs != null && estimatedRemainingMs != null && estimatedRemainingMs > 0 && (
+                  <span className={cls.timeSeparator}>&middot;</span>
+                )}
+                {estimatedRemainingMs != null && estimatedRemainingMs > 0 && (
+                  <span className={cls.timeText}>
+                    预计剩余 {formatDuration(estimatedRemainingMs)}
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* 取消按钮 */}
