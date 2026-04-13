@@ -31,6 +31,8 @@ describe('CanvasImageItem', () => {
       y: 200,
       width: 300,
       height: 400,
+      isFirstInGroup: false,
+      groupLabel: '',
     };
     canvasItem = new CanvasImageItem(layoutItem);
   });

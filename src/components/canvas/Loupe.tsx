@@ -305,7 +305,6 @@ export const Loupe = forwardRef<LoupeHandle, LoupeProps>(function Loupe(
       >
         <canvas ref={canvasRef} />
       </div>
-      <span className={styles.magnificationLabel}>1:1</span>
     </div>
   );
 });

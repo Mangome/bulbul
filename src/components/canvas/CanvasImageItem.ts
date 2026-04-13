@@ -54,6 +54,17 @@ const INFO_CHAR_WIDTH = 6.5;
 const STAR_FILLED = '\u2605'; // ★
 const STAR_EMPTY = '\u2606';  // ☆
 
+// ─── 分组角标常量 ─────────────────────────────────────
+
+const GROUP_BADGE_FONT = '700 10px system-ui, -apple-system, sans-serif';
+const GROUP_BADGE_BG = 'rgba(0, 0, 0, 0.55)';
+const GROUP_BADGE_TEXT_COLOR = '#FFFFFF';
+const GROUP_BADGE_PADDING_X = 8;
+const GROUP_BADGE_PADDING_Y = 4;
+const GROUP_BADGE_OFFSET = 6;
+const GROUP_BADGE_RADIUS = 3;
+const GROUP_BADGE_CHAR_WIDTH = 7;
+
 // ─── CanvasImageItem ─────────────────────────────────
 
 export class CanvasImageItem {
@@ -88,6 +99,10 @@ export class CanvasImageItem {
   private infoParams: string = '';
   private infoVisible: boolean = false;
 
+  // 分组角标
+  private _isFirstInGroup: boolean = false;
+  private _groupLabel: string = '';
+
   // 重新加载标志：图片被 LRU 淘汰后需要重新加载
   needsReload: boolean = false;
 
@@ -99,6 +114,8 @@ export class CanvasImageItem {
     this.y = layoutItem.y;
     this.width = layoutItem.width;
     this.height = layoutItem.height;
+    this._isFirstInGroup = layoutItem.isFirstInGroup;
+    this._groupLabel = layoutItem.groupLabel;
   }
 
   // ── 公共方法 ────────────────────────────────────────
@@ -185,6 +202,9 @@ export class CanvasImageItem {
       this._drawPlaceholder(ctx);
     }
 
+    // 绘制分组角标（首图左上角）
+    this._drawGroupBadge(ctx, zoom);
+
     // 绘制信息覆盖层（文件名 + 拍摄参数）
     this._drawInfoOverlay(ctx, zoom);
 
@@ -268,6 +288,54 @@ export class CanvasImageItem {
   }
 
   // ── 私有方法：绘制 ────────────────────────────────────────
+
+  /**
+   * 绘制分组角标（左上角半透明标签）
+   * 仅在该分组的第一张图片上绘制
+   */
+  private _drawGroupBadge(ctx: CanvasRenderingContext2D, zoom: number): void {
+    if (!this._isFirstInGroup || !this._groupLabel) return;
+
+    const invZoom = 1 / zoom;
+    const text = this._groupLabel;
+
+    ctx.save();
+
+    // 在反向缩放坐标系中绘制，保持文字大小恒定
+    const offsetX = GROUP_BADGE_OFFSET * invZoom;
+    const offsetY = GROUP_BADGE_OFFSET * invZoom;
+    ctx.translate(offsetX, offsetY);
+    ctx.scale(invZoom, invZoom);
+
+    // 估算文字宽度
+    const textWidth = text.length * GROUP_BADGE_CHAR_WIDTH;
+    const bgWidth = textWidth + GROUP_BADGE_PADDING_X * 2;
+    const bgHeight = 10 + GROUP_BADGE_PADDING_Y * 2; // 10px font size
+
+    // 绘制圆角矩形背景
+    const r = GROUP_BADGE_RADIUS;
+    ctx.fillStyle = GROUP_BADGE_BG;
+    ctx.beginPath();
+    ctx.moveTo(r, 0);
+    ctx.lineTo(bgWidth - r, 0);
+    ctx.arcTo(bgWidth, 0, bgWidth, r, r);
+    ctx.lineTo(bgWidth, bgHeight - r);
+    ctx.arcTo(bgWidth, bgHeight, bgWidth - r, bgHeight, r);
+    ctx.lineTo(r, bgHeight);
+    ctx.arcTo(0, bgHeight, 0, bgHeight - r, r);
+    ctx.lineTo(0, r);
+    ctx.arcTo(0, 0, r, 0, r);
+    ctx.closePath();
+    ctx.fill();
+
+    // 绘制文字
+    ctx.font = GROUP_BADGE_FONT;
+    ctx.fillStyle = GROUP_BADGE_TEXT_COLOR;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, GROUP_BADGE_PADDING_X, bgHeight / 2);
+
+    ctx.restore();
+  }
 
   /** 绘制占位色块 */
   private _drawPlaceholder(ctx: CanvasRenderingContext2D): void {

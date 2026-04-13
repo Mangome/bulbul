@@ -4,7 +4,7 @@ import {
   diffVisibleItems,
   type ViewportRect,
 } from './viewport';
-import type { LayoutItem, GroupPageLayout, GroupTitleItem } from './layout';
+import type { LayoutItem, GroupPageLayout } from './layout';
 
 // ─── 测试工具 ─────────────────────────────────────────
 
@@ -17,7 +17,7 @@ function makeItem(
   groupId: number = 1,
   groupIndex: number = 0,
 ): LayoutItem {
-  return { hash, groupId, groupIndex, x, y, width, height };
+  return { hash, groupId, groupIndex, x, y, width, height, isFirstInGroup: false, groupLabel: '' };
 }
 
 function makePage(
@@ -27,14 +27,6 @@ function makePage(
 ): GroupPageLayout {
   const sortedItems = [...items].sort((a, b) => a.y - b.y);
   const maxY = items.length > 0 ? Math.max(...items.map(i => i.y + i.height)) : 0;
-  const titleItem: GroupTitleItem = {
-    groupId: groupIndex + 1,
-    label: `Group ${groupIndex + 1}`,
-    x: 0,
-    y: offsetY,
-    width: 1000,
-    height: 40,
-  };
   return {
     groupIndex,
     groupId: groupIndex + 1,
@@ -42,7 +34,7 @@ function makePage(
     contentHeight: maxY - offsetY,
     columnWidth: 160,
     items,
-    groupTitle: titleItem,
+    groupTitle: undefined,
     sortedItems,
   };
 }

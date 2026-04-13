@@ -104,25 +104,12 @@ HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue(createMockConte
 function createTestLayout(numGroups = 1, itemsPerGroup = 2): LayoutResult {
   const pages = [];
   const allItems = [];
-  const groupTitles = [];
   const columnWidth = 160;
   let currentY = 80; // paddingTop
 
   for (let gi = 0; gi < numGroups; gi++) {
     const pageStartY = currentY;
     const items = [];
-
-    // 分组标题
-    groupTitles.push({
-      groupId: gi,
-      label: `分组 ${gi + 1}（${itemsPerGroup} 张）`,
-      x: 24,
-      y: currentY,
-      width: 952,
-      height: 40,
-    });
-
-    currentY += 40 + 16; // groupTitleHeight + paddingY
 
     for (let i = 0; i < itemsPerGroup; i++) {
       items.push({
@@ -133,6 +120,8 @@ function createTestLayout(numGroups = 1, itemsPerGroup = 2): LayoutResult {
         y: currentY + Math.floor(i / 5) * 120,
         width: columnWidth,
         height: 100,
+        isFirstInGroup: i === 0,
+        groupLabel: i === 0 ? `G${gi + 1} · ${itemsPerGroup}张` : '',
       });
     }
 
@@ -147,7 +136,7 @@ function createTestLayout(numGroups = 1, itemsPerGroup = 2): LayoutResult {
       contentHeight: currentY - pageStartY,
       columnWidth,
       items,
-      groupTitle: groupTitles[gi],
+      groupTitle: undefined,
       sortedItems,
     });
 
@@ -158,7 +147,7 @@ function createTestLayout(numGroups = 1, itemsPerGroup = 2): LayoutResult {
 
   return {
     items: allItems,
-    groupTitles,
+    groupTitles: [],
     pages,
     columnWidth,
     totalHeight,

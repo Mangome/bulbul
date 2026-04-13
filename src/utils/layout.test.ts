@@ -60,6 +60,36 @@ describe('computeColumnWidth', () => {
     const width = computeColumnWidth(1000, config);
     expect(width).toBe(232.5);
   });
+
+  it('列数不应超过 maxColumns', () => {
+    const config: LayoutConfig = {
+      ...DEFAULT_LAYOUT_CONFIG,
+      thumbnailSize: 100,
+      gap: 5,
+      paddingX: 10,
+      maxColumns: 5,
+    };
+    // viewportWidth=2000 → raw columns = floor((2000-20+5)/(100+5)) = floor(1985/105) = 18
+    // 钳制到 5
+    // columnWidth = (2000 - 20 - 5*4) / 5 = (1980 - 20) / 5 = 392
+    const width = computeColumnWidth(2000, config);
+    expect(width).toBe(392);
+  });
+
+  it('列数不应低于 minColumns', () => {
+    const config: LayoutConfig = {
+      ...DEFAULT_LAYOUT_CONFIG,
+      thumbnailSize: 1000,
+      gap: 10,
+      paddingX: 10,
+      minColumns: 1,
+    };
+    // viewportWidth=200 → raw = floor((200-20+10)/(1000+10)) = floor(190/1010) = 0
+    // 钳制到 1
+    // columnWidth = (200 - 20 - 0) / 1 = 180
+    const width = computeColumnWidth(200, config);
+    expect(width).toBe(180);
+  });
 });
 
 // ─── computeVerticalGridLayout ──────────────────────────
@@ -67,7 +97,7 @@ describe('computeColumnWidth', () => {
 describe('computeVerticalGridLayout', () => {
   const viewportWidth = 1000;
 
-  it('标准布局：所有图片获得正确坐标', () => {
+  it('连续排列：所有图片获得正确坐标', () => {
     const groups = [
       makeGroup(1, ['a', 'b', 'c', 'd', 'e', 'f']),
     ];
@@ -83,7 +113,7 @@ describe('computeVerticalGridLayout', () => {
     const result = computeVerticalGridLayout(groups, dims, viewportWidth);
 
     expect(result.items).toHaveLength(6);
-    expect(result.groupTitles).toHaveLength(1);
+    expect(result.groupTitles).toHaveLength(0);
     expect(result.totalHeight).toBeGreaterThan(0);
     expect(result.pages).toHaveLength(1);
 
@@ -93,9 +123,6 @@ describe('computeVerticalGridLayout', () => {
     for (const item of result.items) {
       expect(item.width).toBe(colWidth);
     }
-
-    // 分组标题标签正确
-    expect(result.groupTitles[0].label).toBe('分组 1（6 张）');
   });
 
   it('行式网格：同行图片等宽，行高等于最高图', () => {
@@ -112,10 +139,9 @@ describe('computeVerticalGridLayout', () => {
     // 同行两张图等宽
     expect(result.items[0].width).toBe(result.items[1].width);
 
-    // 行高等于最高图的高度
+    // a 更高（4:3 缩放后更高）
     const heightA = result.items[0].height;
     const heightB = result.items[1].height;
-    // a 更高（4:3 缩放后更高）
     expect(heightA).toBeGreaterThan(heightB);
   });
 
@@ -143,7 +169,7 @@ describe('computeVerticalGridLayout', () => {
     expect(result.items[0].height).toBeCloseTo(actualColWidth * 2 / 3);
   });
 
-  it('空分组仅渲染标题区域', () => {
+  it('空分组被跳过', () => {
     const groups = [
       makeGroup(1, []),
       makeGroup(2, ['a']),
@@ -158,7 +184,7 @@ describe('computeVerticalGridLayout', () => {
     expect(result.pages[1].items).toHaveLength(1);
   });
 
-  it('多分组纵向排列', () => {
+  it('多分组连续排列', () => {
     const groups = [
       makeGroup(1, ['a']),
       makeGroup(2, ['b']),
@@ -171,10 +197,10 @@ describe('computeVerticalGridLayout', () => {
     const result = computeVerticalGridLayout(groups, dims, viewportWidth);
 
     expect(result.pages).toHaveLength(2);
-    // 第二个分组在第一个下方
-    expect(result.pages[1].offsetY).toBeGreaterThan(result.pages[0].offsetY);
-    // totalHeight 应该大于单个分组
-    expect(result.totalHeight).toBeGreaterThan(result.pages[0].contentHeight);
+    expect(result.totalHeight).toBeGreaterThan(0);
+
+    // 所有图片宽度一致
+    expect(result.items[0].width).toBe(result.items[1].width);
   });
 
   it('没有分组时返回空结果', () => {
@@ -187,18 +213,6 @@ describe('computeVerticalGridLayout', () => {
     expect(result.items).toHaveLength(0);
     expect(result.groupTitles).toHaveLength(0);
     expect(result.pages).toHaveLength(0);
-  });
-
-  it('分组标题标签正确', () => {
-    const groups = [makeGroup(1, ['a', 'b'], '相似组 1')];
-    const dims = makeDimensions([
-      ['a', 3000, 2000],
-      ['b', 3000, 2000],
-    ]);
-
-    const result = computeVerticalGridLayout(groups, dims, viewportWidth);
-
-    expect(result.groupTitles[0].label).toBe('相似组 1（2 张）');
   });
 
   it('所有 LayoutItem 的 groupId 和 groupIndex 正确', () => {
@@ -223,10 +237,8 @@ describe('computeVerticalGridLayout', () => {
   });
 
   it('最后一行居左排列', () => {
-    // 创建一个组，图片数量不足以填满最后一行
-    // viewportWidth=1000, thumbnailSize=450, gap=12, paddingX=32
-    // columns = floor((1000 - 64 + 12) / (450 + 12)) = floor(948/462) = 2
-    // 需要 3 张图：第一行 2 张，第二行 1 张
+    // viewportWidth=1000 → 2 columns
+    // 3 张图：第一行 2 张，第二行 1 张
     const groups = [makeGroup(1, ['a', 'b', 'c'])];
     const dims = makeDimensions([
       ['a', 3000, 2000],
@@ -236,18 +248,8 @@ describe('computeVerticalGridLayout', () => {
 
     const result = computeVerticalGridLayout(groups, dims, viewportWidth);
 
-    // 第二行第一张图 (c) 的 x 坐标应与第一行第一张图 (a) 相同
+    // 最后一行第一张图 (c) 的 x 坐标应与第一行第一张图 (a) 相同
     expect(result.items[2].x).toBe(result.items[0].x);
-  });
-
-  it('内容水平居中', () => {
-    const groups = [makeGroup(1, ['a'])];
-    const dims = makeDimensions([['a', 3000, 2000]]);
-
-    const result = computeVerticalGridLayout(groups, dims, viewportWidth);
-
-    // 图片应该有正的 x 坐标（居中偏移）
-    expect(result.items[0].x).toBeGreaterThan(0);
   });
 
   it('所有分组的 columnWidth 一致', () => {
@@ -267,26 +269,78 @@ describe('computeVerticalGridLayout', () => {
     expect(result.columnWidth).toBe(result.pages[0].columnWidth);
   });
 
-  // ─── 单图分组紧凑布局 ─────────────────────────────────
+  // ─── isFirstInGroup 角标 ─────────────────────────────────
 
-  it('单图分组标题使用紧凑模式', () => {
+  it('每组第一张图 isFirstInGroup=true，其余为 false', () => {
     const groups = [
-      makeGroup(1, ['a']),        // 单图
-      makeGroup(2, ['b', 'c']),   // 多图
+      makeGroup(1, ['a', 'b']),
+      makeGroup(2, ['c']),
+      makeGroup(3, ['d', 'e', 'f']),
     ];
     const dims = makeDimensions([
-      ['a', 3000, 2000],
-      ['b', 3000, 2000],
+      ['a', 3000, 2000], ['b', 3000, 2000],
       ['c', 3000, 2000],
+      ['d', 3000, 2000], ['e', 3000, 2000], ['f', 3000, 2000],
     ]);
 
     const result = computeVerticalGridLayout(groups, dims, viewportWidth);
 
-    expect(result.groupTitles[0].compact).toBe(true);
-    expect(result.groupTitles[1].compact).toBe(false);
+    // a=first, b=not
+    expect(result.items[0].isFirstInGroup).toBe(true);
+    expect(result.items[0].groupLabel).toContain('G1');
+    expect(result.items[1].isFirstInGroup).toBe(false);
+    expect(result.items[1].groupLabel).toBe('');
+
+    // c=first
+    expect(result.items[2].isFirstInGroup).toBe(true);
+    expect(result.items[2].groupLabel).toContain('G2');
+
+    // d=first, e=not, f=not
+    expect(result.items[3].isFirstInGroup).toBe(true);
+    expect(result.items[3].groupLabel).toContain('G3');
+    expect(result.items[4].isFirstInGroup).toBe(false);
+    expect(result.items[5].isFirstInGroup).toBe(false);
   });
 
-  it('单图分组标题高度小于多图分组', () => {
+  it('groupLabel 格式正确', () => {
+    const groups = [
+      makeGroup(1, ['a']),
+      makeGroup(2, ['b', 'c', 'd']),
+    ];
+    const dims = makeDimensions([
+      ['a', 3000, 2000],
+      ['b', 3000, 2000], ['c', 3000, 2000], ['d', 3000, 2000],
+    ]);
+
+    const result = computeVerticalGridLayout(groups, dims, viewportWidth);
+
+    expect(result.items[0].groupLabel).toBe('G1 · 1张');
+    expect(result.items[1].groupLabel).toBe('G2 · 3张');
+  });
+
+  // ─── 跨分组连续排列 ─────────────────────────────────
+
+  it('跨分组图片在同一行连续排列', () => {
+    // viewportWidth=1000 → 2 columns
+    // 分组1: 1张, 分组2: 1张 → 应在同一行
+    const groups = [
+      makeGroup(1, ['a']),
+      makeGroup(2, ['b']),
+    ];
+    const dims = makeDimensions([
+      ['a', 3000, 2000],
+      ['b', 3000, 2000],
+    ]);
+
+    const result = computeVerticalGridLayout(groups, dims, viewportWidth);
+
+    // 两张图 Y 坐标相同（同一行）
+    expect(result.items[0].y).toBe(result.items[1].y);
+    // X 坐标不同（不同列）
+    expect(result.items[0].x).not.toBe(result.items[1].x);
+  });
+
+  it('不再有 groupTitles', () => {
     const groups = [
       makeGroup(1, ['a']),
       makeGroup(2, ['b', 'c']),
@@ -299,71 +353,69 @@ describe('computeVerticalGridLayout', () => {
 
     const result = computeVerticalGridLayout(groups, dims, viewportWidth);
 
-    expect(result.groupTitles[0].height).toBe(24);
-    expect(result.groupTitles[1].height).toBe(DEFAULT_LAYOUT_CONFIG.groupTitleHeight);
+    expect(result.groupTitles).toEqual([]);
   });
 
-  it('单图分组图片在内容块内居中', () => {
+  // ─── 列数限制 ─────────────────────────────────
+
+  it('列数不超过 maxColumns', () => {
+    const config: LayoutConfig = {
+      ...DEFAULT_LAYOUT_CONFIG,
+      thumbnailSize: 100,
+      maxColumns: 3,
+    };
+    // viewportWidth=2000 → raw columns 很大，但限制到 3
+    const groups = [makeGroup(1, ['a', 'b', 'c', 'd'])];
+    const dims = makeDimensions([
+      ['a', 3000, 2000], ['b', 3000, 2000], ['c', 3000, 2000], ['d', 3000, 2000],
+    ]);
+
+    const result = computeVerticalGridLayout(groups, dims, 2000, config);
+
+    // 第4张图应该在第二行（列数限制为3）
+    expect(result.items[3].y).toBeGreaterThan(result.items[0].y);
+  });
+
+  it('列数至少为 minColumns', () => {
+    const config: LayoutConfig = {
+      ...DEFAULT_LAYOUT_CONFIG,
+      thumbnailSize: 1000,
+      minColumns: 1,
+    };
+    // viewportWidth=200 → raw columns = 0，但限制到 1
     const groups = [makeGroup(1, ['a'])];
     const dims = makeDimensions([['a', 3000, 2000]]);
 
-    const result = computeVerticalGridLayout(groups, dims, viewportWidth);
-    const item = result.items[0];
-    const title = result.groupTitles[0];
+    const result = computeVerticalGridLayout(groups, dims, 200, config);
 
-    // 图片应在内容块的水平中心
-    const itemCenterX = item.x + item.width / 2;
-    const blockCenterX = title.x + title.width / 2;
-    expect(itemCenterX).toBeCloseTo(blockCenterX);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].width).toBeGreaterThan(0);
   });
 
-  it('多图分组不受紧凑布局影响', () => {
-    const groups = [makeGroup(1, ['a', 'b', 'c'])];
-    const dims = makeDimensions([
-      ['a', 3000, 2000],
-      ['b', 3000, 2000],
-      ['c', 3000, 2000],
-    ]);
+  // ─── page offsetY 用于虚拟化 ─────────────────────────
 
-    const result = computeVerticalGridLayout(groups, dims, viewportWidth);
-
-    // 多图分组使用标准标题高度
-    expect(result.groupTitles[0].height).toBe(DEFAULT_LAYOUT_CONFIG.groupTitleHeight);
-    expect(result.groupTitles[0].compact).toBe(false);
-  });
-
-  it('单图分组间距更紧凑', () => {
+  it('page 的 offsetY 和 contentHeight 正确', () => {
     const groups = [
-      makeGroup(1, ['a']),
-      makeGroup(2, ['b']),
+      makeGroup(1, ['a', 'b']),
+      makeGroup(2, ['c', 'd']),
     ];
     const dims = makeDimensions([
-      ['a', 3000, 2000],
-      ['b', 3000, 2000],
+      ['a', 3000, 2000], ['b', 3000, 2000],
+      ['c', 3000, 2000], ['d', 3000, 2000],
     ]);
 
-    const singleResult = computeVerticalGridLayout(groups, dims, viewportWidth);
+    const result = computeVerticalGridLayout(groups, dims, viewportWidth);
 
-    // 对比多图分组间距
-    const multiGroups = [
-      makeGroup(1, ['a', 'x']),
-      makeGroup(2, ['b', 'y']),
-    ];
-    const multiDims = makeDimensions([
-      ['a', 3000, 2000],
-      ['x', 3000, 2000],
-      ['b', 3000, 2000],
-      ['y', 3000, 2000],
-    ]);
+    for (const page of result.pages) {
+      if (page.items.length === 0) continue;
 
-    const multiResult = computeVerticalGridLayout(multiGroups, multiDims, viewportWidth);
+      // offsetY 应该是该 page 中最小的 item.y
+      const minItemY = Math.min(...page.items.map(i => i.y));
+      expect(page.offsetY).toBe(minItemY);
 
-    // 单图分组之间的间距应小于多图分组
-    const singleGap = singleResult.pages[1].offsetY
-      - singleResult.pages[0].offsetY - singleResult.pages[0].contentHeight;
-    const multiGap = multiResult.pages[1].offsetY
-      - multiResult.pages[0].offsetY - multiResult.pages[0].contentHeight;
-
-    expect(singleGap).toBeLessThan(multiGap);
+      // contentHeight 应该覆盖所有 items
+      const maxBottom = Math.max(...page.items.map(i => i.y + i.height));
+      expect(page.contentHeight).toBe(maxBottom - page.offsetY);
+    }
   });
 });

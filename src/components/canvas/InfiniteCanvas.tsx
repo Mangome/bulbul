@@ -8,8 +8,7 @@
 // 1. 清空 Canvas + 背景色
 // 2. DotBackground（固定视口坐标）
 // 3. ctx.save/translate → 内容坐标系
-//    3a. drawGroupTitles()
-//    3b. CanvasImageItem.draw() × N
+//    3a. CanvasImageItem.draw() × N（含分组角标）
 // 4. ctx.restore
 //
 // 交互模式:
@@ -23,7 +22,6 @@ import { useEffect, useRef, useCallback, useImperativeHandle, forwardRef, useSta
 import { DotBackground } from './DotBackground';
 import { CanvasImageItem } from './CanvasImageItem';
 import { ImageLoader } from '../../hooks/useImageLoader';
-import { drawGroupTitles } from './GroupTitle';
 import {
   getVisibleItems,
   diffVisibleItems,
@@ -46,6 +44,8 @@ import type { ItemRect } from './Loupe';
 const DRAG_DEAD_ZONE = 5;
 const BG_COLOR_LIGHT = '#FFFFFF';
 const BG_COLOR_DARK = '#000000';
+/** 分组导航时，首图顶部预留的呼吸空间 (px) */
+const SCROLL_GROUP_PADDING = 50;
 const SCROLL_ANIMATION_MS =
   typeof window !== 'undefined' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -375,11 +375,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     ctx.save();
     ctx.translate(0, offsetY);
 
-    // 3a. 绘制分组标题
-    const currentLayout = layoutRef.current;
-    drawGroupTitles(ctx, currentLayout.groupTitles);
-
-    // 3b. 绘制所有可见 CanvasImageItem
+    // 3a. 绘制所有可见 CanvasImageItem（含分组角标）
     let needsNextFrame = false;
     const itemsToReload: CanvasImageItem[] = [];
     for (const item of canvasItemsRef.current.values()) {
@@ -669,8 +665,13 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       const page = currentLayout.pages[groupIndex];
       if (!page) return;
 
+      // 首图上方预留呼吸空间，首个分组不偏移
+      const targetY = groupIndex === 0
+        ? page.offsetY
+        : Math.max(0, page.offsetY - SCROLL_GROUP_PADDING);
+
       if (SCROLL_ANIMATION_MS === 0) {
-        scrollYRef.current = page.offsetY;
+        scrollYRef.current = targetY;
         updateViewport();
         markDirty();
         return;
@@ -679,7 +680,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       scrollAnimRef.current = {
         startTime: performance.now(),
         startScrollY: scrollYRef.current,
-        targetScrollY: page.offsetY,
+        targetScrollY: targetY,
       };
       markDirty();
     }
@@ -790,16 +791,20 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     const page = currentLayout.pages[currentGroupIndex];
     if (!page) return;
 
-    // 带动画滚动到目标分组
+    // 带动画滚动到目标分组（首图上方留呼吸空间）
+    const targetY = currentGroupIndex === 0
+      ? page.offsetY
+      : Math.max(0, page.offsetY - SCROLL_GROUP_PADDING);
+
     if (SCROLL_ANIMATION_MS === 0) {
-      scrollYRef.current = page.offsetY;
+      scrollYRef.current = targetY;
       updateViewport();
       markDirty();
     } else {
       scrollAnimRef.current = {
         startTime: performance.now(),
         startScrollY: scrollYRef.current,
-        targetScrollY: page.offsetY,
+        targetScrollY: targetY,
       };
       markDirty();
     }
@@ -819,7 +824,10 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       const currentLayout = layoutRef.current;
       const page = currentLayout.pages[groupIndex];
       if (!page) return;
-      scrollYRef.current = page.offsetY;
+      const targetY = groupIndex === 0
+        ? page.offsetY
+        : Math.max(0, page.offsetY - SCROLL_GROUP_PADDING);
+      scrollYRef.current = targetY;
       scrollAnimRef.current = null;
       updateViewport();
       markDirty();
