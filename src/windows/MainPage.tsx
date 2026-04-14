@@ -189,6 +189,25 @@ function MainPage() {
     init();
   }, [setFolder, startProcessing]);
 
+  // ── 根据当前视口宽度重新计算布局 ──
+  const recomputeLayout = useCallback((viewportWidth: number) => {
+    if (groups.length === 0) return;
+
+    // 从已缓存的 metadataMap 构建图片尺寸信息
+    const imageDims = new Map<string, ImageDimension>();
+    for (const [hash, meta] of metadataMap) {
+      if (meta.imageWidth && meta.imageHeight) {
+        imageDims.set(hash, {
+          width: meta.imageWidth,
+          height: meta.imageHeight,
+        });
+      }
+    }
+
+    const layoutResult = computeVerticalGridLayout(groups, imageDims, viewportWidth);
+    setLayout(layoutResult);
+  }, [groups, metadataMap]);
+
   // ── 处理完成后：获取元数据 + 计算布局 ──
   useEffect(() => {
     if (processingState !== 'completed') return;
@@ -257,6 +276,35 @@ function MainPage() {
     prepareCanvas();
     return () => { cancelled = true; };
   }, [processingState, groups]);
+
+  // ── 窗口尺寸变化时重新计算布局 ──
+  useEffect(() => {
+    const container = canvasContainerRef.current;
+    if (!container) return;
+
+    let lastWidth = container.clientWidth;
+    let resizeTimer: ReturnType<typeof setTimeout>;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const newWidth = Math.round(entry.contentRect.width);
+        if (newWidth === lastWidth || newWidth <= 0) continue;
+        lastWidth = newWidth;
+
+        // debounce：150ms 内只触发一次重算
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+          recomputeLayout(newWidth);
+        }, 150);
+      }
+    });
+
+    resizeObserver.observe(container);
+    return () => {
+      resizeObserver.disconnect();
+      clearTimeout(resizeTimer);
+    };
+  }, [recomputeLayout]);
 
   const handleCancel = useCallback(async () => {
     await cancelProcessing();

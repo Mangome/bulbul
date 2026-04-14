@@ -766,10 +766,19 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── layout 变化时重置到顶部 ──
+  // ── layout 变化时：清除旧 item + 重置到顶部 ──
   useEffect(() => {
     const currentLayout = layoutRef.current;
     if (!currentLayout.pages || currentLayout.pages.length === 0) return;
+
+    // 销毁所有旧的 CanvasImageItem，强制用新布局坐标重建
+    const imageLoader = imageLoaderRef.current;
+    for (const [hash, item] of canvasItemsRef.current) {
+      item.destroy();
+      imageLoader?.unpinImage(hash);
+    }
+    canvasItemsRef.current.clear();
+    visibleItemsRef.current = [];
 
     useCanvasStore.getState().setGroupCount(currentLayout.pages.length);
     scrollYRef.current = 0;
