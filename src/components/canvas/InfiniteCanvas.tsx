@@ -129,6 +129,9 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
   /** 按下时是否命中了图片 */
   const pressedOnImageRef = useRef<{ hash: string; itemRect: ItemRect } | null>(null);
 
+  // ── 分组导航锁定（动画期间禁止 updateViewport 覆盖 currentGroupIndex） ──
+  const navigatingToGroupRef = useRef<number | null>(null);
+
   // ── 滚动动画状态 ──
   const scrollAnimRef = useRef<{
     startTime: number;
@@ -301,12 +304,36 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
     visibleItemsRef.current = newVisible;
 
-    // 更新当前分组索引
-    const currentGroupIdx = getCurrentGroupIndex(scrollY, currentLayout.pages);
-    const storeState = useCanvasStore.getState();
-    if (storeState.currentGroupIndex !== currentGroupIdx) {
-      internalGroupUpdateRef.current = true;
-      useCanvasStore.setState({ currentGroupIndex: currentGroupIdx });
+    // 更新当前分组索引：仅当当前分组完全离开视口时才切换
+    if (navigatingToGroupRef.current === null) {
+      const storeState = useCanvasStore.getState();
+      const currentPage = currentLayout.pages[storeState.currentGroupIndex];
+
+      // 当前分组仍有图片在视口内 → 保持不变
+      if (currentPage && currentPage.items.length > 0) {
+        const pageTop = currentPage.offsetY;
+        const pageBottom = currentPage.offsetY + currentPage.contentHeight;
+        const viewTop = scrollY;
+        const viewBottom = scrollY + screenHeightRef.current;
+        const stillVisible = pageBottom > viewTop && pageTop < viewBottom;
+        if (stillVisible) {
+          // 当前分组仍可见，不切换
+        } else {
+          // 当前分组已完全滚出视口，用二分查找定位新分组
+          const newGroupIdx = getCurrentGroupIndex(scrollY, currentLayout.pages);
+          if (storeState.currentGroupIndex !== newGroupIdx) {
+            internalGroupUpdateRef.current = true;
+            useCanvasStore.setState({ currentGroupIndex: newGroupIdx });
+          }
+        }
+      } else {
+        // 当前分组为空或无效，直接二分查找
+        const newGroupIdx = getCurrentGroupIndex(scrollY, currentLayout.pages);
+        if (storeState.currentGroupIndex !== newGroupIdx) {
+          internalGroupUpdateRef.current = true;
+          useCanvasStore.setState({ currentGroupIndex: newGroupIdx });
+        }
+      }
     }
   }, [setViewport, setViewportRect, markDirty]);
 
@@ -349,6 +376,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       if (progress >= 1) {
         scrollAnimRef.current = null;
         scrollYRef.current = scrollAnim.targetScrollY;
+        // 导航动画结束，解锁分组索引自动检测
+        navigatingToGroupRef.current = null;
       }
 
       updateViewport();
@@ -468,9 +497,10 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       e.preventDefault();
       if (destroyedRef.current) return;
 
-      // 中断正在进行的滚动动画
+      // 中断正在进行的滚动动画，解锁分组索引自动检测
       if (scrollAnimRef.current) {
         scrollAnimRef.current = null;
+        navigatingToGroupRef.current = null;
       }
 
       // 纵向滚动
@@ -648,6 +678,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
       // 中断当前动画
       scrollAnimRef.current = null;
+      navigatingToGroupRef.current = null;
 
       const currentIdx = useCanvasStore.getState().currentGroupIndex;
       let targetIdx = currentIdx + direction;
@@ -659,19 +690,24 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       scrollToGroupIndex(targetIdx);
     }
 
-    /** 滚动到指定分组（带动画） */
+    /** 滚动到指定分组（带动画），定位到该组首图 */
     function scrollToGroupIndex(groupIndex: number) {
       const currentLayout = layoutRef.current;
       const page = currentLayout.pages[groupIndex];
-      if (!page) return;
+      if (!page || page.items.length === 0) return;
 
-      // 首图上方预留呼吸空间，首个分组不偏移
+      // 定位到首图 Y 坐标，首图上方预留呼吸空间
+      const firstItemY = page.items[0].y;
       const targetY = groupIndex === 0
-        ? page.offsetY
-        : Math.max(0, page.offsetY - SCROLL_GROUP_PADDING);
+        ? firstItemY
+        : Math.max(0, firstItemY - SCROLL_GROUP_PADDING);
+
+      // 锁定分组索引，防止动画期间 updateViewport 覆盖
+      navigatingToGroupRef.current = groupIndex;
 
       if (SCROLL_ANIMATION_MS === 0) {
         scrollYRef.current = targetY;
+        navigatingToGroupRef.current = null; // 即时跳转，立即解锁
         updateViewport();
         markDirty();
         return;
@@ -789,7 +825,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     markDirty();
   }, [layout, updateViewport, markDirty]);
 
-  // ── 外部分组导航（useKeyboard A/D 键触发）→ 纵向滚动到目标分组 ──
+  // ── 外部分组导航（胶片条点击、A/D 键触发）→ 纵向滚动到目标分组首图 ──
   const internalGroupUpdateRef = useRef(false);
   useEffect(() => {
     if (internalGroupUpdateRef.current) {
@@ -798,15 +834,20 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     }
     const currentLayout = layoutRef.current;
     const page = currentLayout.pages[currentGroupIndex];
-    if (!page) return;
+    if (!page || page.items.length === 0) return;
 
-    // 带动画滚动到目标分组（首图上方留呼吸空间）
+    // 定位到首图 Y 坐标，首图上方留呼吸空间
+    const firstItemY = page.items[0].y;
     const targetY = currentGroupIndex === 0
-      ? page.offsetY
-      : Math.max(0, page.offsetY - SCROLL_GROUP_PADDING);
+      ? firstItemY
+      : Math.max(0, firstItemY - SCROLL_GROUP_PADDING);
+
+    // 锁定分组索引，防止动画期间 updateViewport 覆盖
+    navigatingToGroupRef.current = currentGroupIndex;
 
     if (SCROLL_ANIMATION_MS === 0) {
       scrollYRef.current = targetY;
+      navigatingToGroupRef.current = null;
       updateViewport();
       markDirty();
     } else {
@@ -832,12 +873,14 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     scrollToGroup: (groupIndex: number) => {
       const currentLayout = layoutRef.current;
       const page = currentLayout.pages[groupIndex];
-      if (!page) return;
+      if (!page || page.items.length === 0) return;
+      const firstItemY = page.items[0].y;
       const targetY = groupIndex === 0
-        ? page.offsetY
-        : Math.max(0, page.offsetY - SCROLL_GROUP_PADDING);
+        ? firstItemY
+        : Math.max(0, firstItemY - SCROLL_GROUP_PADDING);
       scrollYRef.current = targetY;
       scrollAnimRef.current = null;
+      navigatingToGroupRef.current = null;
       updateViewport();
       markDirty();
     },
@@ -944,6 +987,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 /**
  * 根据 scrollY 在 layout pages 的 offsetY 中做二分查找，
  * 确定当前视口所在的分组索引。
+ *
+ * 仅在用户自由滚动时调用（导航动画期间跳过）。
  */
 function getCurrentGroupIndex(
   scrollY: number,

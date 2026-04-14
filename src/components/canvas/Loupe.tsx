@@ -119,6 +119,9 @@ export const Loupe = forwardRef<LoupeHandle, LoupeProps>(function Loupe(
   const prevHashRef = useRef<string | null>(null);
   const mediumBitmapRef = useRef<ImageBitmap | null>(null);
   const orientedCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  /** 锁定放大镜方向：首次出现时决定，拖拽期间不变 */
+  const sideRef = useRef<'left' | 'right' | null>(null);
+  const vSideRef = useRef<'above' | 'below' | null>(null);
 
   const [opacity, setOpacity] = useState(0);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -196,6 +199,8 @@ export const Loupe = forwardRef<LoupeHandle, LoupeProps>(function Loupe(
     }
 
     if (visible) {
+      sideRef.current = null;
+      vSideRef.current = null;
       setOpacity(1);
     } else {
       fadeTimerRef.current = setTimeout(() => {
@@ -285,7 +290,13 @@ export const Loupe = forwardRef<LoupeHandle, LoupeProps>(function Loupe(
 
   // ── 定位计算 ──
 
-  const position = calculatePosition(mouseX, mouseY, loupeSize.w, loupeSize.h, viewportWidth, viewportHeight);
+  if (!sideRef.current) {
+    sideRef.current = mouseX > viewportWidth / 2 ? 'left' : 'right';
+  }
+  if (!vSideRef.current) {
+    vSideRef.current = mouseY > viewportHeight / 2 ? 'above' : 'below';
+  }
+  const position = calculatePosition(mouseX, mouseY, loupeSize.w, loupeSize.h, viewportWidth, viewportHeight, sideRef.current, vSideRef.current);
 
   if (opacity <= 0 && !visible) return null;
 
@@ -386,22 +397,23 @@ function calculatePosition(
   loupeH: number,
   viewportWidth: number,
   viewportHeight: number,
+  side: 'left' | 'right',
+  vSide: 'above' | 'below',
 ): { x: number; y: number } {
   let x: number;
   let y: number;
 
-  // 水平：优先右侧，不够则左侧
-  if (mouseX + OFFSET_X + loupeW < viewportWidth) {
+  // 水平：按锁定的方向放置
+  if (side === 'right') {
     x = mouseX + OFFSET_X;
   } else {
     x = mouseX - loupeW - OFFSET_X;
   }
 
-  // 垂直：优先上方
-  y = mouseY - OFFSET_Y - loupeH;
-
-  // 上方空间不足 → 下方
-  if (y < 0) {
+  // 垂直：按锁定的方向放置
+  if (vSide === 'above') {
+    y = mouseY - OFFSET_Y - loupeH;
+  } else {
     y = mouseY + OFFSET_Y;
   }
 
