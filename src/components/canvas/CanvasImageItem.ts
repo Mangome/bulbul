@@ -63,7 +63,6 @@ const GROUP_BADGE_PADDING_X = 8;
 const GROUP_BADGE_PADDING_Y = 4;
 const GROUP_BADGE_OFFSET = 6;
 const GROUP_BADGE_RADIUS = 3;
-const GROUP_BADGE_CHAR_WIDTH = 7;
 
 // ─── CanvasImageItem ─────────────────────────────────
 
@@ -307,8 +306,9 @@ export class CanvasImageItem {
     ctx.translate(offsetX, offsetY);
     ctx.scale(invZoom, invZoom);
 
-    // 估算文字宽度
-    const textWidth = text.length * GROUP_BADGE_CHAR_WIDTH;
+    // 使用 measureText 获取实际文字宽度（含中文字符）
+    ctx.font = GROUP_BADGE_FONT;
+    const textWidth = ctx.measureText(text).width;
     const bgWidth = textWidth + GROUP_BADGE_PADDING_X * 2;
     const bgHeight = 10 + GROUP_BADGE_PADDING_Y * 2; // 10px font size
 
@@ -328,8 +328,7 @@ export class CanvasImageItem {
     ctx.closePath();
     ctx.fill();
 
-    // 绘制文字
-    ctx.font = GROUP_BADGE_FONT;
+    // 绘制文字（font 已在 measureText 前设置）
     ctx.fillStyle = GROUP_BADGE_TEXT_COLOR;
     ctx.textBaseline = 'middle';
     ctx.fillText(text, GROUP_BADGE_PADDING_X, bgHeight / 2);
