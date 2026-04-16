@@ -4,7 +4,7 @@
 // 全宽顶部条，44px 高度。
 // 左区：分组导航箭头 + 分组名 + 路径
 // 中区：进度条
-// 右区：工具按钮（检测框、分组参数、切换目录、主题）+ 全选/导出
+// 右区：工具按钮（检测框、分组参数、切换目录、主题）+ 导出
 // ============================================================
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
@@ -72,7 +72,6 @@ export interface TopNavBarProps {
   /** 当前文件夹完整路径 */
   folderPath: string | null;
   onExport: () => void;
-  onSelectAll: () => void;
   onSwitchFolder: () => void;
 }
 
@@ -92,7 +91,6 @@ export function TopNavBar({
   groups,
   folderPath,
   onExport,
-  onSelectAll,
   onSwitchFolder,
 }: TopNavBarProps) {
   const currentGroupIndex = useCanvasStore((s) => s.currentGroupIndex);
@@ -360,10 +358,7 @@ export function TopNavBar({
 
         <span className={cls.toolSep} />
 
-        {/* 全选 + 导出 */}
-        <Button variant="ghost" size="sm" onClick={onSelectAll}>
-          全选
-        </Button>
+        {/* 导出 */}
         <Button
           variant="primary"
           size="sm"

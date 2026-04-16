@@ -90,17 +90,6 @@ function MainPage() {
     }
   }, [setFolder, startProcessing, addToast]);
 
-  // ── 全选当前分组 ──
-  const handleSelectAll = useCallback(() => {
-    const { currentGroupIndex } = useCanvasStore.getState();
-    const { groups } = useAppStore.getState();
-    const group = groups[currentGroupIndex];
-    if (group) {
-      useSelectionStore.getState().selectAllInGroup(group.pictureHashes);
-      canvasRef.current?.syncSelectionVisuals();
-    }
-  }, []);
-
   // ── 分组导航回调（左右切换后同步 AppStore） ──
   const handleGroupNavigated = useCallback(() => {
     const { currentGroupIndex } = useCanvasStore.getState();
@@ -337,7 +326,6 @@ function MainPage() {
               groups={groups}
               folderPath={currentFolder}
               onExport={handleExport}
-              onSelectAll={handleSelectAll}
               onSwitchFolder={handleOpenFolder}
             />
 

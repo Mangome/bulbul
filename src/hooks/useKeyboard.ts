@@ -66,17 +66,6 @@ export function useKeyboard({
             e.preventDefault();
             onExport();
             return;
-          case 'a': {
-            e.preventDefault();
-            // 全选当前分组所有图片
-            const { currentGroupIndex } = useCanvasStore.getState();
-            const { groups } = useAppStore.getState();
-            const group = groups[currentGroupIndex];
-            if (group) {
-              useSelectionStore.getState().selectAllInGroup(group.pictureHashes);
-            }
-            return;
-          }
         }
         return;
       }

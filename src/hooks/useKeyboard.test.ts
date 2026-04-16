@@ -161,13 +161,13 @@ describe('useKeyboard', () => {
     expect(onExport).toHaveBeenCalledOnce();
   });
 
-  it('Ctrl+A 全选当前分组 (基于 currentGroupIndex)', () => {
+  it('Ctrl+A 不再由 useKeyboard 处理（已移至 InfiniteCanvas）', () => {
     useCanvasStore.setState({ currentGroupIndex: 0 });
     mount();
     fireKey('a', { ctrlKey: true });
+    // useKeyboard 不再处理 Ctrl+A，选中状态不变
     const state = useSelectionStore.getState();
-    expect(state.selectedCount).toBe(3);
-    expect(state.selectedHashes.has('h1')).toBe(true);
+    expect(state.selectedCount).toBe(0);
   });
 
   it('Escape 有选中时清除选择', () => {
