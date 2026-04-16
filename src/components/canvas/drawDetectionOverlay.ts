@@ -88,8 +88,11 @@ function drawSingleBox(
   // 绘制边框
   drawBoxBorder(ctx, px1, py1, px2, py2, color);
 
-  // 绘制置信度标签
-  drawConfidenceLabel(ctx, px1, py1, box.confidence, color);
+  // 绘制标签
+  const label = box.speciesName
+    ? `${box.speciesName} ${Math.round((box.speciesConfidence ?? box.confidence) * 100)}%`
+    : `Bird: ${Math.round(box.confidence * 100)}%`;
+  drawConfidenceLabel(ctx, px1, py1, label, color);
 }
 
 /**
@@ -153,16 +156,16 @@ function drawBoxBorder(
 }
 
 /**
- * 绘制置信度标签 "Bird: XX%"
+ * 绘制检测标签
  */
 function drawConfidenceLabel(
   ctx: CanvasRenderingContext2D,
   boxX: number,
   boxY: number,
-  confidence: number,
+  label: string,
   borderColor: string,
 ): void {
-  const text = `Bird: ${Math.round(confidence * 100)}%`;
+  const text = label;
 
   ctx.font = `${LABEL_FONT_SIZE}px system-ui, -apple-system, sans-serif`;
   const metrics = ctx.measureText(text);

@@ -10,6 +10,10 @@ export interface DetectionBox {
   x2: number;
   y2: number;
   confidence: number;
+  /** 鸟种名称（预留，当前检测器不支持，始终为 undefined） */
+  speciesName?: string;
+  /** 鸟种分类置信度（预留，当前检测器不支持，始终为 undefined） */
+  speciesConfidence?: number;
 }
 
 /** 合焦评分方法 */

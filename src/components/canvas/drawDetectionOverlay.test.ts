@@ -98,6 +98,28 @@ describe('drawDetectionOverlay', () => {
     expect(fillTextCalls[0][0]).toBe('Bird: 95%');
   });
 
+  it('物种名称标签优先显示鸟种名和分类置信度', () => {
+    const boxes: DetectionBox[] = [
+      { x1: 0.2, y1: 0.2, x2: 0.8, y2: 0.8, confidence: 0.95, speciesName: '白头鹎', speciesConfidence: 0.92 },
+    ];
+    drawDetectionOverlay(ctx, boxes, 400, 300);
+
+    const fillTextCalls = (ctx.fillText as any).mock.calls;
+    expect(fillTextCalls.length).toBeGreaterThan(0);
+    expect(fillTextCalls[0][0]).toBe('白头鹎 92%');
+  });
+
+  it('物种名称存在但无分类置信度时使用检测置信度', () => {
+    const boxes: DetectionBox[] = [
+      { x1: 0.2, y1: 0.2, x2: 0.8, y2: 0.8, confidence: 0.88, speciesName: '红嘴蓝鹊' },
+    ];
+    drawDetectionOverlay(ctx, boxes, 400, 300);
+
+    const fillTextCalls = (ctx.fillText as any).mock.calls;
+    expect(fillTextCalls.length).toBeGreaterThan(0);
+    expect(fillTextCalls[0][0]).toBe('红嘴蓝鹊 88%');
+  });
+
   it('标签位置在框上方不足时向下调整', () => {
     const boxes: DetectionBox[] = [
       { x1: 0.1, y1: 0.0, x2: 0.5, y2: 0.5, confidence: 0.9 },

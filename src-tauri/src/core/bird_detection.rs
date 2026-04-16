@@ -1,6 +1,6 @@
 //! 鸟类检测模块
 //!
-//! 基于 YOLOv8s ONNX 模型的鸟类目标检测。
+//! 基于专精鸟类检测的 YOLOv8s ONNX 模型（bird_detector.onnx）。
 //!
 //! 处理流程：
 //! 1. 加载 ONNX 模型（首次缓存到内存）
@@ -10,6 +10,8 @@
 //! 5. 置信度阈值过滤（< 0.70 移除）
 //! 6. 坐标反归一化回原始图片相对坐标 [0, 1]
 //!
+//! 模型输出: [1, 5, 8400] — 1 类别 (bird), 5 = cx + cy + w + h + conf
+//!
 //! 性能：单张 medium JPEG ~50-150ms（CPU，现代硬件）
 
 use serde::{Deserialize, Serialize};
@@ -17,9 +19,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use crate::models::AppError;
-
-/// COCO 数据集中"鸟"的类别索引
-const BIRD_CLASS_ID: usize = 14;
 
 /// YOLOv8 输入尺寸
 const INPUT_SIZE: u32 = 640;
@@ -44,6 +43,12 @@ pub struct DetectionBox {
     pub y2: f32,
     /// 置信度，范围 [0, 1]
     pub confidence: f32,
+    /// 鸟种名称（预留，当前检测器不支持，始终为 None）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub species_name: Option<String>,
+    /// 鸟种分类置信度（预留，当前检测器不支持，始终为 None）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub species_confidence: Option<f32>,
 }
 
 impl DetectionBox {
@@ -55,6 +60,8 @@ impl DetectionBox {
             x2: x2.clamp(0.0, 1.0),
             y2: y2.clamp(0.0, 1.0),
             confidence: confidence.clamp(0.0, 1.0),
+            species_name: None,
+            species_confidence: None,
         }
     }
 
@@ -201,11 +208,11 @@ fn canvas_to_input(canvas: &image::ImageBuffer<image::Rgb<u8>, Vec<u8>>) -> (Vec
 
 /// 解析 YOLOv8s 输出张量，提取鸟类检测框
 ///
-/// YOLOv8s 输出形状: [1, 84, 8400]
-/// - 84 = 4 (cx, cy, w, h) + 80 (COCO 类别概率)
+/// 专精鸟类检测模型输出形状: [1, 5, 8400]
+/// - 5 = 4 (cx, cy, w, h) + 1 (bird 置信度)
 /// - 8400 = 三个尺度检测头的 anchor 数量
 /// - 坐标是 640px 画布上的像素坐标
-/// - 类别概率已经过 sigmoid，无需再做 softmax
+/// - 置信度已经过 sigmoid
 fn parse_yolov8_output(
     shape: &[i64],
     data: &[f32],
@@ -213,11 +220,11 @@ fn parse_yolov8_output(
     orig_w: f32,
     orig_h: f32,
 ) -> Vec<DetectionBox> {
-    // 期望 shape = [1, 84, 8400]
+    // 期望 shape = [1, 5, 8400]
     if shape.len() != 3 {
         return vec![];
     }
-    let num_features = shape[1] as usize; // 84
+    let num_features = shape[1] as usize; // 5
     let num_detections = shape[2] as usize; // 8400
 
     if num_features < 5 || data.len() < num_features * num_detections {
@@ -233,14 +240,10 @@ fn parse_yolov8_output(
         let w  = data[2 * num_detections + i];
         let h  = data[3 * num_detections + i];
 
-        // bird 类 = COCO index 14, 偏移 4 → feature index 18
-        let bird_conf = if BIRD_CLASS_ID + 4 < num_features {
-            data[(BIRD_CLASS_ID + 4) * num_detections + i]
-        } else {
-            continue;
-        };
+        // 单类别模型: 置信度在 feature index 4
+        let conf = data[4 * num_detections + i];
 
-        if bird_conf < CONFIDENCE_THRESHOLD {
+        if conf < CONFIDENCE_THRESHOLD {
             continue;
         }
 
@@ -256,7 +259,7 @@ fn parse_yolov8_output(
         let x2_rel = (x2_px - letterbox.pad_x) / (orig_w * letterbox.scale);
         let y2_rel = (y2_px - letterbox.pad_y) / (orig_h * letterbox.scale);
 
-        bboxes.push(DetectionBox::new(x1_rel, y1_rel, x2_rel, y2_rel, bird_conf));
+        bboxes.push(DetectionBox::new(x1_rel, y1_rel, x2_rel, y2_rel, conf));
     }
 
     bboxes
@@ -288,7 +291,7 @@ fn run_inference(
         AppError::DetectionFailed(format!("模型推理失败: {}", e))
     })?;
 
-    // YOLOv8s 输出名为 "output0"，形状 [1, 84, 8400]
+    // 专精鸟类检测模型输出名为 "output0"，形状 [1, 5, 8400]
     let output = outputs.get("output0").ok_or_else(|| {
         AppError::DetectionFailed("模型输出中未找到 output0".to_string())
     })?;
@@ -358,8 +361,8 @@ fn get_model_path(explicit_path: Option<&Path>) -> Result<std::path::PathBuf, Ap
 
     // 2. 相对路径 candidates（开发模式）
     let candidates = [
-        "resources/models/yolov8s.onnx",
-        "src-tauri/resources/models/yolov8s.onnx",
+        "resources/models/bird_detector.onnx",
+        "src-tauri/resources/models/bird_detector.onnx",
     ];
 
     for path_str in &candidates {
@@ -372,7 +375,7 @@ fn get_model_path(explicit_path: Option<&Path>) -> Result<std::path::PathBuf, Ap
     // 3. 可执行文件目录相对路径（Windows 安装模式）
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(parent) = exe_path.parent() {
-            let rel_path = parent.join("resources/models/yolov8s.onnx");
+            let rel_path = parent.join("resources/models/bird_detector.onnx");
             if rel_path.exists() {
                 return Ok(rel_path);
             }
@@ -380,7 +383,7 @@ fn get_model_path(explicit_path: Option<&Path>) -> Result<std::path::PathBuf, Ap
     }
 
     Err(AppError::DetectionFailed(
-        "模型文件 yolov8s.onnx 未找到".to_string()
+        "模型文件 bird_detector.onnx 未找到".to_string()
     ))
 }
 
@@ -390,7 +393,7 @@ fn get_model_path(explicit_path: Option<&Path>) -> Result<std::path::PathBuf, Ap
 /// 而 current_exe() 返回 Contents/MacOS/bulbul，
 /// 因此需要使用 Tauri 的 resource_dir 来正确定位。
 pub fn resolve_model_path_from_resource_dir(resource_dir: &Path) -> PathBuf {
-    resource_dir.join("resources").join("models").join("yolov8s.onnx")
+    resource_dir.join("resources").join("models").join("bird_detector.onnx")
 }
 
 /// 检测图片中的鸟
@@ -674,12 +677,12 @@ mod tests {
             scale: 1.0,
         };
 
-        // 模拟全零输出 [1, 84, 8400]
-        let shape = vec![1i64, 84, 8400];
-        let data = vec![0.0f32; 84 * 8400];
+        // 模拟全零输出 [1, 5, 8400]
+        let shape = vec![1i64, 5, 8400];
+        let data = vec![0.0f32; 5 * 8400];
         let bboxes = parse_yolov8_output(&shape, &data, &letterbox, 640.0, 640.0);
 
-        // 全零 → 所有类别概率为 0 → 不应该有任何检测
+        // 全零 → 置信度为 0 → 不应该有任何检测
         assert!(bboxes.is_empty());
     }
 
@@ -692,9 +695,9 @@ mod tests {
             scale: 1.0,
         };
 
-        // 模拟输出 [1, 84, 8400]
-        let shape = vec![1i64, 84, 8400];
-        let mut data = vec![0.0f32; 84 * 8400];
+        // 模拟输出 [1, 5, 8400]
+        let shape = vec![1i64, 5, 8400];
+        let mut data = vec![0.0f32; 5 * 8400];
         let nd = 8400usize;
 
         // 在第 0 个检测位置放入一只鸟: cx=320, cy=320, w=200, h=200
@@ -702,8 +705,7 @@ mod tests {
         data[1 * nd + 0] = 320.0;  // cy
         data[2 * nd + 0] = 200.0;  // w
         data[3 * nd + 0] = 200.0;  // h
-        // BIRD_CLASS_ID=14, 偏移 4 → feature index 18
-        data[(BIRD_CLASS_ID + 4) * nd + 0] = 0.9;
+        data[4 * nd + 0] = 0.9;    // bird confidence
 
         let bboxes = parse_yolov8_output(&shape, &data, &letterbox, 640.0, 640.0);
 
@@ -715,7 +717,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_yolov8_output_non_bird_ignored() {
+    fn test_parse_yolov8_output_below_threshold_ignored() {
         let letterbox = LetterboxInfo {
             canvas: image::ImageBuffer::from_pixel(INPUT_SIZE, INPUT_SIZE, image::Rgb([114u8, 114u8, 114u8])),
             pad_x: 0.0,
@@ -723,20 +725,19 @@ mod tests {
             scale: 1.0,
         };
 
-        let shape = vec![1i64, 84, 8400];
-        let mut data = vec![0.0f32; 84 * 8400];
+        let shape = vec![1i64, 5, 8400];
+        let mut data = vec![0.0f32; 5 * 8400];
         let nd = 8400usize;
 
-        // 放入一个 person (class 0) 高置信度检测
+        // 放入一个低置信度检测
         data[0 * nd + 0] = 320.0;
         data[1 * nd + 0] = 320.0;
         data[2 * nd + 0] = 200.0;
         data[3 * nd + 0] = 200.0;
-        data[4 * nd + 0] = 0.95; // person class (index 0 + 4 = 4)
+        data[4 * nd + 0] = 0.3; // 低于阈值 0.70
 
         let bboxes = parse_yolov8_output(&shape, &data, &letterbox, 640.0, 640.0);
 
-        // person 不是 bird → 应该为空
         assert!(bboxes.is_empty());
     }
 
@@ -750,7 +751,7 @@ mod tests {
             Ok(path) => {
                 println!("✓ 模型文件路径: {:?}", path);
                 assert!(path.exists(), "模型文件应该存在");
-                assert!(path.to_string_lossy().contains("yolov8s.onnx"));
+                assert!(path.to_string_lossy().contains("bird_detector.onnx"));
             }
             Err(e) => {
                 panic!("模型文件加载失败: {:?}", e);
@@ -766,7 +767,7 @@ mod tests {
                 let metadata = std::fs::metadata(&path).expect("无法读取模型文件元数据");
                 let file_size = metadata.len();
                 let expected_min = 20 * 1024 * 1024;  // 20MB
-                let expected_max = 50 * 1024 * 1024;  // 50MB
+                let expected_max = 60 * 1024 * 1024;  // 60MB (新模型 ~43MB)
                 
                 println!("✓ 模型文件大小: {:.1}MB", file_size as f64 / (1024.0 * 1024.0));
                 assert!(file_size >= expected_min && file_size <= expected_max,
