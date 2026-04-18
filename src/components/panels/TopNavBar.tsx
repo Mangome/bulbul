@@ -285,12 +285,15 @@ export function TopNavBar({
         {/* 分组参数 */}
         <div className={cls.popoverAnchor} ref={popoverRef}>
           <button
-            className={`${cls.toolBtn} ${showGroupingPopover ? cls.toolBtnActive : ''}`}
+            className={`${cls.toolBtn} ${cls.toolBtnWithLabel} ${showGroupingPopover ? cls.toolBtnActive : ''}`}
             onClick={() => setShowGroupingPopover((v) => !v)}
-            title="分组参数"
+            title={`分组参数（相似度 ${Math.round(similarityThreshold)}% · 间隔 ${timeGapSeconds}s）`}
             aria-label="分组参数"
           >
             <IconTune />
+            <span className={cls.toolBtnLabel}>
+              {Math.round(similarityThreshold)}%·{timeGapSeconds}s
+            </span>
           </button>
           <AnimatePresence>
             {showGroupingPopover && (
@@ -367,14 +370,7 @@ export function TopNavBar({
         >
           导出
           {selectedCount > 0 && (
-            <Badge
-              variant="primary"
-              style={{
-                background: 'rgba(255,255,255,0.25)',
-                color: '#FFFFFF',
-                marginLeft: '4px',
-              }}
-            >
+            <Badge variant="onPrimary">
               {selectedCount}
             </Badge>
           )}

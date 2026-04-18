@@ -38,12 +38,15 @@ import { useSelectionStore } from '../../stores/useSelectionStore';
 import { useThemeStore } from '../../stores/useThemeStore';
 import { Loupe, type LoupeSourceRect } from './Loupe';
 import type { ItemRect } from './Loupe';
+import { easeOutQuart, lerpColorNum } from '../../utils/easing';
 
 // ─── 常量 ─────────────────────────────────────────────
 
 const DRAG_DEAD_ZONE = 5;
 const BG_COLOR_LIGHT = '#FFFFFF';
 const BG_COLOR_DARK = '#000000';
+const BG_COLOR_LIGHT_NUM = 0xFFFFFF;
+const BG_COLOR_DARK_NUM = 0x000000;
 /** 分组导航时，首图顶部预留的呼吸空间 (px) */
 const SCROLL_GROUP_PADDING = 50;
 const SCROLL_ANIMATION_MS =
@@ -51,6 +54,12 @@ const SCROLL_ANIMATION_MS =
   window.matchMedia('(prefers-reduced-motion: reduce)').matches
     ? 0
     : 400;
+/** 主题切换过渡时长（ms），与 DOM 层 body transition 同步 */
+const THEME_TRANSITION_MS =
+  typeof window !== 'undefined' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ? 0
+    : 300;
 
 // ─── Props ────────────────────────────────────────────
 
@@ -76,10 +85,7 @@ export interface InfiniteCanvasHandle {
 }
 
 // ─── 缓动函数 ────────────────────────────────────────
-
-function easeOutQuart(t: number): number {
-  return 1 - Math.pow(1 - t, 4);
-}
+// easeOutQuart 已从 utils/easing 导入，此处不再定义。
 
 // ─── Component ────────────────────────────────────────
 
@@ -128,6 +134,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
   const hasDraggedRef = useRef(false);
   /** 按下时是否命中了图片 */
   const pressedOnImageRef = useRef<{ hash: string; itemRect: ItemRect } | null>(null);
+  /** 当前悬停的图片 hash（用于 hover 进/出判定） */
+  const hoveredHashRef = useRef<string | null>(null);
 
   // ── 分组导航锁定（动画期间禁止 updateViewport 覆盖 currentGroupIndex） ──
   const navigatingToGroupRef = useRef<number | null>(null);
@@ -137,6 +145,13 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     startTime: number;
     startScrollY: number;
     targetScrollY: number;
+  } | null>(null);
+
+  // ── 主题过渡动画状态（rAF 驱动，Canvas 背景色 + DotBackground 交叉淡入） ──
+  const themeTransitionRef = useRef<{
+    startTime: number;
+    fromTheme: 'light' | 'dark';
+    toTheme: 'light' | 'dark';
   } | null>(null);
 
   // ── Magnifier 状态 ──
@@ -251,6 +266,10 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         canvasItem.destroy();
         canvasItemsRef.current.delete(item.hash);
         imageLoaderRef.current?.unpinImage(item.hash);
+      }
+      // 被销毁的项若是当前悬停项，清除悬停引用
+      if (hoveredHashRef.current === item.hash) {
+        hoveredHashRef.current = null;
       }
     }
 
@@ -386,15 +405,46 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     // 重置变换（DPR scale 已在 setupCanvas 中设置）
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // 1. 清空 Canvas + 背景色
-    const theme = useThemeStore.getState().theme;
-    ctx.fillStyle = theme === 'light' ? BG_COLOR_LIGHT : BG_COLOR_DARK;
+    // 1. 清空 Canvas + 背景色（支持主题过渡）
+    const themeTransition = themeTransitionRef.current;
+    let bgColorStr: string;
+    let dotProgress = 1;
+    let themeTransitionActive = false;
+
+    if (themeTransition && THEME_TRANSITION_MS > 0) {
+      const elapsed = now - themeTransition.startTime;
+      const progress = Math.min(elapsed / THEME_TRANSITION_MS, 1);
+      const eased = easeOutQuart(progress);
+      const fromNum = themeTransition.fromTheme === 'light' ? BG_COLOR_LIGHT_NUM : BG_COLOR_DARK_NUM;
+      const toNum = themeTransition.toTheme === 'light' ? BG_COLOR_LIGHT_NUM : BG_COLOR_DARK_NUM;
+      const interp = lerpColorNum(fromNum, toNum, eased);
+      bgColorStr = '#' + interp.toString(16).padStart(6, '0');
+      dotProgress = eased;
+
+      if (progress >= 1) {
+        // 过渡结束：清理旧 pattern，重置状态
+        themeTransitionRef.current = null;
+        bgLayerRef.current?.clearPrevious();
+      } else {
+        themeTransitionActive = true;
+      }
+    } else {
+      const theme = useThemeStore.getState().theme;
+      bgColorStr = theme === 'light' ? BG_COLOR_LIGHT : BG_COLOR_DARK;
+    }
+
+    ctx.fillStyle = bgColorStr;
     ctx.fillRect(0, 0, screenW, screenH);
 
     // 2. 绘制波点背景（固定视口坐标）
     const bgLayer = bgLayerRef.current;
     if (bgLayer) {
-      bgLayer.draw(ctx, screenW, screenH);
+      bgLayer.draw(ctx, screenW, screenH, dotProgress);
+    }
+
+    // 主题过渡期间持续请求下一帧（即使无其他动画）
+    if (themeTransitionActive) {
+      // renderFrame 末尾 needsNextFrame 会处理，此处标记
     }
 
     // 3. 应用内容坐标变换
@@ -457,7 +507,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     }
 
     // 如果有动画进行中，继续请求下一帧
-    if (scrollAnimRef.current || needsNextFrame) {
+    if (scrollAnimRef.current || needsNextFrame || themeTransitionActive) {
       dirtyRef.current = true;
       rafIdRef.current = requestAnimationFrame(renderFrame);
     }
@@ -589,6 +639,45 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         if (!target || !container.contains(target)) {
           if (loupeSourceRectRef.current !== null) {
             loupeSourceRectRef.current = null;
+            markDirty();
+          }
+          // 画布外：清除悬停
+          if (hoveredHashRef.current) {
+            const prev = canvasItemsRef.current.get(hoveredHashRef.current);
+            if (prev) prev.setHovered(false);
+            hoveredHashRef.current = null;
+            markDirty();
+          }
+        } else {
+          // 画布内：hitTest 维护悬停状态
+          const rect = canvas.getBoundingClientRect();
+          const screenX = e.clientX - rect.left;
+          const screenY = e.clientY - rect.top;
+          const offsetY = -scrollYRef.current + DEFAULT_LAYOUT_CONFIG.paddingTop;
+          const contentX = screenX;
+          const contentY = screenY - offsetY;
+
+          let newHoveredHash: string | null = null;
+          for (const [hash, item] of canvasItemsRef.current) {
+            if (item.alpha <= 0) continue;
+            if (item.hitTest(contentX, contentY)) {
+              newHoveredHash = hash;
+              break;
+            }
+          }
+
+          if (newHoveredHash !== hoveredHashRef.current) {
+            // 旧悬停项退出
+            if (hoveredHashRef.current) {
+              const prev = canvasItemsRef.current.get(hoveredHashRef.current);
+              if (prev) prev.setHovered(false);
+            }
+            // 新悬停项进入
+            if (newHoveredHash) {
+              const next = canvasItemsRef.current.get(newHoveredHash);
+              if (next) next.setHovered(true);
+            }
+            hoveredHashRef.current = newHoveredHash;
             markDirty();
           }
         }
@@ -923,13 +1012,32 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     syncSelectionVisualsRef.current?.();
   }, [selectedCount]);
 
-  // ── 订阅主题变化 ──
+  // ── 订阅主题变化（启动 Canvas 背景 + DotBackground 交叉淡入过渡） ──
+  const prevThemeRef = useRef<'light' | 'dark' | null>(null);
   useEffect(() => {
     const ctx = ctxRef.current;
     const bgLayer = bgLayerRef.current;
     if (!ctx || !bgLayer) return;
 
+    const fromTheme = prevThemeRef.current;
+    prevThemeRef.current = themeValue;
+
+    // 首次挂载或过渡时长为 0 时直接切换
+    if (fromTheme === null || fromTheme === themeValue || THEME_TRANSITION_MS === 0) {
+      bgLayer.updateTheme(themeValue, ctx);
+      bgLayer.clearPrevious();
+      themeTransitionRef.current = null;
+      markDirty();
+      return;
+    }
+
+    // 启动过渡：旧 pattern 保留，新 pattern 生成，通过 progress 交叉淡入
     bgLayer.updateTheme(themeValue, ctx);
+    themeTransitionRef.current = {
+      startTime: performance.now(),
+      fromTheme,
+      toTheme: themeValue,
+    };
     markDirty();
   }, [themeValue, markDirty]);
 

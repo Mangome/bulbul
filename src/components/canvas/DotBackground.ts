@@ -3,6 +3,8 @@
 //
 // 使用 OffscreenCanvas 生成波点 tile，通过 CanvasPattern 实现
 // 无限重复。固定在视口坐标系，不受 ContentLayer 缩放影响。
+//
+// 支持主题切换交叉淡入：保留旧 pattern 并以 alpha 渐变过渡到新 pattern。
 // ============================================================
 
 // ─── 配置 ─────────────────────────────────────────────
@@ -22,14 +24,19 @@ const DOT_ALPHA = 0.5;
 
 export class DotBackground {
   private pattern: CanvasPattern | null = null;
+  private previousPattern: CanvasPattern | null = null;
   private currentTheme: 'light' | 'dark' | null = null;
 
   /**
    * 更新主题并重建 CanvasPattern。
    * 相同主题不重复生成。
+   * 若已有 pattern，会保留为 previousPattern，用于交叉淡入。
    */
   updateTheme(theme: 'light' | 'dark', ctx: CanvasRenderingContext2D): void {
     if (theme === this.currentTheme && this.pattern) return;
+
+    // 保留旧 pattern 以支持交叉淡入
+    this.previousPattern = this.pattern;
     this.currentTheme = theme;
 
     const size = DOT_SPACING;
@@ -46,18 +53,50 @@ export class DotBackground {
   }
 
   /**
-   * 绘制波点背景，铺满指定区域。
-   * pattern 未初始化时跳过。
+   * 清除保留的旧 pattern（主题过渡动画结束后调用）
    */
-  draw(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+  clearPrevious(): void {
+    this.previousPattern = null;
+  }
+
+  /**
+   * 绘制波点背景，铺满指定区域。
+   *
+   * @param transitionProgress 主题过渡进度（0-1），1 表示完全显示新主题
+   *                           小于 1 时以 previousPattern + 新 pattern 交叉淡入
+   */
+  draw(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    transitionProgress: number = 1,
+  ): void {
     if (!this.pattern) return;
+
+    // 正常渲染：仅绘制当前 pattern
+    if (transitionProgress >= 1 || !this.previousPattern) {
+      ctx.fillStyle = this.pattern;
+      ctx.fillRect(0, 0, width, height);
+      return;
+    }
+
+    // 过渡中：旧 pattern 向下淡出，新 pattern 向上淡入
+    const prevSave = ctx.globalAlpha;
+    ctx.globalAlpha = prevSave * (1 - transitionProgress);
+    ctx.fillStyle = this.previousPattern;
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.globalAlpha = prevSave * transitionProgress;
     ctx.fillStyle = this.pattern;
     ctx.fillRect(0, 0, width, height);
+
+    ctx.globalAlpha = prevSave;
   }
 
   /** 清理资源 */
   destroy(): void {
     this.pattern = null;
+    this.previousPattern = null;
     this.currentTheme = null;
   }
 }

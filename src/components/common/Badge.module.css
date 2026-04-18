@@ -19,7 +19,10 @@
   white-space: nowrap;
   user-select: none;
   height: 20px;
-  transition: all var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -74,4 +77,15 @@
   color: #FFFFFF;
   border: none;
   box-shadow: var(--shadow-subtle);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   变体: OnPrimary - 放置于 Primary 按钮/背景之上的徽章
+──────────────────────────────────────────────────────────────── */
+
+.onPrimary {
+  background: rgba(255, 255, 255, 0.25);
+  color: #FFFFFF;
+  border: none;
+  margin-left: 4px;
 }

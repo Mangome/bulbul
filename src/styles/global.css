@@ -87,7 +87,11 @@ button {
   font-size: inherit;
   font-weight: inherit;
   color: inherit;
-  transition: all var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast),
+    transform var(--transition-fast);
 }
 
 button:disabled {

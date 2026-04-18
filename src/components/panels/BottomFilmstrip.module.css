@@ -14,8 +14,8 @@
   z-index: 90;
 
   background: var(--filmstrip-bg, var(--panel-bg));
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-top: 1px solid var(--panel-border);
 
   display: flex;

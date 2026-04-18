@@ -12,7 +12,7 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 44px;
+  height: 48px;
   z-index: 100;
   display: flex;
   align-items: center;
@@ -20,8 +20,8 @@
   padding: 0 16px;
   
   background: var(--panel-bg);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--panel-border);
   
   pointer-events: auto;
@@ -38,7 +38,7 @@
 .navSection {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--spacing-xs);
   flex-shrink: 0;
 }
 
@@ -46,8 +46,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 6px;
   cursor: pointer;
   font-size: 14px;
@@ -96,7 +96,7 @@
 .folderPath {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--spacing-sm);
   padding: 3px 8px;
   border-radius: 6px;
   cursor: pointer;
@@ -150,14 +150,14 @@
 .pathContent {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--spacing-sm);
   min-width: 0;
 }
 
 .copiedContent {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--spacing-sm);
   color: var(--color-success);
   font-size: 12px;
   font-weight: var(--font-weight-medium);
@@ -219,8 +219,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 6px;
   cursor: pointer;
   color: var(--color-text-secondary);
@@ -249,6 +249,22 @@
   color: var(--color-primary);
 }
 
+/* 带文字标签的工具按钮 */
+.toolBtnWithLabel {
+  width: auto;
+  padding: 0 8px;
+  gap: var(--spacing-sm);
+}
+
+.toolBtnLabel {
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.1px;
+  color: inherit;
+  white-space: nowrap;
+}
+
 /* 细分隔线 */
 .toolSep {
   width: 1px;
@@ -274,8 +290,8 @@
   padding: 14px;
 
   background: var(--panel-bg);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--panel-border);
   border-radius: var(--panel-radius);
   box-shadow: var(--shadow-elevated);

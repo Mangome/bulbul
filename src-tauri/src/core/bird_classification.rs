@@ -1,21 +1,26 @@
 //! 鸟种分类模块
 //!
-//! 基于专精鸟类物种分类的 YOLOv8s-cls ONNX 模型（bird_classifier.onnx）。
+//! 基于专精中国鸟类物种分类的 YOLOv8s-cls ONNX 模型（bird_classifier.onnx）。
 //!
 //! 处理流程：
 //! 1. 加载 ONNX 分类模型和物种数据库（首次缓存到内存）
 //! 2. 根据检测框裁剪图片中的鸟类区域
 //! 3. Resize 到 224×224 并归一化
-//! 4. YOLOv8s-cls 推理获得 1486 类 logits
-//! 5. Softmax 得概率，取 argmax 对应物种
+//! 4. YOLOv8s-cls 推理获得 373 类概率
+//! 5. 取 argmax 对应物种（输出已经是 softmax 概率）
 //! 6. 从物种数据库查找中文名/英文名
 //!
 //! 模型输入: `images` [1, 3, 224, 224] float32（NCHW，归一化到 [0, 1]）
-//! 模型输出: `output0` [1, 1486] float32（softmax 后的概率值，不需要再 softmax）
+//! 模型输出: `output0` [1, 373] float32（softmax 后的概率值，不需要再 softmax）
+//!
+//! 训练数据: Firefly-ZJ/Bird-Classification 中国鸟类数据集（约 220K 张，373 种）
+//! 替代原 iNaturalist 2021 1486 类模型以解决国内鸟种误识别为海外种的问题。
+//! 旧模型归档于 temp/legacy_models/bird_classifier_v1_inaturalist_1486.onnx。
 //!
 //! 设计原则：
 //! - Best-effort：分类失败不影响主流水线，仅 log warn
 //! - 物种名称优先中文名，无中文名时 fallback 英文名
+//!   （新 373 类数据库理论上 100% 覆盖中文名）
 
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -28,7 +33,10 @@ use crate::models::AppError;
 const CLASSIFIER_INPUT_SIZE: u32 = 224;
 
 /// 鸟种最低置信度阈值（低于此值不标注物种名称）
-const SPECIES_CONFIDENCE_THRESHOLD: f32 = 0.10;
+///
+/// 在 373 类中国鸟种模型上，训练数据量更大、类别更少，模型置信度普遍更高，
+/// 因此阈值从原 0.10 提高到 0.25，过滤掉低置信度的误识别。
+const SPECIES_CONFIDENCE_THRESHOLD: f32 = 0.25;
 
 /// 分类器推理线程数
 const CLASSIFIER_INTRA_THREADS: usize = 2;
@@ -43,7 +51,7 @@ struct SpeciesEntry {
     scientific_name: String,
     /// 英文俗名
     common_name_en: String,
-    /// 中文俗名（非中国分布种为 null）
+    /// 中文俗名（理论上 373 种全部有中文名；若因数据源缺失则为 null）
     common_name_zh: Option<String>,
     /// 目（用于调试）
     #[allow(dead_code)]

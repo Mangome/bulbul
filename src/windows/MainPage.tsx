@@ -207,13 +207,9 @@ function MainPage() {
     const prepareCanvas = async () => {
       // 收集所有 hash
       const allHashes: string[] = [];
-      const nameMap = new Map<string, string>();
-
       for (const group of groups) {
-        for (let i = 0; i < group.pictureHashes.length; i++) {
-          const hash = group.pictureHashes[i];
+        for (const hash of group.pictureHashes) {
           allHashes.push(hash);
-          nameMap.set(hash, group.pictureNames[i] ?? hash);
         }
       }
 
@@ -264,7 +260,7 @@ function MainPage() {
 
     prepareCanvas();
     return () => { cancelled = true; };
-  }, [processingState, groups]);
+  }, [processingState, groups, memoizedFileNames]);
 
   // ── 窗口尺寸变化时重新计算布局 ──
   useEffect(() => {

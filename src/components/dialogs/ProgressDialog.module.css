@@ -81,11 +81,22 @@
   to { transform: rotate(360deg); }
 }
 
+/* 尊重 reduced-motion：spinner 改为静态圆环（保留视觉指示但不旋转） */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+    border-top-color: var(--color-primary);
+    border-right-color: var(--color-primary);
+    opacity: 0.6;
+  }
+}
+
 .stageLabel {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   color: var(--color-text-secondary);
   letter-spacing: -0.2px;
+  display: inline-block;
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -130,24 +141,16 @@
   height: 100%;
   border-radius: 3px;
   background: var(--color-primary);
-  transition: width var(--transition-normal);
-  position: relative;
-  background-image: linear-gradient(
-    -45deg,
-    rgba(255, 255, 255, 0.15) 25%,
-    transparent 25%,
-    transparent 50%,
-    rgba(255, 255, 255, 0.15) 50%,
-    rgba(255, 255, 255, 0.15) 75%,
-    transparent 75%
-  );
-  background-size: 12px 12px;
-  animation: stripeMove 0.6s linear infinite;
+  /* 450ms easeOutQuint — 更沉稳的推进感 */
+  transition: width 450ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: width;
 }
 
-@keyframes stripeMove {
-  from { background-position: 0 0; }
-  to { background-position: 12px 0; }
+/* 尊重 reduced-motion：进度条瞬时更新 */
+@media (prefers-reduced-motion: reduce) {
+  .progressBarFill {
+    transition: none;
+  }
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -203,7 +206,11 @@
   border: 1px solid var(--color-border);
   border-radius: 6px;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast),
+    transform var(--transition-fast);
 }
 
 .cancelButton:hover {
@@ -223,16 +230,4 @@
 [data-theme="dark"] .dialog {
   background: var(--color-bg-secondary);
   border-color: var(--color-border);
-}
-
-[data-theme="dark"] .progressBarFill {
-  background-image: linear-gradient(
-    -45deg,
-    rgba(255, 255, 255, 0.08) 25%,
-    transparent 25%,
-    transparent 50%,
-    rgba(255, 255, 255, 0.08) 50%,
-    rgba(255, 255, 255, 0.08) 75%,
-    transparent 75%
-  );
 }

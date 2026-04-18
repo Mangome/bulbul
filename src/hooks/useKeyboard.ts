@@ -25,7 +25,7 @@ export interface UseKeyboardOptions {
 // ─── 常量 ─────────────────────────────────────────────
 
 /** 分组导航节流间隔（ms），防止快速连按导致动画/纹理堆叠白屏 */
-const NAVIGATION_THROTTLE_MS = 200;
+const NAVIGATION_THROTTLE_MS = 180;
 
 // ─── 辅助 ─────────────────────────────────────────────
 

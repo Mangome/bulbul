@@ -39,8 +39,8 @@
   background:
     radial-gradient(
       ellipse 60% 50% at 50% 45%,
-      rgba(74, 144, 226, 0.12) 0%,
-      rgba(74, 144, 226, 0.04) 35%,
+      rgba(var(--color-primary-rgb), 0.12) 0%,
+      rgba(var(--color-primary-rgb), 0.04) 35%,
       transparent 70%
     );
   animation: glowPulse 8s ease-in-out infinite;
@@ -51,8 +51,8 @@
   background:
     radial-gradient(
       ellipse 60% 50% at 50% 45%,
-      rgba(30, 58, 95, 0.06) 0%,
-      rgba(30, 58, 95, 0.02) 35%,
+      rgba(var(--color-primary-rgb), 0.06) 0%,
+      rgba(var(--color-primary-rgb), 0.02) 35%,
       transparent 70%
     );
 }
@@ -91,7 +91,7 @@
   background-image:
     radial-gradient(
       circle,
-      rgba(30, 58, 95, 0.06) 1px,
+      rgba(var(--color-primary-rgb), 0.06) 1px,
       transparent 1.5px
     );
 }
@@ -120,7 +120,7 @@
     105deg,
     transparent 0%,
     transparent 40%,
-    rgba(30, 58, 95, 0.025) 50%,
+    rgba(var(--color-primary-rgb), 0.025) 50%,
     transparent 60%,
     transparent 100%
   );
@@ -188,8 +188,8 @@
   border-radius: 50%;
   background: radial-gradient(
     circle,
-    rgba(74, 144, 226, 0.22) 0%,
-    rgba(74, 144, 226, 0.08) 40%,
+    rgba(var(--color-primary-rgb), 0.22) 0%,
+    rgba(var(--color-primary-rgb), 0.08) 40%,
     transparent 70%
   );
   filter: blur(12px);
@@ -201,8 +201,8 @@
 :root:not([data-theme="dark"]) .iconHalo {
   background: radial-gradient(
     circle,
-    rgba(30, 58, 95, 0.14) 0%,
-    rgba(30, 58, 95, 0.06) 40%,
+    rgba(var(--color-primary-rgb), 0.14) 0%,
+    rgba(var(--color-primary-rgb), 0.06) 40%,
     transparent 70%
   );
 }
@@ -225,14 +225,14 @@
   user-select: none;
   filter:
     drop-shadow(0 8px 24px rgba(0, 0, 0, 0.4))
-    drop-shadow(0 2px 8px rgba(74, 144, 226, 0.15));
+    drop-shadow(0 2px 8px rgba(var(--color-primary-rgb), 0.15));
 }
 
 [data-theme="light"] .icon,
 :root:not([data-theme="dark"]) .icon {
   filter:
-    drop-shadow(0 8px 24px rgba(30, 58, 95, 0.18))
-    drop-shadow(0 2px 8px rgba(30, 58, 95, 0.08));
+    drop-shadow(0 8px 24px rgba(var(--color-primary-rgb), 0.18))
+    drop-shadow(0 2px 8px rgba(var(--color-primary-rgb), 0.08));
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -272,11 +272,11 @@
 .taglineEn {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-normal);
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   letter-spacing: 2px;
   text-transform: uppercase;
   font-style: italic;
-  opacity: 0.7;
+  opacity: 0.85;
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -329,7 +329,7 @@
   border-radius: 10px;
   cursor: pointer;
   box-shadow:
-    0 4px 16px rgba(74, 144, 226, 0.24),
+    0 4px 16px rgba(var(--color-primary-rgb), 0.24),
     0 1px 2px rgba(0, 0, 0, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.15);
   transition:
@@ -340,38 +340,27 @@
   font-family: inherit;
 }
 
-[data-theme="light"] .button,
-:root:not([data-theme="dark"]) .button {
-  box-shadow:
-    0 4px 16px rgba(30, 58, 95, 0.22),
-    0 1px 2px rgba(0, 0, 0, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.15);
-}
-
 .button:hover {
   box-shadow:
-    0 8px 24px rgba(74, 144, 226, 0.36),
+    0 8px 24px rgba(var(--color-primary-rgb), 0.36),
     0 2px 4px rgba(0, 0, 0, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
   transform: translateY(-2px);
-}
-
-[data-theme="light"] .button:hover,
-:root:not([data-theme="dark"]) .button:hover {
-  box-shadow:
-    0 8px 24px rgba(30, 58, 95, 0.3),
-    0 2px 4px rgba(0, 0, 0, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .button:hover .buttonArrow {
   transform: translateX(3px);
 }
 
+.button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 4px;
+}
+
 .button:active {
   transform: translateY(0) scale(0.98);
   box-shadow:
-    0 2px 8px rgba(74, 144, 226, 0.2),
+    0 2px 8px rgba(var(--color-primary-rgb), 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 

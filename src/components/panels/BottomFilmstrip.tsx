@@ -25,16 +25,24 @@ export interface BottomFilmstripProps {
 export function BottomFilmstrip({ groups, onGroupClick }: BottomFilmstripProps) {
   const currentGroupIndex = useCanvasStore((s) => s.currentGroupIndex);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const lastScrollTimeRef = useRef<number>(0);
 
-  // 当前分组变化时，自动滚动胶片条使活动项可见
+  // 当前分组变化时，自动滚动胶片条使活动项可见。
+  // 连续快速切换时改用 instant，避免 smooth 动画排队造成卡顿。
   useEffect(() => {
     if (!scrollRef.current) return;
     const activeEl = scrollRef.current.querySelector(
       `[data-filmstrip-index="${currentGroupIndex}"]`,
     ) as HTMLElement | null;
-    if (activeEl) {
-      activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-    }
+    if (!activeEl) return;
+
+    const now = performance.now();
+    const gap = now - lastScrollTimeRef.current;
+    lastScrollTimeRef.current = now;
+
+    // 300ms 内连续切换视为快速连击，跳过动画
+    const behavior: ScrollBehavior = gap < 300 ? 'instant' : 'smooth';
+    activeEl.scrollIntoView({ behavior, block: 'nearest', inline: 'center' });
   }, [currentGroupIndex]);
 
   if (groups.length === 0) return null;

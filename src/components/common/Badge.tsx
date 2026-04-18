@@ -10,7 +10,7 @@ import cls from './Badge.module.css';
 
 // ─── 类型 ─────────────────────────────────────────────
 
-export type BadgeVariant = 'default' | 'primary' | 'success' | 'warning';
+export type BadgeVariant = 'default' | 'primary' | 'success' | 'warning' | 'onPrimary';
 
 export interface BadgeProps {
   variant?: BadgeVariant;

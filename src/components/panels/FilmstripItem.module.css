@@ -16,12 +16,19 @@
   border-radius: 6px;
   border: none;
   background: transparent;
+  position: relative;
 
-  transition: background-color var(--transition-fast);
+  transition:
+    background-color 200ms cubic-bezier(0.25, 1, 0.5, 1),
+    transform 120ms cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 .item:hover {
   background-color: var(--color-bg-tertiary);
+}
+
+.item:hover .thumb {
+  border-color: var(--color-border-strong, var(--color-border));
 }
 
 .item:active {
@@ -38,6 +45,44 @@
   box-shadow: 0 0 0 2px var(--color-primary-light);
 }
 
+/* 激活态底部指示短条（滑入式） */
+.active::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 20px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--color-primary);
+  transform: translateX(-50%) scaleX(0.3);
+  opacity: 0;
+  animation: indicatorSlideIn 260ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes indicatorSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scaleX(0.3);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .item,
+  .thumb {
+    transition: none;
+  }
+  .active::after {
+    animation: none;
+    opacity: 1;
+    transform: translateX(-50%) scaleX(1);
+  }
+}
+
 /* ────────────────────────────────────────────────────────────────
    缩略图
 ──────────────────────────────────────────────────────────────── */
@@ -51,24 +96,30 @@
   background: var(--color-bg-tertiary);
 
   transition:
-    border-color var(--transition-fast),
-    box-shadow var(--transition-fast);
+    border-color 200ms cubic-bezier(0.25, 1, 0.5, 1),
+    box-shadow 200ms cubic-bezier(0.25, 1, 0.5, 1),
+    filter 150ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.item:hover .thumbImg {
+  filter: brightness(1.04);
+}
+
+.active .thumbImg {
+  filter: brightness(1.06);
 }
 
 .thumbImg {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: filter 150ms cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 .thumbPlaceholder {
   width: 100%;
   height: 100%;
-  background: linear-gradient(
-    135deg,
-    var(--color-bg-secondary) 0%,
-    var(--color-bg-tertiary) 100%
-  );
+  background: var(--color-bg-tertiary);
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -81,6 +132,7 @@
   color: var(--color-text-muted);
   line-height: 1;
   font-variant-numeric: tabular-nums;
+  transition: color 200ms cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 .active .count {

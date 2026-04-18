@@ -1,0 +1,13 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   App - 根容器样式
+════════════════════════════════════════════════════════════════════════════ */
+
+.unknownWindow {
+  padding: var(--spacing-xl);
+  text-align: center;
+}
+
+.unknownWindowTitle {
+  color: var(--color-danger);
+  margin-bottom: var(--spacing-md);
+}

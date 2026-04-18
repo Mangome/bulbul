@@ -47,9 +47,11 @@
   height: 12px;
   border-radius: 50%;
   background: var(--color-primary);
-  border: 2px solid #FFFFFF;
+  border: 2px solid var(--color-bg-primary);
   box-shadow: var(--shadow-normal);
-  transition: all var(--transition-fast);
+  transition:
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
   cursor: grab;
 }
 
@@ -61,9 +63,4 @@
 
 .thumb:hover {
   box-shadow: 0 0 0 4px var(--color-primary-light);
-}
-
-/* 深色主题 */
-[data-theme="dark"] .thumb {
-  border-color: var(--color-bg-primary);
 }

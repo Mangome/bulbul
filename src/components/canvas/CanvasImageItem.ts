@@ -14,6 +14,7 @@
 import type { LayoutItem } from '../../utils/layout';
 import type { ImageMetadata, DetectionBox } from '../../types';
 import { drawDetectionOverlay } from './drawDetectionOverlay';
+import { easeOutQuart } from '../../utils/easing';
 
 // ─── 常量 ─────────────────────────────────────────────
 
@@ -33,6 +34,19 @@ const getSelAnimDuration = (): number => {
   if (typeof window === 'undefined') return 200;
   const prefersReduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   return prefersReduced ? 0 : 200;
+};
+
+// ─── 悬停态常量 ─────────────────────────────────────
+/** 悬停边框颜色（亮色中性线，在任何底图上都清晰） */
+const HOVER_BORDER_COLOR = 'rgba(255, 255, 255, 0.65)';
+const HOVER_BORDER_SHADOW = 'rgba(0, 0, 0, 0.35)';
+/** 悬停边框宽度（屏幕像素） */
+const HOVER_BORDER_WIDTH = 1.5;
+/** 悬停动画时长（ms） */
+const getHoverAnimDuration = (): number => {
+  if (typeof window === 'undefined') return 150;
+  const prefersReduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  return prefersReduced ? 0 : 150;
 };
 
 // ─── 信息覆盖层常量 ─────────────────────────────────
@@ -83,10 +97,17 @@ export class CanvasImageItem {
   // 视觉状态
   alpha: number = 1;
   private _isSelected: boolean = false;
+  private _isHovered: boolean = false;
 
   // 选中动画状态
   private selectionAnimStartTime: number = 0;
   private selectionAnimDirection: 'in' | 'out' = 'in';
+
+  // 悬停动画状态（rAF 驱动，与选中动画同构）
+  private hoverAnimStartTime: number = 0;
+  private hoverAnimDirection: 'in' | 'out' = 'in';
+  /** 最近一帧的 hover progress（0-1），用于避免动画完成后继续请求帧 */
+  private hoverAnimValue: number = 0;
 
   // 检测框
   private detectionBoxes: DetectionBox[] = [];
@@ -212,6 +233,13 @@ export class CanvasImageItem {
       drawDetectionOverlay(ctx, this.detectionBoxes, this.width, this.height);
     }
 
+    // 绘制悬停效果（仅在未选中时）
+    const hoverAnimNeedsFrame = this._updateHoverAnimation(now);
+    needsNextFrame = needsNextFrame || hoverAnimNeedsFrame;
+    if (!this._isSelected && this.hoverAnimValue > 0.01) {
+      this._drawHover(ctx, zoom);
+    }
+
     // 绘制选中效果
     if (this._isSelected) {
       const animNeedsFrame = this._updateSelectionAnimation(now);
@@ -242,11 +270,14 @@ export class CanvasImageItem {
   }
 
   /**
-   * 设置悬停状态 — 缩略图模式下为 no-op
-   * 悬停反馈由 Magnifier 组件提供
+   * 设置悬停状态（带 150ms easeOutQuart 补间）
+   * 非选中态下显示 1.5px 轻描边；选中态下为 no-op（避免视觉叠加）
    */
-  setHovered(_hovered: boolean): void {
-    // no-op: 缩略图模式不绘制悬停效果
+  setHovered(hovered: boolean): void {
+    if (this._isHovered === hovered) return;
+    this._isHovered = hovered;
+    this.hoverAnimStartTime = performance.now();
+    this.hoverAnimDirection = hovered ? 'in' : 'out';
   }
 
   /**
@@ -274,6 +305,9 @@ export class CanvasImageItem {
     // 不触碰 ImageBitmap，生命周期由 ImageCache 管理
     this.image = null;
     this.selectionAnimStartTime = 0;
+    this.hoverAnimStartTime = 0;
+    this.hoverAnimValue = 0;
+    this._isHovered = false;
     this.detectionBoxes = [];
     this.detectionVisible = false;
   }
@@ -477,6 +511,35 @@ export class CanvasImageItem {
   }
 
   /**
+   * 绘制悬停效果：图片外围 1.5px 淡白描边（带轻阴影）
+   * 使用反向缩放保证边框屏幕像素宽度恒定，不随 zoom 变化
+   * 仅当 hoverAnimValue > 0 且未选中时调用
+   */
+  private _drawHover(ctx: CanvasRenderingContext2D, zoom: number): void {
+    const alpha = this.hoverAnimValue * this.alpha;
+    if (alpha <= 0.01) return;
+
+    const invZoom = 1 / zoom;
+    const borderW = HOVER_BORDER_WIDTH * invZoom;
+    const half = borderW / 2;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+
+    // 轻阴影增强在复杂底色上的辨识度
+    ctx.shadowColor = HOVER_BORDER_SHADOW;
+    ctx.shadowBlur = 3 * invZoom;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+
+    ctx.strokeStyle = HOVER_BORDER_COLOR;
+    ctx.lineWidth = borderW;
+    ctx.strokeRect(half, half, this.width - borderW, this.height - borderW);
+
+    ctx.restore();
+  }
+
+  /**
    * 绘制选中效果：内缩品牌色边框 + 右上角精致角标
    * 使用反向缩放保证边框和角标在任意 zoom 下像素大小恒定
    */
@@ -487,13 +550,14 @@ export class CanvasImageItem {
 
     let progress = Math.min(elapsed / duration, 1);
     if (this.selectionAnimDirection === 'out') {
-      const outDuration = duration * 0.6;
+      // 退出动画 75% 时长（比进入稍快）
+      const outDuration = duration * 0.75;
       progress = Math.min(elapsed / outDuration, 1);
       progress = 1 - progress;
     }
 
-    // ease-out-cubic 缓动，让动画更自然
-    const eased = 1 - Math.pow(1 - progress, 3);
+    // ease-out-quart 缓动，工具感更强、更自然的减速
+    const eased = easeOutQuart(progress);
     const baseAlpha = this.alpha;
     const invZoom = 1 / zoom;
 
@@ -557,9 +621,32 @@ export class CanvasImageItem {
     const elapsed = now - this.selectionAnimStartTime;
     const duration = this.selectionAnimDirection === 'in'
       ? getSelAnimDuration()
-      : getSelAnimDuration() * 0.6;
+      : getSelAnimDuration() * 0.75;
 
     return elapsed < duration;
+  }
+
+  /**
+   * 更新悬停动画进度，返回是否需要继续渲染
+   * 同时写入 this.hoverAnimValue（0-1）供 _drawHover 使用
+   */
+  private _updateHoverAnimation(now: number): boolean {
+    const duration = this.hoverAnimDirection === 'in'
+      ? getHoverAnimDuration()
+      : getHoverAnimDuration() * 0.75;
+
+    // duration 为 0（reduced-motion）时直接取终值
+    if (duration <= 0) {
+      this.hoverAnimValue = this._isHovered ? 1 : 0;
+      return false;
+    }
+
+    const elapsed = now - this.hoverAnimStartTime;
+    const rawProgress = Math.max(0, Math.min(1, elapsed / duration));
+    const eased = easeOutQuart(rawProgress);
+    this.hoverAnimValue = this.hoverAnimDirection === 'in' ? eased : 1 - eased;
+
+    return rawProgress < 1;
   }
 
   /** 格式化拍摄参数为显示字符串 */
