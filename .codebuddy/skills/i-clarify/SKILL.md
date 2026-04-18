@@ -1,6 +1,7 @@
 ---
 name: i-clarify
 description: Improve unclear UX copy, error messages, microcopy, labels, and instructions to make interfaces easier to understand. Use when the user mentions confusing text, unclear labels, bad error messages, hard-to-follow instructions, or wanting better UX writing.
+version: 2.1.1
 user-invocable: true
 argument-hint: "[target]"
 ---
@@ -9,7 +10,7 @@ Identify and improve unclear, confusing, or poorly written interface text to mak
 
 ## MANDATORY PREPARATION
 
-Invoke /i-frontend-design — it contains design principles, anti-patterns, and the **Context Gathering Protocol**. Follow the protocol before proceeding — if no design context exists yet, you MUST run /i-teach-impeccable first. Additionally gather: audience technical level and users' mental state in context.
+Invoke /i-impeccable — it contains design principles, anti-patterns, and the **Context Gathering Protocol**. Follow the protocol before proceeding — if no design context exists yet, you MUST run /i-impeccable teach first. Additionally gather: audience technical level and users' mental state in context.
 
 ---
 

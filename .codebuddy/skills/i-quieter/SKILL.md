@@ -1,6 +1,7 @@
 ---
 name: i-quieter
 description: Tones down visually aggressive or overstimulating designs, reducing intensity while preserving quality. Use when the user mentions too bold, too loud, overwhelming, aggressive, garish, or wants a calmer, more refined aesthetic.
+version: 2.1.1
 user-invocable: true
 argument-hint: "[target]"
 ---
@@ -9,7 +10,7 @@ Reduce visual intensity in designs that are too bold, aggressive, or overstimula
 
 ## MANDATORY PREPARATION
 
-Invoke /i-frontend-design — it contains design principles, anti-patterns, and the **Context Gathering Protocol**. Follow the protocol before proceeding — if no design context exists yet, you MUST run /i-teach-impeccable first.
+Invoke /i-impeccable — it contains design principles, anti-patterns, and the **Context Gathering Protocol**. Follow the protocol before proceeding — if no design context exists yet, you MUST run /i-impeccable teach first.
 
 ---
 
