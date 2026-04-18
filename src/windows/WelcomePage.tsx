@@ -36,24 +36,74 @@ function WelcomePage() {
 
   return (
     <div className={cls.container}>
-      <div className={cls.content}>
-        <img src={appIcon} alt="Bulbul" className={cls.icon} draggable={false} />
+      {/* 背景装饰层 */}
+      <div className={cls.backdrop} aria-hidden="true">
+        <div className={cls.glow} />
+        <div className={cls.dots} />
+        <div className={cls.beam} />
+      </div>
+
+      <main className={cls.content}>
+        <div className={cls.iconWrap}>
+          <div className={cls.iconHalo} aria-hidden="true" />
+          <img src={appIcon} alt="" className={cls.icon} draggable={false} />
+        </div>
+
         <h1 className={cls.title}>Bulbul</h1>
-        <p className={cls.subtitle}>RAW 图像快速筛选</p>
-        {version && <p className={cls.version}>v{version}</p>}
-        <p className={cls.description}>
+
+        <p className={cls.tagline}>
+          <span className={cls.taglineZh}>从一组相似照片中，挑出那一张</span>
+          <span className={cls.taglineEn}>Focus on the keepers.</span>
         </p>
+
+        <div className={cls.meta} aria-hidden="true">
+          <span className={cls.metaDot} />
+          <span className={cls.metaText}>智能分组 · 极速预览 · 专注选片</span>
+          <span className={cls.metaDot} />
+        </div>
 
         <button
           className={`${cls.button} ${loading ? cls.buttonDisabled : ''}`}
           onClick={handleSelectFolder}
           disabled={loading}
+          aria-busy={loading}
+          aria-label="选择 RAW 文件夹以开始筛选"
         >
-          {loading ? '正在打开...' : '选择文件夹'}
+          <span className={cls.buttonLabel}>
+            {loading ? '正在打开…' : '选择文件夹'}
+          </span>
+          {!loading && (
+            <svg
+              className={cls.buttonArrow}
+              width="14"
+              height="14"
+              viewBox="0 0 14 14"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M3 7h8m0 0L7.5 3.5M11 7L7.5 10.5"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          )}
         </button>
 
-        {error && <p className={cls.error}>{error}</p>}
-      </div>
+        {error && (
+          <p className={cls.error} role="alert">
+            {error}
+          </p>
+        )}
+      </main>
+
+      {version && (
+        <footer className={cls.footer} aria-hidden="true">
+          <span className={cls.footerVersion}>v{version}</span>
+        </footer>
+      )}
     </div>
   );
 }
