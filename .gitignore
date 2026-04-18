@@ -87,3 +87,6 @@ coverage/src-tauri/target/debug/build/bulbul-f09fc20a00155c90/out/index.html
 
 
 git-commit.bat
+
+# Training/data directories (large file counts)
+temp/

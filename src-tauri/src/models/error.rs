@@ -39,6 +39,9 @@ pub enum AppError {
 
     #[error("目标检测失败: {0}")]
     DetectionFailed(String),
+
+    #[error("鸟种分类失败: {0}")]
+    ClassificationFailed(String),
 }
 
 impl AppError {
@@ -58,6 +61,7 @@ impl AppError {
             AppError::ConfigError(_) => "配置加载失败，请检查应用设置".to_string(),
             AppError::HashError(_) => "图像指纹计算失败，请重试".to_string(),
             AppError::DetectionFailed(_) => "目标检测失败，将跳过该图片的区域评分".to_string(),
+            AppError::ClassificationFailed(_) => "鸟种分类失败，将跳过物种标注".to_string(),
         }
     }
 }
@@ -187,6 +191,19 @@ mod tests {
     fn test_detection_failed_user_message() {
         let err = AppError::DetectionFailed("inference timeout".to_string());
         assert!(err.user_message().contains("目标检测失败"));
+    }
+
+    #[test]
+    fn test_classification_failed_serialization() {
+        let err = AppError::ClassificationFailed("model not found".to_string());
+        let json = serde_json::to_string(&err).unwrap();
+        assert_eq!(json, "\"鸟种分类失败: model not found\"");
+    }
+
+    #[test]
+    fn test_classification_failed_user_message() {
+        let err = AppError::ClassificationFailed("inference error".to_string());
+        assert!(err.user_message().contains("鸟种分类失败"));
     }
 
     #[test]

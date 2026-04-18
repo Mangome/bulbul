@@ -19,30 +19,48 @@ pub fn run() {
         .filter_level(log::LevelFilter::Debug)
         .format_timestamp_millis()
         .init();
-    
+
     log::info!("Bulbul 应用启动");
+    let app_start = std::time::Instant::now();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
-        .setup(|app| {
+        .on_page_load(move |webview, payload| {
+            // 页面加载完成时显示窗口，不依赖前端 JS 执行
+            if payload.event() == tauri::webview::PageLoadEvent::Finished {
+                let label = webview.label().to_string();
+                let window = webview.window();
+                let _ = window.show();
+                log::info!(
+                    "[启动计时] 窗口已显示: label={}, url={}, elapsed={:?}",
+                    label,
+                    payload.url(),
+                    app_start.elapsed(),
+                );
+            }
+        })
+        .setup(move |app| {
+            log::info!("[启动计时] setup() 开始: {:?}", app_start.elapsed());
+
             let cache_dir = app
                 .path()
                 .cache_dir()
                 .unwrap_or_else(|_| std::path::PathBuf::from(".cache"));
             log::info!("系统缓存目录: {}", cache_dir.display());
-            
+
             let cache_base = get_cache_base_dir(&cache_dir);
             log::info!("应用缓存基目录: {}", cache_base.display());
-            
+
             // 确保缓存目录存在
             if let Err(e) = std::fs::create_dir_all(&cache_base) {
                 log::warn!("创建缓存目录失败: {}", e);
             } else {
                 log::info!("缓存目录已确保存在");
             }
-            
+            log::info!("[启动计时] setup() 缓存目录完成: {:?}", app_start.elapsed());
+
             let session = SessionState::with_cache_dir(cache_base);
             app.manage(Arc::new(Mutex::new(session)));
 
@@ -50,6 +68,7 @@ pub fn run() {
             for (_label, window) in app.webview_windows() {
                 set_window_icons(&window);
             }
+            log::info!("[启动计时] setup() 完成: {:?}", app_start.elapsed());
 
             Ok(())
         })

@@ -26,7 +26,7 @@ pub async fn open_main_window(
         // 已存在则聚焦
         existing.set_focus().map_err(|e| e.to_string())?;
     } else {
-        // 创建新的 Main 窗口（初始不可见，由前端渲染完成后调用 show）
+        // 创建新的 Main 窗口（初始不可见，由 Rust on_page_load 回调显示）
         let main_window = WebviewWindowBuilder::new(
             &app,
             "main",

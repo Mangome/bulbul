@@ -30,7 +30,7 @@ const CONFIDENCE_THRESHOLD: f32 = 0.70;
 const NMS_IOU_THRESHOLD: f32 = 0.45;
 
 /// 检测框坐标和置信度
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct DetectionBox {
     /// 左边界，范围 [0, 1] 相对坐标
@@ -611,7 +611,7 @@ mod tests {
     #[test]
     fn test_denormalize_clamp_out_of_bounds() {
         // DetectionBox::new clamps inputs to [0,1]
-        let bbox = DetectionBox { x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0, confidence: 0.9 };
+        let bbox = DetectionBox { x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0, confidence: 0.9, ..Default::default() };
         assert!(bbox.x1 >= 0.0 && bbox.x1 <= 1.0);
         assert!(bbox.x2 >= 0.0 && bbox.x2 <= 1.0);
     }

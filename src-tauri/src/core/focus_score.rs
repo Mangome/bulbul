@@ -460,6 +460,7 @@ mod tests {
         let bbox = DetectionBox {
             x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0,
             confidence: 0.9,
+            ..Default::default()
         };
         let region_score = score_image_with_bbox(&img, &bbox).unwrap();
         // 算法不完全相同（分块 vs 整体方差），但评分应在 ±1 星以内
@@ -474,6 +475,7 @@ mod tests {
         let bbox = DetectionBox {
             x1: 0.1, y1: 0.1, x2: 0.9, y2: 0.9,
             confidence: 0.9,
+            ..Default::default()
         };
         let score = score_image_with_bbox(&img, &bbox).unwrap();
         assert!(score >= 4, "Sharp region should score >= 4, got {}", score);
@@ -486,6 +488,7 @@ mod tests {
         let bbox = DetectionBox {
             x1: 0.1, y1: 0.1, x2: 0.9, y2: 0.9,
             confidence: 0.9,
+            ..Default::default()
         };
         let score = score_image_with_bbox(&img, &bbox).unwrap();
         assert!(score <= 2, "Blurred region should score <= 2, got {}", score);
@@ -511,6 +514,7 @@ mod tests {
         let bbox = DetectionBox {
             x1: 0.5, y1: 0.5, x2: 0.501, y2: 0.501,
             confidence: 0.9,
+            ..Default::default()
         };
         // 应该不 panic，返回低评分（区域太小，方差为 0）
         let score = score_image_with_bbox(&img, &bbox).unwrap();
@@ -524,6 +528,7 @@ mod tests {
         let bbox = DetectionBox {
             x1: 0.8, y1: 0.8, x2: 1.5, y2: 1.5,
             confidence: 0.9,
+            ..Default::default()
         };
         // 应不 panic（evaluate_blocks_in_bbox 中 min(width) 约束）
         let result = score_image_with_bbox(&img, &bbox);
@@ -561,6 +566,7 @@ mod tests {
         let bbox = DetectionBox {
             x1: 0.1, y1: 0.1, x2: 0.9, y2: 0.9,
             confidence: 0.9,
+            ..Default::default()
         };
         let (score, method) = calculate_focus_score_with_bbox(&tmp_path, Some(&bbox)).unwrap();
         assert!(score.is_some());

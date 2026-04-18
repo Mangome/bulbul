@@ -4,6 +4,7 @@
 //! Scanning → Processing → Analyzing → Grouping → FocusScoring(异步后台) → Completed
 //! 返回 GroupResult。
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
@@ -13,7 +14,9 @@ use chrono::NaiveDateTime;
 use tauri::{Emitter, Manager};
 use tokio::sync::Semaphore;
 
+use crate::core::bird_classification;
 use crate::core::bird_detection;
+use crate::core::bird_detection::DetectionBox;
 use crate::core::focus_score;
 use crate::core::focus_score::FocusScoringMethod;
 use crate::core::grouping::{self, ImageInfoWithPhash};
@@ -447,10 +450,11 @@ pub async fn process_folder(
     {
         let app = app.clone();
         let results = results.clone();
+        let group_result_clone = group_result.clone();
         let pipeline_start = Instant::now(); // 重置计时器用于 FocusScoring 阶段
 
         tokio::spawn(async move {
-            if let Err(e) = compute_focus_scores_background(&app, &results, total, &pipeline_start)
+            if let Err(e) = compute_focus_scores_background(&app, &results, total, &pipeline_start, &group_result_clone)
                 .await
             {
                 log::error!("后台合焦评分失败: {}", e);
@@ -651,15 +655,25 @@ fn parse_capture_time(time_str: &str) -> Option<NaiveDateTime> {
         .ok()
 }
 
+/// 单帧检测结果（暂存，用于分组投票）
+struct FrameDetectionResult {
+    hash: String,
+    score: Option<u32>,
+    method: FocusScoringMethod,
+    bboxes: Vec<DetectionBox>,
+}
+
 /// 异步后台计算合焦程度评分
 ///
 /// 在单独的任务中计算所有图片的合焦评分，并定期发送进度事件。
-/// 完成后发送 "focus-scores-completed" 事件。
+/// 完成后对所有分组执行多帧概率融合投票，通过 `species-vote-update` 事件
+/// 将投票结果发送到前端。
 async fn compute_focus_scores_background(
     app: &tauri::AppHandle,
     results: &[ProcessResult],
     total: usize,
     focus_scoring_start: &Instant,
+    group_result: &GroupResult,
 ) -> Result<(), String> {
     if results.is_empty() {
         return Ok(());
@@ -674,6 +688,19 @@ async fn compute_focus_scores_background(
         log::warn!("resource_dir 下未找到模型文件，将回退到默认路径搜索");
     }
     let model_path = model_path; // 不可变
+
+    // 解析分类器模型和物种数据库路径
+    let (classifier_model_path, species_db_path): (Option<PathBuf>, Option<PathBuf>) = app.path().resource_dir()
+        .map(|dir| bird_classification::resolve_classifier_paths_from_resource_dir(&dir))
+        .map(|(m, d)| {
+            let m = if m.exists() { Some(m) } else { None };
+            let d = if d.exists() { Some(d) } else { None };
+            (m, d)
+        })
+        .unwrap_or((None, None));
+    if classifier_model_path.is_none() {
+        log::info!("resource_dir 下未找到分类器模型，将回退到默认路径搜索或跳过物种分类");
+    }
 
     // 并发计算配置
     let max_concurrency = std::cmp::min(4, num_cpus::get()); // 限制在 4 个并发
@@ -697,6 +724,8 @@ async fn compute_focus_scores_background(
         let medium_path = PathBuf::from(&result.medium_path);
         let filename = result.filename.clone();
         let model_path_for_task = model_path.clone();
+        let classifier_model_for_task = classifier_model_path.clone();
+        let species_db_for_task = species_db_path.clone();
 
         join_set.spawn(async move {
             let _permit = sem.acquire().await.ok();
@@ -705,10 +734,12 @@ async fn compute_focus_scores_background(
             let hash_clone = hash.clone();
             let medium_path_clone = medium_path.clone();
             let model_path_clone = model_path_for_task.clone();
+            let classifier_model_clone = classifier_model_for_task.clone();
+            let species_db_clone = species_db_for_task.clone();
             let result = tokio::task::spawn_blocking(move || {
                 // 1. 鸟类检测
                 let detection = bird_detection::detect_birds(&medium_path_clone, model_path_clone.as_deref());
-                let (best_bbox, all_bboxes) = match detection {
+                let (best_bbox, mut all_bboxes) = match detection {
                     Ok(result) if !result.bboxes.is_empty() => {
                         // 取置信度最高的框用于评分
                         let best = result.bboxes.iter()
@@ -723,7 +754,17 @@ async fn compute_focus_scores_background(
                     }
                 };
 
-                // 2. 区域合焦评分
+                // 2. 鸟种分类（best-effort，失败不影响后续）
+                if !all_bboxes.is_empty() {
+                    let _ = bird_classification::classify_detections(
+                        &medium_path_clone,
+                        &mut all_bboxes,
+                        classifier_model_clone.as_deref(),
+                        species_db_clone.as_deref(),
+                    );
+                }
+
+                // 3. 区域合焦评分
                 let (score, method) = focus_score::calculate_focus_score_with_bbox(
                     &medium_path_clone,
                     best_bbox.as_ref(),
@@ -738,19 +779,16 @@ async fn compute_focus_scores_background(
         });
     }
 
-    // 流式收集结果，每完成一张立即 emit
+    // 收集所有帧的结果（先不流式 emit，等投票后再发）
+    let mut frame_results: Vec<FrameDetectionResult> = Vec::with_capacity(total);
     let mut completed = 0usize;
 
     while let Some(join_result) = join_set.join_next().await {
         match join_result {
             Ok((_idx, hash, Ok((score, method, bboxes)), filename)) => {
                 completed += 1;
-                let _ = app.emit("focus-score-update", serde_json::json!({
-                    "hash": &hash,
-                    "score": score,
-                    "method": method,
-                    "detectionBboxes": bboxes,
-                }));
+                frame_results.push(FrameDetectionResult { hash, score, method, bboxes });
+
                 emit_progress(
                     app,
                     ProcessingState::FocusScoring,
@@ -763,11 +801,13 @@ async fn compute_focus_scores_background(
             Ok((_idx, hash, Err(err), _filename)) => {
                 completed += 1;
                 log::warn!("计算 {} 的合焦评分失败: {}", hash, err);
-                let _ = app.emit("focus-score-update", serde_json::json!({
-                    "hash": &hash,
-                    "score": null,
-                    "method": "Undetected",
-                }));
+                frame_results.push(FrameDetectionResult {
+                    hash,
+                    score: None,
+                    method: FocusScoringMethod::Undetected,
+                    bboxes: vec![],
+                });
+
                 emit_progress(
                     app,
                     ProcessingState::FocusScoring,
@@ -790,6 +830,84 @@ async fn compute_focus_scores_background(
                 );
             }
         }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // 分组内多帧概率融合投票
+    // ═══════════════════════════════════════════════════════
+
+    // 构建 hash → 检测结果索引（owned String 避免借用 frame_results）
+    let hash_to_result: HashMap<String, usize> = frame_results
+        .iter()
+        .enumerate()
+        .map(|(i, r)| (r.hash.clone(), i))
+        .collect();
+
+    // 遍历每个分组，对有 bbox 的图片执行融合投票
+    for group in &group_result.groups {
+        // 收集该分组内有检测结果的图片
+        let group_member_indices: Vec<usize> = group.picture_hashes
+            .iter()
+            .filter_map(|h| hash_to_result.get(h).copied())
+            .collect();
+
+        // 只有多于 1 帧有检测结果时才做融合（1 帧时投票无意义）
+        if group_member_indices.len() < 2 {
+            continue;
+        }
+
+        // 检查是否至少有一个成员有物种结果（投票才有意义）
+        let any_has_species = group_member_indices.iter()
+            .any(|&idx| frame_results[idx].bboxes.iter().any(|b| b.species_name.is_some()));
+
+        if !any_has_species {
+            continue;
+        }
+
+        // 构建投票输入：每个成员的 (图片路径, bboxes)
+        let mut vote_inputs: Vec<(PathBuf, Vec<DetectionBox>)> = Vec::new();
+        for &idx in &group_member_indices {
+            let result_idx = results.iter().position(|r| r.hash == frame_results[idx].hash);
+            let medium_path = result_idx.map(|i| PathBuf::from(&results[i].medium_path));
+            if let Some(path) = medium_path {
+                vote_inputs.push((path, frame_results[idx].bboxes.clone()));
+            }
+        }
+
+        // 执行融合投票
+        let mut vote_bboxes_refs: Vec<(&Path, &mut Vec<DetectionBox>)> = Vec::new();
+        for (path, bboxes) in &mut vote_inputs {
+            vote_bboxes_refs.push((path.as_path(), bboxes));
+        }
+
+        if let Err(e) = bird_classification::classify_group_with_fusion(
+            &mut vote_bboxes_refs,
+            classifier_model_path.as_deref(),
+            species_db_path.as_deref(),
+        ) {
+            log::warn!("分组 {} 投票融合失败: {}", group.id, e);
+            continue;
+        }
+
+        // 将投票结果回写到 frame_results 中对应的条目
+        for (i, &idx) in group_member_indices.iter().enumerate() {
+            if i < vote_inputs.len() {
+                frame_results[idx].bboxes = vote_inputs[i].1.clone();
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // 流式发送所有结果（投票后的最终结果）
+    // ═══════════════════════════════════════════════════════
+
+    for frame in &frame_results {
+        let _ = app.emit("focus-score-update", serde_json::json!({
+            "hash": &frame.hash,
+            "score": frame.score,
+            "method": frame.method,
+            "detectionBboxes": frame.bboxes,
+        }));
     }
 
     // 发送完成事件

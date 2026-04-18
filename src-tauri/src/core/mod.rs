@@ -6,3 +6,4 @@ pub mod grouping;
 pub mod nef_parser;
 pub mod focus_score;
 pub mod bird_detection;
+pub mod bird_classification;
