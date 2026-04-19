@@ -10,10 +10,14 @@ import type { DetectionBox } from '../../types';
 
 // ─── 常量 ─────────────────────────────────────────────
 
-/** 主框颜色（置信度最高的框） */
+/** 高置信鸟种框颜色（speciesConfidence >= 阈值） */
 const PRIMARY_BOX_COLOR = '#22C55E';
-/** 副框颜色（其他检测框） */
+/** 低置信鸟种框颜色（有鸟种名但 speciesConfidence < 阈值） */
+const LOW_CONFIDENCE_BOX_COLOR = '#F97316';
+/** 仅检测框颜色（无鸟种名） */
 const SECONDARY_BOX_COLOR = '#EAB308';
+/** 鸟种高置信阈值，>= 此值视为可信鸟种 */
+const SPECIES_HIGH_CONFIDENCE = 0.85;
 /** 框线宽度 */
 const BOX_LINE_WIDTH = 2;
 /** 折角尺寸（px） */
@@ -49,14 +53,12 @@ export function drawDetectionOverlay(
 ): void {
   if (boxes.length === 0) return;
 
-  // 找到最高置信度
-  const maxConfidence = Math.max(...boxes.map((b) => b.confidence));
 
   ctx.save();
 
   for (const box of boxes) {
-    const isPrimary = box.confidence === maxConfidence;
-    drawSingleBox(ctx, box, isPrimary, displayWidth, displayHeight);
+    const tier = getBoxTier(box);
+    drawSingleBox(ctx, box, tier, displayWidth, displayHeight);
   }
 
   ctx.restore();
@@ -64,10 +66,30 @@ export function drawDetectionOverlay(
 
 // ─── 内部函数 ─────────────────────────────────────────
 
+type BoxTier = 'high' | 'low' | 'detect';
+
+/** 根据鸟种置信度判定框的等级 */
+function getBoxTier(box: DetectionBox): BoxTier {
+  if (box.speciesName) {
+    const conf = box.speciesConfidence ?? box.confidence;
+    return conf >= SPECIES_HIGH_CONFIDENCE ? 'high' : 'low';
+  }
+  return 'detect';
+}
+
+/** 根据框等级获取颜色 */
+function getTierColor(tier: BoxTier): string {
+  switch (tier) {
+    case 'high': return PRIMARY_BOX_COLOR;
+    case 'low': return LOW_CONFIDENCE_BOX_COLOR;
+    case 'detect': return SECONDARY_BOX_COLOR;
+  }
+}
+
 function drawSingleBox(
   ctx: CanvasRenderingContext2D,
   box: DetectionBox,
-  isPrimary: boolean,
+  tier: BoxTier,
   displayWidth: number,
   displayHeight: number,
 ): void {
@@ -83,16 +105,25 @@ function drawSingleBox(
   const px2 = box.x2 * displayWidth;
   const py2 = box.y2 * displayHeight;
 
-  const color = isPrimary ? PRIMARY_BOX_COLOR : SECONDARY_BOX_COLOR;
+  const color = getTierColor(tier);
 
   // 绘制边框
   drawBoxBorder(ctx, px1, py1, px2, py2, color);
 
   // 绘制标签
-  const label = box.speciesName
-    ? `${box.speciesName} ${Math.round((box.speciesConfidence ?? box.confidence) * 100)}%`
-    : `Bird: ${Math.round(box.confidence * 100)}%`;
+  const label = buildLabel(box, tier);
   drawConfidenceLabel(ctx, px1, py1, label, color);
+}
+
+/** 构建标签文本 */
+function buildLabel(box: DetectionBox, tier: BoxTier): string {
+  if (box.speciesName) {
+    const conf = Math.round((box.speciesConfidence ?? box.confidence) * 100);
+    return tier === 'high'
+      ? `${box.speciesName} ${conf}%`
+      : `${box.speciesName}? ${conf}%`;
+  }
+  return `Bird: ${Math.round(box.confidence * 100)}%`;
 }
 
 /**

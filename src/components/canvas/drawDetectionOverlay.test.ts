@@ -40,29 +40,108 @@ describe('drawDetectionOverlay', () => {
     expect((ctx.stroke as any).mock.calls.length).toBe(0);
   });
 
-  it('单个检测框绘制为主框（绿色）', () => {
+  it('高置信鸟种框为绿色', () => {
+    const boxes: DetectionBox[] = [
+      { x1: 0.2, y1: 0.1, x2: 0.8, y2: 0.9, confidence: 0.95, speciesName: '白头鹎', speciesConfidence: 0.92 },
+    ];
+    drawDetectionOverlay(ctx, boxes, 400, 300);
+
+    expect(ctx.strokeStyle).toBe('#22C55E');
+  });
+
+  it('低置信鸟种框为橙色', () => {
+    const boxes: DetectionBox[] = [
+      { x1: 0.2, y1: 0.1, x2: 0.8, y2: 0.9, confidence: 0.95, speciesName: '白头鹎', speciesConfidence: 0.60 },
+    ];
+    drawDetectionOverlay(ctx, boxes, 400, 300);
+
+    expect(ctx.strokeStyle).toBe('#F97316');
+  });
+
+  it('仅检测框（无鸟种名）为黄色', () => {
     const boxes: DetectionBox[] = [
       { x1: 0.2, y1: 0.1, x2: 0.8, y2: 0.9, confidence: 0.95 },
     ];
     drawDetectionOverlay(ctx, boxes, 400, 300);
 
-    // 应该有 stroke 调用（边框 + 4 个折角 = 5 次）
-    expect((ctx.stroke as any).mock.calls.length).toBe(5);
-    // strokeStyle 应该被设置为绿色
-    expect(ctx.strokeStyle).toBe('#22C55E');
+    expect(ctx.strokeStyle).toBe('#EAB308');
   });
 
-  it('多个检测框区分主框（绿色）和副框（黄色）', () => {
+  it('鸟种置信度正好 85% 视为高置信（绿色）', () => {
     const boxes: DetectionBox[] = [
-      { x1: 0.1, y1: 0.1, x2: 0.5, y2: 0.5, confidence: 0.8 },
-      { x1: 0.5, y1: 0.5, x2: 0.9, y2: 0.9, confidence: 0.95 },
+      { x1: 0.2, y1: 0.1, x2: 0.8, y2: 0.9, confidence: 0.95, speciesName: '红嘴蓝鹊', speciesConfidence: 0.85 },
     ];
     drawDetectionOverlay(ctx, boxes, 400, 300);
 
-    // 应该有 10 次 stroke 调用（每个框 5 次）
-    expect((ctx.stroke as any).mock.calls.length).toBe(10);
-    // 应该有 fillText 调用（标签文字）
-    expect((ctx.fillText as any).mock.calls.length).toBe(2);
+    expect(ctx.strokeStyle).toBe('#22C55E');
+  });
+
+  it('鸟种置信度 84% 视为低置信（橙色）', () => {
+    const boxes: DetectionBox[] = [
+      { x1: 0.2, y1: 0.1, x2: 0.8, y2: 0.9, confidence: 0.95, speciesName: '红嘴蓝鹊', speciesConfidence: 0.84 },
+    ];
+    drawDetectionOverlay(ctx, boxes, 400, 300);
+
+    expect(ctx.strokeStyle).toBe('#F97316');
+  });
+
+  it('高置信标签无问号：白头鹎 92%', () => {
+    const boxes: DetectionBox[] = [
+      { x1: 0.2, y1: 0.2, x2: 0.8, y2: 0.8, confidence: 0.95, speciesName: '白头鹎', speciesConfidence: 0.92 },
+    ];
+    drawDetectionOverlay(ctx, boxes, 400, 300);
+
+    const fillTextCalls = (ctx.fillText as any).mock.calls;
+    expect(fillTextCalls.length).toBeGreaterThan(0);
+    expect(fillTextCalls[0][0]).toBe('白头鹎 92%');
+  });
+
+  it('低置信标签带问号：白头鹎? 45%', () => {
+    const boxes: DetectionBox[] = [
+      { x1: 0.2, y1: 0.2, x2: 0.8, y2: 0.8, confidence: 0.95, speciesName: '白头鹎', speciesConfidence: 0.45 },
+    ];
+    drawDetectionOverlay(ctx, boxes, 400, 300);
+
+    const fillTextCalls = (ctx.fillText as any).mock.calls;
+    expect(fillTextCalls.length).toBeGreaterThan(0);
+    expect(fillTextCalls[0][0]).toBe('白头鹎? 45%');
+  });
+
+  it('仅检测标签：Bird: 95%', () => {
+    const boxes: DetectionBox[] = [
+      { x1: 0.2, y1: 0.2, x2: 0.8, y2: 0.8, confidence: 0.95 },
+    ];
+    drawDetectionOverlay(ctx, boxes, 400, 300);
+
+    const fillTextCalls = (ctx.fillText as any).mock.calls;
+    expect(fillTextCalls.length).toBeGreaterThan(0);
+    expect(fillTextCalls[0][0]).toBe('Bird: 95%');
+  });
+
+  it('鸟种名存在但无 speciesConfidence 时使用 detection confidence 判定等级', () => {
+    const boxes: DetectionBox[] = [
+      // 无 speciesConfidence 时 fallback 到 confidence=0.70 < 0.85 → 低置信橙色
+      { x1: 0.2, y1: 0.2, x2: 0.8, y2: 0.8, confidence: 0.70, speciesName: '红嘴蓝鹊' },
+    ];
+    drawDetectionOverlay(ctx, boxes, 400, 300);
+
+    expect(ctx.strokeStyle).toBe('#F97316');
+    const fillTextCalls = (ctx.fillText as any).mock.calls;
+    expect(fillTextCalls[0][0]).toBe('红嘴蓝鹊? 70%');
+  });
+
+  it('多个不同等级的框各自显示对应颜色', () => {
+    const boxes: DetectionBox[] = [
+      { x1: 0.0, y1: 0.0, x2: 0.3, y2: 0.3, confidence: 0.9, speciesName: '麻雀', speciesConfidence: 0.92 },
+      { x1: 0.3, y1: 0.3, x2: 0.6, y2: 0.6, confidence: 0.9, speciesName: '喜鹊', speciesConfidence: 0.60 },
+      { x1: 0.6, y1: 0.6, x2: 0.9, y2: 0.9, confidence: 0.9 },
+    ];
+    drawDetectionOverlay(ctx, boxes, 400, 300);
+
+    // 每个框 5 次 stroke（边框 + 4 折角），共 15 次
+    expect((ctx.stroke as any).mock.calls.length).toBe(15);
+    // 3 个标签
+    expect((ctx.fillText as any).mock.calls.length).toBe(3);
   });
 
   it('过小的框不绘制（< 10px）', () => {
@@ -84,40 +163,6 @@ describe('drawDetectionOverlay', () => {
     drawDetectionOverlay(ctx, boxes, 400, 300);
 
     expect((ctx.stroke as any).mock.calls.length).toBe(5);
-  });
-
-  it('置信度标签包含正确的百分比文本', () => {
-    const boxes: DetectionBox[] = [
-      { x1: 0.2, y1: 0.2, x2: 0.8, y2: 0.8, confidence: 0.95 },
-    ];
-    drawDetectionOverlay(ctx, boxes, 400, 300);
-
-    // fillText 应包含 "Bird: 95%"
-    const fillTextCalls = (ctx.fillText as any).mock.calls;
-    expect(fillTextCalls.length).toBeGreaterThan(0);
-    expect(fillTextCalls[0][0]).toBe('Bird: 95%');
-  });
-
-  it('物种名称标签优先显示鸟种名和分类置信度', () => {
-    const boxes: DetectionBox[] = [
-      { x1: 0.2, y1: 0.2, x2: 0.8, y2: 0.8, confidence: 0.95, speciesName: '白头鹎', speciesConfidence: 0.92 },
-    ];
-    drawDetectionOverlay(ctx, boxes, 400, 300);
-
-    const fillTextCalls = (ctx.fillText as any).mock.calls;
-    expect(fillTextCalls.length).toBeGreaterThan(0);
-    expect(fillTextCalls[0][0]).toBe('白头鹎 92%');
-  });
-
-  it('物种名称存在但无分类置信度时使用检测置信度', () => {
-    const boxes: DetectionBox[] = [
-      { x1: 0.2, y1: 0.2, x2: 0.8, y2: 0.8, confidence: 0.88, speciesName: '红嘴蓝鹊' },
-    ];
-    drawDetectionOverlay(ctx, boxes, 400, 300);
-
-    const fillTextCalls = (ctx.fillText as any).mock.calls;
-    expect(fillTextCalls.length).toBeGreaterThan(0);
-    expect(fillTextCalls[0][0]).toBe('红嘴蓝鹊 88%');
   });
 
   it('标签位置在框上方不足时向下调整', () => {

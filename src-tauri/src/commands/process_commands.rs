@@ -779,7 +779,7 @@ async fn compute_focus_scores_background(
         });
     }
 
-    // 收集所有帧的结果（先不流式 emit，等投票后再发）
+    // 收集所有帧的结果，每帧完成即流式 emit 初步结果
     let mut frame_results: Vec<FrameDetectionResult> = Vec::with_capacity(total);
     let mut completed = 0usize;
 
@@ -787,6 +787,15 @@ async fn compute_focus_scores_background(
         match join_result {
             Ok((_idx, hash, Ok((score, method, bboxes)), filename)) => {
                 completed += 1;
+
+                // 立即 emit 初步结果，前端先显示单帧分类结果
+                let _ = app.emit("focus-score-update", serde_json::json!({
+                    "hash": &hash,
+                    "score": score,
+                    "method": method,
+                    "detectionBboxes": &bboxes,
+                }));
+
                 frame_results.push(FrameDetectionResult { hash, score, method, bboxes });
 
                 emit_progress(
@@ -802,11 +811,18 @@ async fn compute_focus_scores_background(
                 completed += 1;
                 log::warn!("计算 {} 的合焦评分失败: {}", hash, err);
                 frame_results.push(FrameDetectionResult {
-                    hash,
+                    hash: hash.clone(),
                     score: None,
                     method: FocusScoringMethod::Undetected,
                     bboxes: vec![],
                 });
+
+                let _ = app.emit("focus-score-update", serde_json::json!({
+                    "hash": &hash,
+                    "score": null,
+                    "method": "Undetected",
+                    "detectionBboxes": [],
+                }));
 
                 emit_progress(
                     app,
@@ -833,17 +849,18 @@ async fn compute_focus_scores_background(
     }
 
     // ═══════════════════════════════════════════════════════
-    // 分组内多帧概率融合投票
+    // 分组融合投票 — 仅多帧分组需要投票，投票后 emit 融合结果
+    // 初步结果已在上面逐帧 emit，此处覆盖为融合后的最终结果
     // ═══════════════════════════════════════════════════════
 
-    // 构建 hash → 检测结果索引（owned String 避免借用 frame_results）
+    // 构建 hash → 检测结果索引
     let hash_to_result: HashMap<String, usize> = frame_results
         .iter()
         .enumerate()
         .map(|(i, r)| (r.hash.clone(), i))
         .collect();
 
-    // 遍历每个分组，对有 bbox 的图片执行融合投票
+    // 仅处理多帧分组的融合投票
     for group in &group_result.groups {
         // 收集该分组内有检测结果的图片
         let group_member_indices: Vec<usize> = group.picture_hashes
@@ -851,7 +868,7 @@ async fn compute_focus_scores_background(
             .filter_map(|h| hash_to_result.get(h).copied())
             .collect();
 
-        // 只有多于 1 帧有检测结果时才做融合（1 帧时投票无意义）
+        // 只有多于 1 帧有检测结果时才做融合
         if group_member_indices.len() < 2 {
             continue;
         }
@@ -889,25 +906,19 @@ async fn compute_focus_scores_background(
             continue;
         }
 
-        // 将投票结果回写到 frame_results 中对应的条目
+        // 将投票结果回写到 frame_results 并 emit 融合后的最终结果
         for (i, &idx) in group_member_indices.iter().enumerate() {
             if i < vote_inputs.len() {
                 frame_results[idx].bboxes = vote_inputs[i].1.clone();
             }
+            let frame = &frame_results[idx];
+            let _ = app.emit("focus-score-update", serde_json::json!({
+                "hash": &frame.hash,
+                "score": frame.score,
+                "method": frame.method,
+                "detectionBboxes": frame.bboxes,
+            }));
         }
-    }
-
-    // ═══════════════════════════════════════════════════════
-    // 流式发送所有结果（投票后的最终结果）
-    // ═══════════════════════════════════════════════════════
-
-    for frame in &frame_results {
-        let _ = app.emit("focus-score-update", serde_json::json!({
-            "hash": &frame.hash,
-            "score": frame.score,
-            "method": frame.method,
-            "detectionBboxes": frame.bboxes,
-        }));
     }
 
     // 发送完成事件
