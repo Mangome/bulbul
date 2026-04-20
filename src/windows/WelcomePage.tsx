@@ -52,8 +52,8 @@ function WelcomePage() {
         <h1 className={cls.title}>Bulbul</h1>
 
         <p className={cls.tagline}>
-          <span className={cls.taglineZh}>从一组相似照片中，挑出那一张</span>
-          <span className={cls.taglineEn}>Focus on the keepers.</span>
+          <span className={cls.taglineZh}>连拍一时爽，选片不再慌</span>
+          <span className={cls.taglineEn}>Burst freely, pick easily.</span>
         </p>
 
         <div className={cls.meta} aria-hidden="true">
