@@ -794,7 +794,7 @@ mod tests {
             return;
         }
 
-        use crate::core::nef_parser::extract_largest_jpeg;
+        use crate::core::raw_parser::extract_largest_jpeg;
 
         let nef_data = std::fs::read(nef_path).expect("无法读取 NEF 文件");
         println!("✓ 已读取 NEF 文件: {} 字节", nef_data.len());

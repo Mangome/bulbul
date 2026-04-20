@@ -3,7 +3,7 @@ pub mod metadata;
 pub mod phash;
 pub mod similarity;
 pub mod grouping;
-pub mod nef_parser;
+pub mod raw_parser;
 pub mod focus_score;
 pub mod bird_detection;
 pub mod bird_classification;

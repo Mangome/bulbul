@@ -335,7 +335,7 @@ function MainPage() {
           <div className={cls.placeholder}>
             <p className={cls.placeholderText}>
               {processingState === 'completed' && groups.length === 0
-                ? '该目录下未找到 NEF 文件'
+                ? '该目录下未找到 RAW 文件'
                 : processingState === 'completed'
                   ? '正在准备画布...'
                   : '等待处理完成...'}

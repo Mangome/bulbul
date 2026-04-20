@@ -106,7 +106,13 @@ pub async fn export_images(
         let file_name = src_path
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| format!("{}.nef", hash));
+            .unwrap_or_else(|| {
+                let ext = src_path
+                    .extension()
+                    .map(|e| format!(".{}", e.to_string_lossy()))
+                    .unwrap_or_default();
+                format!("{}{}", hash, ext)
+            });
 
         // 处理文件名冲突
         let dest_path = resolve_conflict(&target, &file_name).await;

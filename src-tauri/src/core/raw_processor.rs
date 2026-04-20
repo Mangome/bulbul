@@ -14,7 +14,7 @@ use std::path::Path;
 use image::imageops::FilterType;
 use serde::{Deserialize, Serialize};
 
-use crate::core::nef_parser;
+use crate::core::raw_parser;
 use crate::models::{AppError, ImageMetadata};
 use crate::utils::cache;
 use crate::utils::paths::compute_path_hash;
@@ -32,9 +32,6 @@ const THUMBNAIL_QUALITY: u8 = 80;
 
 /// Medium JPEG 质量（1920px 显示用，80% 是高质量与文件大小的平衡）
 const MEDIUM_QUALITY: u8 = 80;
-
-/// Exif 头部读取大小上限（64KB 足以覆盖所有 Exif 数据，NEF 的 Exif 在文件头）
-const EXIF_HEADER_SIZE: usize = 64 * 1024;
 
 /// 单文件处理结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,19 +68,28 @@ pub async fn process_single_raw(
         .map(|e| e.to_string_lossy().to_string())
         .unwrap_or_default();
 
-    // 校验支持的格式（快速失败）
-    nef_parser::get_extractor(&extension)?;
+    // 校验支持的格式并获取 Extractor（快速失败）
+    let extractor = raw_parser::get_extractor(&extension)?;
 
     // 缓存命中时走快速路径：仅读取头部解析 Exif
     if cache::is_cached(cache_base_dir, &hash) {
-        // 先尝试 64KB 头部快速读取；若 EXIF 字段偏移超出头部范围则回退全量读取
-        let metadata = match read_exif_from_header(file_path).await {
-            Ok(m) => m,
-            Err(_) => {
-                let data = tokio::fs::read(file_path).await.map_err(|e| {
-                    AppError::FileNotFound(format!("{}: {}", file_path.display(), e))
-                })?;
-                crate::core::metadata::parse_exif(&data)?
+        let header_size = extractor.exif_header_size();
+        // 先尝试头部快速读取；若 header_size 为 0 则跳过直接全量读取
+        // 若 EXIF 字段偏移超出头部范围则回退全量读取
+        let metadata = if header_size == 0 {
+            let data = tokio::fs::read(file_path).await.map_err(|e| {
+                AppError::FileNotFound(format!("{}: {}", file_path.display(), e))
+            })?;
+            crate::core::metadata::parse_exif(&data)?
+        } else {
+            match read_exif_from_header(file_path, header_size).await {
+                Ok(m) => m,
+                Err(_) => {
+                    let data = tokio::fs::read(file_path).await.map_err(|e| {
+                        AppError::FileNotFound(format!("{}: {}", file_path.display(), e))
+                    })?;
+                    crate::core::metadata::parse_exif(&data)?
+                }
             }
         };
         let medium_path =
@@ -107,10 +113,10 @@ pub async fn process_single_raw(
     })?;
 
     // 从同一份数据中并行提取 JPEG 和 Exif
-    let jpeg_data = nef_parser::extract_largest_jpeg(&data)?;
+    let jpeg_data = extractor.extract_jpeg(&data)?;
     let metadata = crate::core::metadata::parse_exif(&data)?;
 
-    // 不再需要原始 NEF 数据，尽早释放
+    // 不再需要原始 RAW 数据，尽早释放
     drop(data);
 
     // 生成 medium 和缩略图（CPU 密集型，在 blocking 线程池中执行）
@@ -141,9 +147,11 @@ pub async fn process_single_raw(
 
 /// 仅读取文件头部解析 Exif（用于缓存命中快速路径）
 ///
-/// NEF 的 Exif 数据存储在 TIFF IFD 头部，通常 64KB 以内即可完全覆盖。
-/// 相比全量读取 30-60MB，这里只读 64KB，速度提升 ~500x。
-async fn read_exif_from_header(file_path: &Path) -> Result<ImageMetadata, AppError> {
+/// TIFF/EP 格式的 Exif 数据存储在文件头部 IFD 中，通常 64KB 以内即可完全覆盖。
+/// 相比全量读取 30-60MB，头部读取速度提升 ~500x。
+///
+/// 当 `exif_header_size` 为 0 时返回错误，由调用方执行全量读取。
+async fn read_exif_from_header(file_path: &Path, exif_header_size: usize) -> Result<ImageMetadata, AppError> {
     use tokio::io::AsyncReadExt;
 
     let mut file = tokio::fs::File::open(file_path).await.map_err(|e| {
@@ -154,9 +162,9 @@ async fn read_exif_from_header(file_path: &Path) -> Result<ImageMetadata, AppErr
         .metadata()
         .await
         .map(|m| m.len() as usize)
-        .unwrap_or(EXIF_HEADER_SIZE);
+        .unwrap_or(exif_header_size);
 
-    let read_size = file_size.min(EXIF_HEADER_SIZE);
+    let read_size = file_size.min(exif_header_size);
     let mut header = vec![0u8; read_size];
     file.read_exact(&mut header).await.map_err(|e| {
         AppError::IoError(std::io::Error::new(

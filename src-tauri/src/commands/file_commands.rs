@@ -3,6 +3,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use tauri_plugin_dialog::DialogExt;
 
+use crate::core::raw_parser;
 use crate::models::AppError;
 use crate::state::SessionState;
 
@@ -59,7 +60,7 @@ pub async fn get_folder_info(path: String) -> Result<FolderInfo, String> {
         if path.is_file() {
             file_count += 1;
             if let Some(ext) = path.extension() {
-                if ext.to_string_lossy().to_lowercase() == "nef" {
+                if raw_parser::is_raw_extension(&ext.to_string_lossy()) {
                     raw_count += 1;
                 }
             }
@@ -79,7 +80,7 @@ pub async fn get_folder_info(path: String) -> Result<FolderInfo, String> {
     })
 }
 
-/// 扫描文件夹中的所有 .nef 文件（非递归，大小写不敏感）
+/// 扫描文件夹中的所有 RAW 文件（非递归，大小写不敏感）
 #[tauri::command]
 pub async fn scan_raw_files(path: String) -> Result<ScanResult, String> {
     let dir_path = Path::new(&path);
@@ -98,7 +99,7 @@ pub async fn scan_raw_files(path: String) -> Result<ScanResult, String> {
         let path = entry.path();
         if path.is_file() {
             if let Some(ext) = path.extension() {
-                if ext.to_string_lossy().to_lowercase() == "nef" {
+                if raw_parser::is_raw_extension(&ext.to_string_lossy()) {
                     files.push(path.to_string_lossy().to_string());
                 }
             }

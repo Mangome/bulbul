@@ -21,6 +21,7 @@ use crate::core::focus_score;
 use crate::core::focus_score::FocusScoringMethod;
 use crate::core::grouping::{self, ImageInfoWithPhash};
 use crate::core::phash;
+use crate::core::raw_parser;
 use crate::core::raw_processor::{self, ProcessResult};
 use crate::models::{GroupResult, PerformanceMetrics, ProcessingProgress, ProcessingState};
 use crate::state::SessionState;
@@ -62,7 +63,7 @@ pub async fn process_folder(
     emit_progress(&app, ProcessingState::Scanning, 0, 0, None, &pipeline_start);
 
     let scan_start = Instant::now();
-    let nef_files = scan_nef_files(Path::new(&folder_path)).map_err(|e| e.to_string())?;
+    let nef_files = scan_raw_files_internal(Path::new(&folder_path)).map_err(|e| e.to_string())?;
     let total = nef_files.len();
     let scan_time_ms = scan_start.elapsed().as_secs_f64() * 1000.0;
 
@@ -570,15 +571,15 @@ fn handle_cancelled(
     Ok(cancelled_result)
 }
 
-/// 扫描文件夹中的 NEF 文件（非递归，大小写不敏感）
-fn scan_nef_files(folder: &Path) -> Result<Vec<PathBuf>, std::io::Error> {
+/// 扫描文件夹中的 RAW 文件（非递归，大小写不敏感）
+fn scan_raw_files_internal(folder: &Path) -> Result<Vec<PathBuf>, std::io::Error> {
     let mut files = Vec::new();
     for entry in std::fs::read_dir(folder)? {
         let entry = entry?;
         let path = entry.path();
         if path.is_file() {
             if let Some(ext) = path.extension() {
-                if ext.to_string_lossy().to_lowercase() == "nef" {
+                if raw_parser::is_raw_extension(&ext.to_string_lossy()) {
                     files.push(path);
                 }
             }
