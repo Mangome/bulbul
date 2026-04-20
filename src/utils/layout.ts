@@ -44,7 +44,7 @@ export const DEFAULT_LAYOUT_CONFIG: LayoutConfig = {
   paddingY: 20,
   groupGap: 36,
   groupTitleHeight: 48,
-  paddingTop: 56,     // 44px TopNavBar + 12px 安全距离
+  paddingTop: 12,      // 与图片间距一致，保持呼吸感
   paddingBottom: 84,   // 72px BottomFilmstrip + 12px 安全距离
   maxColumns: 5,
   minColumns: 1,
