@@ -1,26 +1,25 @@
 //! 鸟种分类模块
 //!
-//! 基于专精中国鸟类物种分类的 YOLOv8s-cls ONNX 模型（bird_classifier.onnx）。
+//! 基于 ResNet34 全球鸟类分类 ONNX 模型（bird_classifier.onnx, INT8 QDQ 量化）。
 //!
 //! 处理流程：
 //! 1. 加载 ONNX 分类模型和物种数据库（首次缓存到内存）
 //! 2. 根据检测框裁剪图片中的鸟类区域
-//! 3. Resize 到 224×224 并归一化
-//! 4. YOLOv8s-cls 推理获得 373 类概率
-//! 5. 取 argmax 对应物种（输出已经是 softmax 概率）
+//! 3. Resize 到 224×224 + ImageNet 标准归一化（mean/std）
+//! 4. ResNet34/MetaFGNet 推理获得 10,964 类 logits
+//! 5. Softmax 转概率 + argmax 对应物种
 //! 6. 从物种数据库查找中文名/英文名
 //!
-//! 模型输入: `images` [1, 3, 224, 224] float32（NCHW，归一化到 [0, 1]）
-//! 模型输出: `output0` [1, 373] float32（softmax 后的概率值，不需要再 softmax）
+//! 模型输入: `images` [1, 3, 224, 224] float32（NCHW，ImageNet 归一化）
+//! 模型输出: `output0` [1, 11000] float32（原始 logits，需手动 softmax）
 //!
-//! 训练数据: Firefly-ZJ/Bird-Classification 中国鸟类数据集（约 220K 张，373 种）
-//! 替代原 iNaturalist 2021 1486 类模型以解决国内鸟种误识别为海外种的问题。
-//! 旧模型归档于 temp/legacy_models/bird_classifier_v1_inaturalist_1486.onnx。
+//! 训练数据: DIB-10K 全球鸟类数据集（10,964 种）
+//! 替代原 YOLOv8s-cls 373 类中国鸟类模型以实现全球鸟种覆盖。
+//! 旧模型归档于 temp/legacy_models/species_database_v2_cn_373.json。
 //!
 //! 设计原则：
 //! - Best-effort：分类失败不影响主流水线，仅 log warn
 //! - 物种名称优先中文名，无中文名时 fallback 英文名
-//!   （新 373 类数据库理论上 100% 覆盖中文名）
 
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -34,9 +33,9 @@ const CLASSIFIER_INPUT_SIZE: u32 = 224;
 
 /// 鸟种最低置信度阈值（低于此值不标注物种名称）
 ///
-/// 在 373 类中国鸟种模型上，训练数据量更大、类别更少，模型置信度普遍更高，
-/// 因此阈值从原 0.10 提高到 0.25，过滤掉低置信度的误识别。
-const SPECIES_CONFIDENCE_THRESHOLD: f32 = 0.25;
+/// 在 10,964 类全球鸟种模型下，类似别的概率被摊薄，置信度天然分散，
+/// 因此阈值从 0.25 降低到 0.10，避免过滤掉正确识别。
+const SPECIES_CONFIDENCE_THRESHOLD: f32 = 0.10;
 
 /// 分类器推理线程数
 const CLASSIFIER_INTRA_THREADS: usize = 2;
@@ -167,42 +166,41 @@ fn crop_bbox_region(
     img.crop_imm(x1, y1, crop_w, crop_h)
 }
 
-/// 将 RGB 图片转换为 NCHW f32 张量，归一化到 [0, 1]
+/// 将 RGB 图片转换为 NCHW f32 张量，使用 ImageNet 标准预处理
 ///
-/// 预处理流程与 ultralytics YOLOv8-cls 训练时一致：
-/// 1. Resize 短边到 224（保持宽高比）
-/// 2. CenterCrop 到 224×224
-/// 3. RGB → NCHW f32，归一化到 [0, 1]
+/// 预处理流程与 ResNet34/MetaFGNet 训练时一致：
+/// 1. 直接 Resize 到 224×224（不保持宽高比）
+/// 2. RGB 像素值除以 255.0
+/// 3. 减去 ImageNet 均值 [0.485, 0.456, 0.406]
+/// 4. 除以 ImageNet 标准差 [0.229, 0.224, 0.225]
+/// 5. HWC → CHW 通道排列
 ///
 /// 返回 (shape, flat_data)，shape = [1, 3, 224, 224]
 fn image_to_classifier_input(
     img: &image::DynamicImage,
 ) -> (Vec<i64>, Vec<f32>) {
-    let (w, h) = (img.width() as f32, img.height() as f32);
-    let target = CLASSIFIER_INPUT_SIZE as f32;
+    // 1. 直接 Resize 到 224×224
+    let resized = img.resize_exact(
+        CLASSIFIER_INPUT_SIZE,
+        CLASSIFIER_INPUT_SIZE,
+        image::imageops::FilterType::Lanczos3,
+    );
 
-    // 1. Resize 短边到 target，保持宽高比
-    let scale = target / w.min(h);
-    let new_w = (w * scale).round() as u32;
-    let new_h = (h * scale).round() as u32;
-    let resized = img.resize_exact(new_w, new_h, image::imageops::FilterType::Lanczos3);
+    // ImageNet 归一化参数
+    let mean = [0.485f32, 0.456, 0.406];
+    let std = [0.229f32, 0.224, 0.225];
 
-    // 2. CenterCrop 到 target × target
-    let crop_x = (new_w.saturating_sub(CLASSIFIER_INPUT_SIZE)) / 2;
-    let crop_y = (new_h.saturating_sub(CLASSIFIER_INPUT_SIZE)) / 2;
-    let cropped = resized.crop_imm(crop_x, crop_y, CLASSIFIER_INPUT_SIZE, CLASSIFIER_INPUT_SIZE);
-
-    // 3. RGB → NCHW f32 [0, 1]
-    let rgb = cropped.to_rgb8();
+    // 2-5. 归一化 + HWC→CHW
+    let rgb = resized.to_rgb8();
     let (w, h) = (rgb.width() as usize, rgb.height() as usize);
     let mut data = vec![0.0f32; 3 * h * w];
 
     for y in 0..h {
         for x in 0..w {
             let pixel = rgb.get_pixel(x as u32, y as u32);
-            data[0 * h * w + y * w + x] = pixel[0] as f32 / 255.0; // R
-            data[1 * h * w + y * w + x] = pixel[1] as f32 / 255.0; // G
-            data[2 * h * w + y * w + x] = pixel[2] as f32 / 255.0; // B
+            data[0 * h * w + y * w + x] = (pixel[0] as f32 / 255.0 - mean[0]) / std[0]; // R
+            data[1 * h * w + y * w + x] = (pixel[1] as f32 / 255.0 - mean[1]) / std[1]; // G
+            data[2 * h * w + y * w + x] = (pixel[2] as f32 / 255.0 - mean[2]) / std[2]; // B
         }
     }
 
@@ -212,9 +210,6 @@ fn image_to_classifier_input(
 // ─── 推理与后处理 ────────────────────────────────────
 
 /// 对 logits 做 softmax，返回概率分布
-///
-/// 注意：当前 ONNX 输出已经是概率值，此函数仅用于测试。
-#[allow(dead_code)]
 fn softmax(logits: &[f32]) -> Vec<f32> {
     let max_logit = logits.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
     let exps: Vec<f32> = logits.iter().map(|&x| (x - max_logit).exp()).collect();
@@ -227,7 +222,7 @@ fn softmax(logits: &[f32]) -> Vec<f32> {
 
 /// 对单个裁剪区域执行分类推理，返回完整概率分布
 ///
-/// 返回 `(probs, best_idx, best_conf)`，probs 为 1486 维概率向量。
+/// 返回 `(probs, best_idx, best_conf)`，probs 为 softmax 后的概率向量。
 /// 用于分组内多帧概率平均融合，比单帧 argmax 投票更准确。
 fn classify_crop_with_probs(
     crop: &image::DynamicImage,
@@ -244,7 +239,9 @@ fn classify_crop_with_probs(
     let output = outputs.get("output0")?;
     let (_out_shape, out_data) = output.try_extract_tensor::<f32>().ok()?;
 
-    let probs: Vec<f32> = out_data.to_vec();
+    // 新模型输出原始 logits，需 softmax 转概率
+    let logits: Vec<f32> = out_data.to_vec();
+    let probs = softmax(&logits);
 
     let (best_idx, &best_prob) = probs
         .iter()
@@ -257,9 +254,6 @@ fn classify_crop_with_probs(
 /// 对单个裁剪区域执行分类推理（便捷包装，仅返回最佳结果）
 ///
 /// 返回 (class_id_0indexed, confidence)，失败返回 None
-///
-/// 注意：YOLOv8s-cls ONNX 导出的 output0 已经是 softmax 后的概率值，
-/// 不需要再做 softmax（PyTorch 模型输出 tuple[0] = probs, tuple[1] = logits）。
 fn classify_crop(
     crop: &image::DynamicImage,
 ) -> Option<(usize, f32)> {
@@ -269,15 +263,23 @@ fn classify_crop(
 /// 根据类别索引查找物种显示名称
 ///
 /// class_id 在数据库中为 1-indexed，ONNX 输出索引为 0-indexed
+/// 数据库按 class_id 升序排列，class_id = idx + 1，可直接索引访问
 fn lookup_species_name(class_idx_0: usize) -> Option<String> {
     let db = SPECIES_DATABASE.lock().ok()?;
     let db = db.as_ref()?;
 
-    // 数据库按 class_id 升序排列，class_id = idx + 1
-    let target_class_id = class_idx_0 + 1;
-    db.iter()
-        .find(|entry| entry.class_id == target_class_id)
-        .map(|entry| entry.display_name().to_string())
+    // 直接索引：class_id = idx + 1，数据库按 class_id 严格升序
+    if class_idx_0 >= db.len() {
+        log::warn!(
+            "类别索引 {} 超出物种数据库范围 (len={})",
+            class_idx_0,
+            db.len()
+        );
+        return None;
+    }
+    let entry = &db[class_idx_0];
+    debug_assert_eq!(entry.class_id, class_idx_0 + 1, "class_id 应为 idx+1");
+    Some(entry.display_name().to_string())
 }
 
 // ─── 路径解析 ────────────────────────────────────
@@ -744,18 +746,44 @@ mod tests {
     }
 
     #[test]
+    fn test_image_to_classifier_input_imagenet_normalization() {
+        // 像素 (128, 64, 32) → ImageNet 归一化后:
+        // R = (128/255 - 0.485) / 0.229 ≈ 0.073
+        // G = (64/255 - 0.456) / 0.224 ≈ -0.860
+        // B = (32/255 - 0.406) / 0.225 ≈ -1.234
+        // 使用 224×224 避免 resize 插值误差
+        let img = image::DynamicImage::ImageRgb8(
+            image::ImageBuffer::from_pixel(224, 224, image::Rgb([128u8, 64u8, 32u8]))
+        );
+        let (_, data) = image_to_classifier_input(&img);
+        let hw = (224 * 224) as usize;
+        let center = 112 * 224 + 112;
+        let r = data[0 * hw + center];
+        let g = data[1 * hw + center];
+        let b = data[2 * hw + center];
+        let expected_r = (128.0f32 / 255.0 - 0.485) / 0.229;
+        let expected_g = (64.0f32 / 255.0 - 0.456) / 0.224;
+        let expected_b = (32.0f32 / 255.0 - 0.406) / 0.225;
+        assert!((r - expected_r).abs() < 1e-4, "R 通道应为 {}, 实际 {}", expected_r, r);
+        assert!((g - expected_g).abs() < 1e-4, "G 通道应为 {}, 实际 {}", expected_g, g);
+        assert!((b - expected_b).abs() < 1e-4, "B 通道应为 {}, 实际 {}", expected_b, b);
+    }
+
+    #[test]
     fn test_image_to_classifier_input_channel_order() {
-        // 纯红像素 (255, 0, 0) → R=1.0, G=0.0, B=0.0
+        // 纯红像素 (255, 0, 0) → R=(1.0-0.485)/0.229, G=(0.0-0.456)/0.224, B=(0.0-0.406)/0.225
         let img = image::DynamicImage::ImageRgb8(
             image::ImageBuffer::from_pixel(100, 100, image::Rgb([255u8, 0u8, 0u8]))
         );
         let (_, data) = image_to_classifier_input(&img);
         let hw = (224 * 224) as usize;
-        // 采样中心像素
         let center = 112 * 224 + 112;
-        assert!((data[0 * hw + center] - 1.0).abs() < 1e-5, "R 通道应为 1.0");
-        assert!(data[1 * hw + center].abs() < 1e-5, "G 通道应为 0.0");
-        assert!(data[2 * hw + center].abs() < 1e-5, "B 通道应为 0.0");
+        let expected_r = (255.0f32 / 255.0 - 0.485) / 0.229; // ≈ 2.251
+        let expected_g = (0.0f32 / 255.0 - 0.456) / 0.224;   // ≈ -2.036
+        let expected_b = (0.0f32 / 255.0 - 0.406) / 0.225;   // ≈ -1.804
+        assert!((data[0 * hw + center] - expected_r).abs() < 1e-4, "R 通道应为 {}", expected_r);
+        assert!((data[1 * hw + center] - expected_g).abs() < 1e-4, "G 通道应为 {}", expected_g);
+        assert!((data[2 * hw + center] - expected_b).abs() < 1e-4, "B 通道应为 {}", expected_b);
     }
 
     // ── 裁剪测试 ──
@@ -866,5 +894,54 @@ mod tests {
         let (model, db) = resolve_classifier_paths_from_resource_dir(Path::new("/app"));
         assert!(model.to_string_lossy().contains("bird_classifier.onnx"));
         assert!(db.to_string_lossy().contains("species_database.json"));
+    }
+
+    // ── QDQ 量化模型加载测试 ──
+
+    #[test]
+    fn test_load_qdq_quantized_model() {
+        // 验证 QDQ 格式（DynamicQuantizeLinear + ConvInteger）的 INT8 量化模型
+        // 能否被 Rust ort crate 正常加载和推理
+        let model_path = Path::new("resources/models/bird_classifier.onnx");
+        if !model_path.exists() {
+            eprintln!("跳过: 模型文件不存在 ({:?})", model_path);
+            return;
+        }
+
+        let session = ort::session::Session::builder()
+            .expect("Session builder 创建失败")
+            .with_intra_threads(2)
+            .expect("线程配置失败")
+            .commit_from_file(model_path);
+
+        match session {
+            Ok(mut sess) => {
+                let input_info = &sess.inputs()[0];
+                let output_info = &sess.outputs()[0];
+                println!(
+                    "QDQ 模型加载成功! 输入: {}, 输出: {}",
+                    input_info.name(), output_info.name()
+                );
+
+                // 构造全零输入进行推理测试（与 classify_crop_with_probs 相同的 API）
+                let shape = vec![1i64, 3, 224, 224];
+                let data = vec![0.0f32; 3 * 224 * 224];
+                let input_tensor =
+                    ort::value::Tensor::from_array((shape, data)).expect("Tensor 创建失败");
+
+                let inputs = ort::inputs!["images" => input_tensor];
+                let outputs = sess.run(inputs).expect("推理失败");
+
+                let output = outputs.get("output0").expect("未找到 output0");
+                let (out_shape, out_data) = output
+                    .try_extract_tensor::<f32>()
+                    .expect("提取输出 tensor 失败");
+                println!("推理成功! 输出形状: {:?}", out_shape);
+                assert_eq!(out_data.len(), 11000);
+            }
+            Err(e) => {
+                panic!("QDQ 模型加载失败: {}", e);
+            }
+        }
     }
 }
