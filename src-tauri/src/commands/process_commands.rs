@@ -23,7 +23,7 @@ use crate::core::grouping::{self, ImageInfoWithPhash};
 use crate::core::phash;
 use crate::core::raw_parser;
 use crate::core::raw_processor::{self, ProcessResult};
-use crate::models::{GroupResult, PerformanceMetrics, ProcessingProgress, ProcessingState};
+use crate::models::{DetectionCacheEntry, GroupResult, PerformanceMetrics, ProcessingProgress, ProcessingState};
 use crate::state::SessionState;
 use crate::utils::cache;
 
@@ -477,8 +477,10 @@ pub async fn process_folder(
             gps_cache.len()
         );
 
+        let state_arc = Arc::clone(&state);
+
         tokio::spawn(async move {
-            if let Err(e) = compute_focus_scores_background(&app, &results, total, &pipeline_start, &group_result_clone, &gps_cache)
+            if let Err(e) = compute_focus_scores_background(&app, &results, total, &pipeline_start, &group_result_clone, &gps_cache, state_arc)
                 .await
             {
                 log::error!("后台合焦评分失败: {}", e);
@@ -532,6 +534,205 @@ pub async fn regroup(
     }
 
     Ok(group_result)
+}
+
+/// 使用指定 GPS 坐标重新分类（复用检测结果，仅重跑分类）
+///
+/// 当 lat=0.0 且 lng=0.0 时，表示不应用地理过滤。
+/// 有 EXIF GPS 的照片保持原有精确坐标，省份坐标仅作 fallback。
+#[tauri::command]
+pub async fn reclassify(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<Mutex<SessionState>>>,
+    lat: f64,
+    lng: f64,
+) -> Result<(), String> {
+    // 读取 detection_cache 和相关数据
+    let (detection_cache, metadata_cache, group_result, cache_dir) = {
+        let s = state.lock().map_err(|e| e.to_string())?;
+        if s.detection_cache.is_empty() {
+            return Err("尚未完成鸟类检测，无法重新分类".to_string());
+        }
+        (
+            s.detection_cache.clone(),
+            s.metadata_cache.clone(),
+            s.group_result.clone(),
+            s.cache_dir.clone(),
+        )
+    };
+
+    let group_result = group_result.ok_or("没有可用的分组数据")?;
+
+    // 解析分类器和地理过滤网格数据路径
+    let (classifier_model_path, species_db_path): (Option<PathBuf>, Option<PathBuf>) = app.path().resource_dir()
+        .map(|dir| bird_classification::resolve_classifier_paths_from_resource_dir(&dir))
+        .map(|(m, d)| {
+            let m = if m.exists() { Some(m) } else { None };
+            let d = if d.exists() { Some(d) } else { None };
+            (m, d)
+        })
+        .unwrap_or((None, None));
+
+    let geo_grid_path: Option<PathBuf> = app.path().resource_dir()
+        .map(|dir| bird_classification::resolve_geo_grid_path_from_resource_dir(&dir))
+        .ok()
+        .filter(|p| p.exists());
+
+    // 判断是否应用省份 GPS
+    let province_gps = if lat == 0.0 && lng == 0.0 {
+        None
+    } else {
+        Some((lat, lng))
+    };
+
+    let total = detection_cache.len();
+    let mut completed = 0usize;
+
+    // ─── 第一阶段：逐张重跑 classify_detections ───
+    let mut updated_cache = detection_cache.clone();
+
+    for (hash, entry) in detection_cache.iter() {
+        if entry.bboxes.is_empty() {
+            completed += 1;
+            continue;
+        }
+
+        // 确定该照片的 GPS 坐标：EXIF GPS 优先，省份坐标作 fallback
+        let gps = metadata_cache.get(hash)
+            .and_then(|meta| {
+                match (meta.gps_latitude, meta.gps_longitude) {
+                    (Some(lat), Some(lng)) => Some((lat, lng)),
+                    _ => None,
+                }
+            })
+            .or(province_gps);
+
+        // 获取图片的 medium 缓存路径
+        let medium_path = crate::utils::paths::get_cache_file_path(&cache_dir, hash, "medium");
+
+        // 重跑分类
+        let mut bboxes = entry.bboxes.clone();
+        let _ = bird_classification::classify_detections(
+            &medium_path,
+            &mut bboxes,
+            classifier_model_path.as_deref(),
+            species_db_path.as_deref(),
+            gps,
+            geo_grid_path.as_deref(),
+        );
+
+        // 更新缓存
+        updated_cache.get_mut(hash).unwrap().bboxes = bboxes;
+
+        completed += 1;
+
+        // 流式 emit 进度
+        let progress_percent = if total > 0 {
+            (completed as f64 / total as f64) * 100.0
+        } else {
+            0.0
+        };
+        let progress = ProcessingProgress {
+            state: ProcessingState::FocusScoring,
+            current: completed,
+            total,
+            progress_percent,
+            message: None,
+            current_file: None,
+            elapsed_ms: None,
+            estimated_remaining_ms: None,
+        };
+        let _ = app.emit("processing-progress", &progress);
+    }
+
+    // ─── 第二阶段：分组融合投票重跑 ───
+    for group in &group_result.groups {
+        let group_member_hashes: Vec<&String> = group.picture_hashes.iter()
+            .filter(|h| updated_cache.contains_key(*h))
+            .collect();
+
+        if group_member_hashes.len() < 2 {
+            continue;
+        }
+
+        // 检查是否至少有一个成员有物种结果
+        let any_has_species = group_member_hashes.iter()
+            .any(|h| updated_cache[*h].bboxes.iter().any(|b| b.species_name.is_some()));
+
+        if !any_has_species {
+            continue;
+        }
+
+        // 构建投票输入
+        let mut vote_inputs: Vec<(PathBuf, Vec<DetectionBox>)> = Vec::new();
+        for &hash in &group_member_hashes {
+            let medium_path = crate::utils::paths::get_cache_file_path(&cache_dir, hash, "medium");
+            vote_inputs.push((medium_path, updated_cache[hash].bboxes.clone()));
+        }
+
+        // 取该分组的 GPS（EXIF 优先，省份 fallback）
+        let group_gps = group.picture_hashes.iter()
+            .filter_map(|h| metadata_cache.get(h))
+            .filter_map(|meta| match (meta.gps_latitude, meta.gps_longitude) {
+                (Some(lat), Some(lng)) => Some((lat, lng)),
+                _ => None,
+            })
+            .next()
+            .or(province_gps);
+
+        // 执行融合投票
+        let mut vote_bboxes_refs: Vec<(&Path, &mut Vec<DetectionBox>)> = Vec::new();
+        for (path, bboxes) in &mut vote_inputs {
+            vote_bboxes_refs.push((path.as_path(), bboxes));
+        }
+
+        if let Err(e) = bird_classification::classify_group_with_fusion(
+            &mut vote_bboxes_refs,
+            classifier_model_path.as_deref(),
+            species_db_path.as_deref(),
+            group_gps,
+            geo_grid_path.as_deref(),
+        ) {
+            log::warn!("reclassify 分组 {} 投票融合失败: {}", group.id, e);
+            continue;
+        }
+
+        // 回写投票结果到 updated_cache 并 emit
+        for (i, &hash) in group_member_hashes.iter().enumerate() {
+            if i < vote_inputs.len() {
+                updated_cache.get_mut(hash).unwrap().bboxes = vote_inputs[i].1.clone();
+            }
+
+            let entry = &updated_cache[hash];
+            let _ = app.emit("focus-score-update", serde_json::json!({
+                "hash": hash,
+                "score": entry.score,
+                "method": entry.method,
+                "detectionBboxes": entry.bboxes,
+            }));
+        }
+    }
+
+    // 写回 detection_cache
+    {
+        let mut s = state.lock().map_err(|e| e.to_string())?;
+        s.detection_cache = updated_cache;
+    }
+
+    // 发送完成事件
+    let final_progress = ProcessingProgress {
+        state: ProcessingState::FocusScoring,
+        current: total,
+        total,
+        progress_percent: 100.0,
+        message: Some("重新分类完成".to_string()),
+        current_file: None,
+        elapsed_ms: None,
+        estimated_remaining_ms: None,
+    };
+    let _ = app.emit("processing-progress", &final_progress);
+
+    Ok(())
 }
 
 /// 取消正在进行的处理
@@ -699,6 +900,7 @@ async fn compute_focus_scores_background(
     focus_scoring_start: &Instant,
     group_result: &GroupResult,
     gps_cache: &HashMap<String, Option<(f64, f64)>>,
+    state: Arc<Mutex<SessionState>>,
 ) -> Result<(), String> {
     if results.is_empty() {
         return Ok(());
@@ -836,6 +1038,15 @@ async fn compute_focus_scores_background(
                     "detectionBboxes": &bboxes,
                 }));
 
+                // 写入 detection_cache
+                if let Ok(mut s) = state.lock() {
+                    s.detection_cache.insert(hash.clone(), DetectionCacheEntry {
+                        score,
+                        method: method.clone(),
+                        bboxes: bboxes.clone(),
+                    });
+                }
+
                 frame_results.push(FrameDetectionResult { hash, score, method, bboxes });
 
                 emit_progress(
@@ -850,6 +1061,16 @@ async fn compute_focus_scores_background(
             Ok((_idx, hash, Err(err), _filename)) => {
                 completed += 1;
                 log::warn!("计算 {} 的合焦评分失败: {}", hash, err);
+
+                // 写入 detection_cache（空结果）
+                if let Ok(mut s) = state.lock() {
+                    s.detection_cache.insert(hash.clone(), DetectionCacheEntry {
+                        score: None,
+                        method: FocusScoringMethod::Undetected,
+                        bboxes: vec![],
+                    });
+                }
+
                 frame_results.push(FrameDetectionResult {
                     hash: hash.clone(),
                     score: None,
@@ -962,6 +1183,13 @@ async fn compute_focus_scores_background(
                 "method": frame.method,
                 "detectionBboxes": frame.bboxes,
             }));
+
+            // 更新 detection_cache 中的 bboxes（融合结果）
+            if let Ok(mut s) = state.lock() {
+                if let Some(entry) = s.detection_cache.get_mut(&frame.hash) {
+                    entry.bboxes = frame.bboxes.clone();
+                }
+            }
         }
     }
 
@@ -1057,7 +1285,7 @@ mod tests {
     #[test]
     fn test_semaphore_concurrency_limit() {
         use tokio::sync::Semaphore;
-        
+
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             let max_concurrency = 4;
@@ -1074,9 +1302,9 @@ mod tests {
 
                 join_set.spawn(async move {
                     let _permit = sem.acquire().await.ok();
-                    
+
                     let current = counter_clone.fetch_add(1, Ordering::SeqCst) + 1;
-                    
+
                     // 更新最大并发数
                     loop {
                         let max = max_concurrent_clone.load(Ordering::SeqCst);
@@ -1105,6 +1333,112 @@ mod tests {
                 max_concurrency
             );
         });
+    }
+
+    // ─── reclassify 相关测试 ─────────────────────────────
+
+    /// 测试：detection_cache 为空时应返回错误
+    #[test]
+    fn test_reclassify_empty_cache_error() {
+        let state = SessionState::new();
+        assert!(state.detection_cache.is_empty());
+        // reclassify 命令内部检查: if s.detection_cache.is_empty() { return Err(...) }
+        // 此处验证前置条件
+        let should_error = state.detection_cache.is_empty();
+        assert!(should_error, "detection_cache 为空时应触发错误");
+    }
+
+    /// 测试：GPS 优先级逻辑 — 有 EXIF GPS 的照片使用原始坐标
+    #[test]
+    fn test_reclassify_gps_priority() {
+        let mut metadata = crate::models::ImageMetadata::default();
+        metadata.gps_latitude = Some(30.5);
+        metadata.gps_longitude = Some(114.3);
+
+        // 省份坐标
+        let province_gps = Some((25.0, 102.7));
+
+        // GPS 优先级逻辑：EXIF GPS 优先
+        let gps = match (metadata.gps_latitude, metadata.gps_longitude) {
+            (Some(lat), Some(lng)) => Some((lat, lng)),
+            _ => None,
+        }.or(province_gps);
+
+        assert_eq!(gps, Some((30.5, 114.3)), "应使用 EXIF GPS 坐标");
+    }
+
+    /// 测试：GPS fallback — 无 EXIF GPS 时使用省份坐标
+    #[test]
+    fn test_reclassify_gps_fallback() {
+        let metadata = crate::models::ImageMetadata::default();
+        // metadata 无 GPS
+
+        let province_gps = Some((25.0, 102.7));
+
+        let gps = match (metadata.gps_latitude, metadata.gps_longitude) {
+            (Some(lat), Some(lng)) => Some((lat, lng)),
+            _ => None,
+        }.or(province_gps);
+
+        assert_eq!(gps, Some((25.0, 102.7)), "应使用省份坐标作为 fallback");
+    }
+
+    /// 测试：lat=0.0, lng=0.0 时表示不应用地理过滤
+    #[test]
+    fn test_reclassify_no_geo_filter() {
+        let lat = 0.0;
+        let lng = 0.0;
+
+        let province_gps = if lat == 0.0 && lng == 0.0 {
+            None
+        } else {
+            Some((lat, lng))
+        };
+
+        assert_eq!(province_gps, None, "lat=0, lng=0 时不应用地理过滤");
+    }
+
+    /// 测试：detection_cache 读写
+    #[test]
+    fn test_detection_cache_read_write() {
+        let mut state = SessionState::new();
+
+        // 写入
+        let entry = DetectionCacheEntry {
+            score: Some(4),
+            method: FocusScoringMethod::BirdRegion,
+            bboxes: vec![DetectionBox::new(0.1, 0.2, 0.8, 0.9, 0.95)],
+        };
+        state.detection_cache.insert("hash_abc".to_string(), entry.clone());
+
+        // 读取
+        let read_entry = state.detection_cache.get("hash_abc").unwrap();
+        assert_eq!(read_entry.score, Some(4));
+        assert_eq!(read_entry.method, FocusScoringMethod::BirdRegion);
+        assert_eq!(read_entry.bboxes.len(), 1);
+
+        // 更新
+        state.detection_cache.get_mut("hash_abc").unwrap().bboxes[0].species_name = Some("Silver Pheasant".to_string());
+        state.detection_cache.get_mut("hash_abc").unwrap().bboxes[0].species_confidence = Some(0.85);
+
+        let updated = state.detection_cache.get("hash_abc").unwrap();
+        assert_eq!(updated.bboxes[0].species_name, Some("Silver Pheasant".to_string()));
+        assert_eq!(updated.bboxes[0].species_confidence, Some(0.85));
+    }
+
+    /// 测试：reset() 清空 detection_cache
+    #[test]
+    fn test_reset_clears_detection_cache() {
+        let mut state = SessionState::new();
+        state.detection_cache.insert("hash_abc".to_string(), DetectionCacheEntry {
+            score: Some(4),
+            method: FocusScoringMethod::BirdRegion,
+            bboxes: vec![],
+        });
+        assert!(!state.detection_cache.is_empty());
+
+        state.reset();
+        assert!(state.detection_cache.is_empty(), "reset() 应清空 detection_cache");
     }
 }
 

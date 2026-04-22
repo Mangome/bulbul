@@ -1,6 +1,7 @@
 import { useThemeStore } from './useThemeStore';
 import { useCanvasStore } from './useCanvasStore';
 import { useGroupingStore } from './useGroupingStore';
+import { useGeoStore } from './useGeoStore';
 import { loadSettings, saveSettings, type PersistedSettings } from './settingsStorage';
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -13,6 +14,7 @@ function collectSettings(): PersistedSettings {
     showDetectionOverlay: useCanvasStore.getState().showDetectionOverlay,
     similarityThreshold: useGroupingStore.getState().similarityThreshold,
     timeGapSeconds: useGroupingStore.getState().timeGapSeconds,
+    province: useGeoStore.getState().selectedProvince,
   };
 }
 
@@ -49,6 +51,9 @@ export async function initSettings(): Promise<void> {
     }
     useGroupingStore.getState().setSimilarityThreshold(saved.similarityThreshold);
     useGroupingStore.getState().setTimeGapSeconds(saved.timeGapSeconds);
+    if (saved.province) {
+      useGeoStore.getState().setProvince(saved.province);
+    }
 
     // 订阅变更，自动持久化
     useThemeStore.subscribe(
@@ -70,6 +75,14 @@ export async function initSettings(): Promise<void> {
     useGroupingStore.subscribe(
       (state, prev) => {
         if (state.similarityThreshold !== prev.similarityThreshold || state.timeGapSeconds !== prev.timeGapSeconds) {
+          scheduleSave();
+        }
+      },
+    );
+
+    useGeoStore.subscribe(
+      (state, prev) => {
+        if (state.selectedProvince !== prev.selectedProvince) {
           scheduleSave();
         }
       },

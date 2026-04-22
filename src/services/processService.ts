@@ -33,6 +33,11 @@ export async function regroup(
   });
 }
 
+/** 使用指定 GPS 坐标重新分类（复用检测结果，仅重跑分类） */
+export async function reclassify(lat: number, lng: number): Promise<void> {
+  return await invoke('reclassify', { lat, lng });
+}
+
 /** 监听处理进度事件 */
 export async function onProgress(
   callback: (progress: ProcessingProgress) => void

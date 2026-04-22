@@ -326,6 +326,109 @@
 }
 
 /* ────────────────────────────────────────────────────────────────
+   省份选择器弹窗
+──────────────────────────────────────────────────────────────── */
+
+.provincePopover {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: -8px;
+  width: 200px;
+  padding: 8px;
+
+  background: var(--panel-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--panel-radius);
+  box-shadow: var(--shadow-elevated);
+
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  pointer-events: auto;
+  z-index: 200;
+}
+
+.provinceSearch {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--color-text-primary);
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  outline: none;
+
+  transition: border-color var(--transition-fast);
+}
+
+.provinceSearch:focus {
+  border-color: var(--color-primary);
+}
+
+.provinceSearch::placeholder {
+  color: var(--color-text-muted);
+}
+
+.provinceList {
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.provinceItem {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.provinceItem:hover {
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+}
+
+.provinceItemActive {
+  background-color: var(--color-primary-light);
+  color: var(--color-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.provinceItemClear {
+  color: var(--color-text-muted);
+  font-style: italic;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 2px;
+  padding-bottom: 8px;
+}
+
+.provinceItemClear:hover {
+  color: var(--color-danger);
+}
+
+.provinceEmpty {
+  padding: 12px 8px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+/* ────────────────────────────────────────────────────────────────
    深色主题微调
 ──────────────────────────────────────────────────────────────── */
 

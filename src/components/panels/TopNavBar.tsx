@@ -17,7 +17,11 @@ import { useSelectionStore } from '../../stores/useSelectionStore';
 import { useThemeStore } from '../../stores/useThemeStore';
 import { useGroupingStore } from '../../stores/useGroupingStore';
 import { useAppStore } from '../../stores/useAppStore';
+import { useGeoStore } from '../../stores/useGeoStore';
 import { useProcessing } from '../../hooks/useProcessing';
+import { reclassify } from '../../services/processService';
+import { PROVINCES } from '../../data/provinces';
+import type { Province } from '../../data/provinces';
 import type { GroupData } from '../../types';
 import cls from './TopNavBar.module.css';
 
@@ -61,6 +65,15 @@ function IconTune() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
       <path d="M2 4h3M8 4h5M5 2.5v3M2 7.5h5M10 7.5h3M7 6v3M2 11h7M12 11h1M9 9.5v3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconMap() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+      <path d="M5.5 1.5v11.5M9.5 2v11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      <path d="M1.5 4.5l4-1 4 1.5 4-1v7l-4 1-4-1.5-4 1z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -115,9 +128,40 @@ export function TopNavBar({
   const hasGroups = useAppStore((s) => s.groups.length > 0);
   const { regroupWith } = useProcessing();
 
+  // 省份选择
+  const selectedProvince = useGeoStore((s) => s.selectedProvince);
+  const setProvince = useGeoStore((s) => s.setProvince);
+  const [provinceSearch, setProvinceSearch] = useState('');
+
+  const filteredProvinces = useMemo(
+    () => provinceSearch ? PROVINCES.filter((p) => p.name.includes(provinceSearch)) : PROVINCES,
+    [provinceSearch],
+  );
+
+  const handleSelectProvince = useCallback(async (province: Province | null) => {
+    setProvince(province);
+    setShowProvincePopover(false);
+    setProvinceSearch('');
+    setReclassifyLoading(true);
+    try {
+      if (province) {
+        await reclassify(province.lat, province.lng);
+      } else {
+        await reclassify(0.0, 0.0);
+      }
+    } catch (e) {
+      console.error('重分类失败:', e);
+    } finally {
+      setReclassifyLoading(false);
+    }
+  }, [setProvince]);
+
   const [copied, setCopied] = useState(false);
   const [showGroupingPopover, setShowGroupingPopover] = useState(false);
+  const [showProvincePopover, setShowProvincePopover] = useState(false);
+  const [reclassifyLoading, setReclassifyLoading] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const provincePopoverRef = useRef<HTMLDivElement>(null);
   const regroupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const displayPath = useMemo(
@@ -134,15 +178,19 @@ export function TopNavBar({
 
   // 点击外部关闭弹窗
   useEffect(() => {
-    if (!showGroupingPopover) return;
     const handleClickOutside = (e: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+      if (showGroupingPopover && popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
         setShowGroupingPopover(false);
       }
+      if (showProvincePopover && provincePopoverRef.current && !provincePopoverRef.current.contains(e.target as Node)) {
+        setShowProvincePopover(false);
+      }
     };
-    document.addEventListener('pointerdown', handleClickOutside);
+    if (showGroupingPopover || showProvincePopover) {
+      document.addEventListener('pointerdown', handleClickOutside);
+    }
     return () => document.removeEventListener('pointerdown', handleClickOutside);
-  }, [showGroupingPopover]);
+  }, [showGroupingPopover, showProvincePopover]);
 
   // 防抖触发 regroup
   const scheduleRegroup = useCallback(
@@ -281,6 +329,64 @@ export function TopNavBar({
         >
           <IconDetection />
         </button>
+
+        {/* 省份选择器 */}
+        <div className={cls.popoverAnchor} ref={provincePopoverRef}>
+          <button
+            className={`${cls.toolBtn} ${cls.toolBtnWithLabel} ${showProvincePopover ? cls.toolBtnActive : ''} ${selectedProvince ? cls.toolBtnActive : ''} ${!hasGroups || reclassifyLoading ? cls.toolBtnDisabled : ''}`}
+            onClick={() => hasGroups && !reclassifyLoading && setShowProvincePopover((v) => !v)}
+            disabled={!hasGroups || reclassifyLoading}
+            title={selectedProvince ? `当前地区: ${selectedProvince.name}` : '选择地区'}
+            aria-label="选择地区"
+          >
+            <IconMap />
+            <span className={cls.toolBtnLabel}>
+              {selectedProvince ? selectedProvince.name : '地区'}
+            </span>
+          </button>
+          <AnimatePresence>
+            {showProvincePopover && (
+              <motion.div
+                className={cls.provincePopover}
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.15 }}
+              >
+                <input
+                  className={cls.provinceSearch}
+                  type="text"
+                  placeholder="搜索省份..."
+                  value={provinceSearch}
+                  onChange={(e) => setProvinceSearch(e.target.value)}
+                  autoFocus
+                />
+                <div className={cls.provinceList}>
+                  {selectedProvince && (
+                    <button
+                      className={`${cls.provinceItem} ${cls.provinceItemClear}`}
+                      onClick={() => handleSelectProvince(null)}
+                    >
+                      清除选择
+                    </button>
+                  )}
+                  {filteredProvinces.map((p) => (
+                    <button
+                      key={p.name}
+                      className={`${cls.provinceItem} ${selectedProvince?.name === p.name ? cls.provinceItemActive : ''}`}
+                      onClick={() => handleSelectProvince(p)}
+                    >
+                      {p.name}
+                    </button>
+                  ))}
+                  {filteredProvinces.length === 0 && (
+                    <div className={cls.provinceEmpty}>无匹配结果</div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
         {/* 分组参数 */}
         <div className={cls.popoverAnchor} ref={popoverRef}>

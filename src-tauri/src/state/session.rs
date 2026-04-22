@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use crate::core::grouping::ImageInfoWithPhash;
-use crate::models::{GroupResult, ImageMetadata, ProcessingState};
+use crate::models::{DetectionCache, GroupResult, ImageMetadata, ProcessingState};
 
 /// 全局会话状态，跨 Command 共享
 pub struct SessionState {
@@ -21,6 +21,8 @@ pub struct SessionState {
     pub processing_state: ProcessingState,
     pub cancel_flag: Arc<AtomicBool>,
     pub cache_dir: PathBuf,
+    /// 照片 hash → 检测结果缓存，供 reclassify 复用
+    pub detection_cache: DetectionCache,
 }
 
 impl SessionState {
@@ -37,6 +39,7 @@ impl SessionState {
             processing_state: ProcessingState::Idle,
             cancel_flag: Arc::new(AtomicBool::new(false)),
             cache_dir: PathBuf::new(),
+            detection_cache: HashMap::new(),
         }
     }
 
@@ -63,6 +66,7 @@ impl SessionState {
         self.group_result = None;
         self.processing_state = ProcessingState::Idle;
         self.cancel_flag.store(false, Ordering::Relaxed);
+        self.detection_cache.clear();
     }
 }
 
@@ -89,6 +93,7 @@ mod tests {
         assert!(state.group_result.is_none());
         assert_eq!(state.processing_state, ProcessingState::Idle);
         assert!(!state.cancel_flag.load(Ordering::Relaxed));
+        assert!(state.detection_cache.is_empty());
         assert_eq!(state.cache_dir, PathBuf::new());
     }
 
@@ -145,6 +150,7 @@ mod tests {
         assert!(!state.cancel_flag.load(Ordering::Relaxed));
         // cache_dir 应保留
         assert_eq!(state.cache_dir, PathBuf::from("/cache"));
+        assert!(state.detection_cache.is_empty());
     }
 
     #[test]

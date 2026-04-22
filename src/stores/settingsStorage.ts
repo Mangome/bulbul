@@ -7,6 +7,7 @@ import {
 } from '@tauri-apps/plugin-fs';
 
 import type { Theme } from './useThemeStore';
+import type { Province } from '../data/provinces';
 
 /** 持久化设置的结构 */
 export interface PersistedSettings {
@@ -14,6 +15,7 @@ export interface PersistedSettings {
   showDetectionOverlay: boolean;
   similarityThreshold: number;
   timeGapSeconds: number;
+  province: Province | null;
 }
 
 const DEFAULTS: PersistedSettings = {
@@ -21,10 +23,19 @@ const DEFAULTS: PersistedSettings = {
   showDetectionOverlay: false,
   similarityThreshold: 90.0,
   timeGapSeconds: 10,
+  province: null,
 };
 
 const SETTINGS_DIR = 'bulbul';
 const SETTINGS_FILE = 'bulbul/settings.json';
+
+function isValidProvince(value: unknown): value is Province {
+  if (!value || typeof value !== 'object') return false;
+  const p = value as Record<string, unknown>;
+  return typeof p.name === 'string'
+    && typeof p.lat === 'number'
+    && typeof p.lng === 'number';
+}
 
 /**
  * 从磁盘加载设置（$APPDATA/bulbul/settings.json）。
@@ -48,6 +59,7 @@ export async function loadSettings(): Promise<PersistedSettings> {
       showDetectionOverlay: typeof parsed.showDetectionOverlay === 'boolean' ? parsed.showDetectionOverlay : DEFAULTS.showDetectionOverlay,
       similarityThreshold: typeof parsed.similarityThreshold === 'number' ? parsed.similarityThreshold : DEFAULTS.similarityThreshold,
       timeGapSeconds: typeof parsed.timeGapSeconds === 'number' ? parsed.timeGapSeconds : DEFAULTS.timeGapSeconds,
+      province: isValidProvince(parsed.province) ? parsed.province : DEFAULTS.province,
     };
     return result;
   } catch (e) {
