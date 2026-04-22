@@ -7,3 +7,4 @@ pub mod raw_parser;
 pub mod focus_score;
 pub mod bird_detection;
 pub mod bird_classification;
+pub mod geo_filter;

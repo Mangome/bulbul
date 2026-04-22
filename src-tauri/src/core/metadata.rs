@@ -78,6 +78,13 @@ fn map_exif_to_metadata(exif: &Exif) -> ImageMetadata {
     meta.gps_longitude = parse_gps_coordinate(exif, Tag::GPSLongitude, Tag::GPSLongitudeRef);
     meta.gps_altitude = get_rational_f64(exif, Tag::GPSAltitude);
 
+    if meta.gps_latitude.is_none() && meta.gps_longitude.is_none() {
+        log::debug!(
+            "EXIF 中无 GPS 数据 (GPSInfoIFDPointer 存在: {})",
+            exif.get_field(Tag::GPSInfoIFDPointer, In::PRIMARY).is_some()
+        );
+    }
+
     meta
 }
 
@@ -283,10 +290,19 @@ fn parse_gps_coordinate(exif: &Exif, coord_tag: Tag, ref_tag: Tag) -> Option<f64
             let s = v[2].to_f64();
             d + m / 60.0 + s / 3600.0
         }
-        _ => return None,
+        _ => {
+            log::debug!("GPS 坐标标签 {:?} 值格式不匹配: {:?}", coord_tag, field.value);
+            return None;
+        }
     };
 
-    let ref_field = exif.get_field(ref_tag, In::PRIMARY)?;
+    let ref_field = match exif.get_field(ref_tag, In::PRIMARY) {
+        Some(f) => f,
+        None => {
+            log::debug!("GPS 参考方向标签 {:?} 未找到，默认正数", ref_tag);
+            return Some(degrees);
+        }
+    };
     let ref_str = ref_field.display_value().to_string();
     let ref_str = ref_str.trim_matches('"').trim();
 

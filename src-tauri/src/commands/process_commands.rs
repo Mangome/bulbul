@@ -454,8 +454,31 @@ pub async fn process_folder(
         let group_result_clone = group_result.clone();
         let pipeline_start = Instant::now(); // 重置计时器用于 FocusScoring 阶段
 
+        // 预提取 GPS 坐标（metadata_cache 在 Mutex 中，需在异步任务前提取）
+        let gps_cache: HashMap<String, Option<(f64, f64)>> = {
+            let s = state.lock().unwrap();
+            results.iter()
+                .map(|r| {
+                    let gps = s.metadata_cache.get(&r.hash)
+                        .and_then(|meta| {
+                            match (meta.gps_latitude, meta.gps_longitude) {
+                                (Some(lat), Some(lng)) => Some((lat, lng)),
+                                _ => None,
+                            }
+                        });
+                    (r.hash.clone(), gps)
+                })
+                .collect()
+        };
+        let gps_count = gps_cache.values().filter(|v| v.is_some()).count();
+        log::info!(
+            "GPS 缓存: {}/{} 张照片有 GPS 坐标",
+            gps_count,
+            gps_cache.len()
+        );
+
         tokio::spawn(async move {
-            if let Err(e) = compute_focus_scores_background(&app, &results, total, &pipeline_start, &group_result_clone)
+            if let Err(e) = compute_focus_scores_background(&app, &results, total, &pipeline_start, &group_result_clone, &gps_cache)
                 .await
             {
                 log::error!("后台合焦评分失败: {}", e);
@@ -675,6 +698,7 @@ async fn compute_focus_scores_background(
     total: usize,
     focus_scoring_start: &Instant,
     group_result: &GroupResult,
+    gps_cache: &HashMap<String, Option<(f64, f64)>>,
 ) -> Result<(), String> {
     if results.is_empty() {
         return Ok(());
@@ -703,6 +727,15 @@ async fn compute_focus_scores_background(
         log::info!("resource_dir 下未找到分类器模型，将回退到默认路径搜索或跳过物种分类");
     }
 
+    // 解析地理过滤网格数据路径
+    let geo_grid_path: Option<PathBuf> = app.path().resource_dir()
+        .map(|dir| bird_classification::resolve_geo_grid_path_from_resource_dir(&dir))
+        .ok()
+        .filter(|p| p.exists());
+    if geo_grid_path.is_some() {
+        log::info!("地理过滤网格数据已找到，将启用 GPS 物种过滤");
+    }
+
     // 并发计算配置
     let max_concurrency = std::cmp::min(4, num_cpus::get()); // 限制在 4 个并发
     let semaphore = Arc::new(Semaphore::new(max_concurrency));
@@ -727,6 +760,8 @@ async fn compute_focus_scores_background(
         let model_path_for_task = model_path.clone();
         let classifier_model_for_task = classifier_model_path.clone();
         let species_db_for_task = species_db_path.clone();
+        let geo_grid_for_task = geo_grid_path.clone();
+        let gps_for_task = gps_cache.get(&hash).copied().flatten();
 
         join_set.spawn(async move {
             let _permit = sem.acquire().await.ok();
@@ -737,6 +772,8 @@ async fn compute_focus_scores_background(
             let model_path_clone = model_path_for_task.clone();
             let classifier_model_clone = classifier_model_for_task.clone();
             let species_db_clone = species_db_for_task.clone();
+            let geo_grid_clone = geo_grid_for_task.clone();
+            let gps_clone = gps_for_task;
             let result = tokio::task::spawn_blocking(move || {
                 // 1. 鸟类检测
                 let detection = bird_detection::detect_birds(&medium_path_clone, model_path_clone.as_deref());
@@ -762,6 +799,8 @@ async fn compute_focus_scores_background(
                         &mut all_bboxes,
                         classifier_model_clone.as_deref(),
                         species_db_clone.as_deref(),
+                        gps_clone,
+                        geo_grid_clone.as_deref(),
                     );
                 }
 
@@ -902,6 +941,10 @@ async fn compute_focus_scores_background(
             &mut vote_bboxes_refs,
             classifier_model_path.as_deref(),
             species_db_path.as_deref(),
+            group.picture_hashes.iter()
+                .filter_map(|h| gps_cache.get(h).copied().flatten())
+                .next(),
+            geo_grid_path.as_deref(),
         ) {
             log::warn!("分组 {} 投票融合失败: {}", group.id, e);
             continue;
