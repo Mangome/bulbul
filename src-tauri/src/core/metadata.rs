@@ -73,18 +73,6 @@ fn map_exif_to_metadata(exif: &Exif) -> ImageMetadata {
         }
     }
 
-    // GPS
-    meta.gps_latitude = parse_gps_coordinate(exif, Tag::GPSLatitude, Tag::GPSLatitudeRef);
-    meta.gps_longitude = parse_gps_coordinate(exif, Tag::GPSLongitude, Tag::GPSLongitudeRef);
-    meta.gps_altitude = get_rational_f64(exif, Tag::GPSAltitude);
-
-    if meta.gps_latitude.is_none() && meta.gps_longitude.is_none() {
-        log::debug!(
-            "EXIF 中无 GPS 数据 (GPSInfoIFDPointer 存在: {})",
-            exif.get_field(Tag::GPSInfoIFDPointer, In::PRIMARY).is_some()
-        );
-    }
-
     meta
 }
 
@@ -280,40 +268,6 @@ fn get_color_space(exif: &Exif) -> Option<String> {
     }
 }
 
-/// 解析 GPS 坐标（度/分/秒 → 十进制度数）
-fn parse_gps_coordinate(exif: &Exif, coord_tag: Tag, ref_tag: Tag) -> Option<f64> {
-    let field = exif.get_field(coord_tag, In::PRIMARY)?;
-    let degrees = match &field.value {
-        Value::Rational(ref v) if v.len() >= 3 => {
-            let d = v[0].to_f64();
-            let m = v[1].to_f64();
-            let s = v[2].to_f64();
-            d + m / 60.0 + s / 3600.0
-        }
-        _ => {
-            log::debug!("GPS 坐标标签 {:?} 值格式不匹配: {:?}", coord_tag, field.value);
-            return None;
-        }
-    };
-
-    let ref_field = match exif.get_field(ref_tag, In::PRIMARY) {
-        Some(f) => f,
-        None => {
-            log::debug!("GPS 参考方向标签 {:?} 未找到，默认正数", ref_tag);
-            return Some(degrees);
-        }
-    };
-    let ref_str = ref_field.display_value().to_string();
-    let ref_str = ref_str.trim_matches('"').trim();
-
-    // 南纬(S)和西经(W)为负数
-    if ref_str == "S" || ref_str == "W" {
-        Some(-degrees)
-    } else {
-        Some(degrees)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -366,24 +320,6 @@ mod tests {
             &input[11..19]
         );
         assert_eq!(result, expected);
-    }
-
-    #[test]
-    fn test_gps_dms_to_decimal() {
-        // 手动测试 DMS → decimal 转换逻辑
-        // N 39°54'20" → 39 + 54/60 + 20/3600 ≈ 39.9056
-        let d: f64 = 39.0;
-        let m: f64 = 54.0;
-        let s: f64 = 20.0;
-        let decimal = d + m / 60.0 + s / 3600.0;
-        assert!((decimal - 39.9056_f64).abs() < 0.001);
-
-        // S 33°51'22" → -(33 + 51/60 + 22/3600) ≈ -33.856
-        let d: f64 = 33.0;
-        let m: f64 = 51.0;
-        let s: f64 = 22.0;
-        let decimal = -(d + m / 60.0 + s / 3600.0);
-        assert!((decimal - (-33.856_f64)).abs() < 0.001);
     }
 
     #[test]

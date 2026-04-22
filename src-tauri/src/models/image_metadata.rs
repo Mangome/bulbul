@@ -45,11 +45,6 @@ pub struct ImageMetadata {
     pub image_height: Option<u32>,
     pub orientation: Option<u16>,
 
-    // GPS
-    pub gps_latitude: Option<f64>,
-    pub gps_longitude: Option<f64>,
-    pub gps_altitude: Option<f64>,
-
     // 文件信息
     pub file_size: Option<u64>,
     pub compression: Option<String>,
@@ -77,7 +72,7 @@ mod tests {
         assert!(meta.camera_make.is_none());
         assert!(meta.focal_length.is_none());
         assert!(meta.iso_speed.is_none());
-        assert!(meta.gps_latitude.is_none());
+        assert!(meta.focal_length.is_none());
         assert!(meta.file_size.is_none());
         assert!(meta.focus_score.is_none());
     }

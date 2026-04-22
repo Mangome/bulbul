@@ -58,11 +58,6 @@ export interface ImageMetadata {
   imageHeight: number | null;
   orientation: number | null;
 
-  // GPS
-  gpsLatitude: number | null;
-  gpsLongitude: number | null;
-  gpsAltitude: number | null;
-
   // 文件信息
   fileSize: number | null;
   compression: string | null;
