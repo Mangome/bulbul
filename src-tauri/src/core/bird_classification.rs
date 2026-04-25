@@ -41,6 +41,16 @@ const SPECIES_CONFIDENCE_THRESHOLD: f32 = 0.10;
 /// 分类器推理线程数
 const CLASSIFIER_INTRA_THREADS: usize = 2;
 
+/// 默认 GPS 坐标：中国地理中心（陕西省泾阳县附近，约 35°N, 105°E）
+///
+/// 当用户未选择省份时，使用此坐标作为地理过滤的默认值，
+/// 将 10,964 种全球鸟类缩减到约 100-200 种中国可见鸟种，大幅提升识别准确率。
+///
+/// 选择 35°N, 105°E 而非某具体省份的原因：
+/// - 该坐标位于中国中部，1 度网格覆盖的物种列表对中国大部分地区有较好代表性
+/// - 用户后续可通过省份选择器精确定位，覆盖更精准的结果
+pub const DEFAULT_GPS: Option<(f64, f64)> = Some((35.0, 105.0));
+
 /// 物种数据库条目
 #[derive(Debug, Clone, Deserialize)]
 struct SpeciesEntry {

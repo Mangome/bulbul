@@ -8,12 +8,16 @@ export async function processFolder(
   options?: {
     similarityThreshold?: number;
     timeGapSeconds?: number;
+    lat?: number;
+    lng?: number;
   }
 ): Promise<GroupResult> {
   return await invoke<GroupResult>('process_folder', {
     folderPath,
     similarityThreshold: options?.similarityThreshold ?? 90.0,
     timeGapSeconds: options?.timeGapSeconds ?? 10,
+    lat: options?.lat,
+    lng: options?.lng,
   });
 }
 

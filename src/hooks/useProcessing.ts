@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useAppStore } from '../stores/useAppStore';
 import { useGroupingStore } from '../stores/useGroupingStore';
+import { useGeoStore } from '../stores/useGeoStore';
 import { useTauriEvents } from './useTauriEvents';
 import * as processService from '../services/processService';
 import type { ProcessingProgress } from '../types';
@@ -36,9 +37,12 @@ export function useProcessing() {
       try {
         setProcessingState('scanning');
         const { similarityThreshold, timeGapSeconds } = useGroupingStore.getState();
+        const { selectedProvince } = useGeoStore.getState();
         const result = await processService.processFolder(folderPath, {
           similarityThreshold,
           timeGapSeconds,
+          lat: selectedProvince?.lat,
+          lng: selectedProvince?.lng,
         });
         setGroups(result.groups, result.totalImages);
       } catch (err) {

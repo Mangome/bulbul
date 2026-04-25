@@ -46,6 +46,8 @@ pub async fn process_folder(
     folder_path: String,
     similarity_threshold: Option<f64>,
     time_gap_seconds: Option<u64>,
+    lat: Option<f64>,
+    lng: Option<f64>,
 ) -> Result<GroupResult, String> {
     let pipeline_start = Instant::now();
 
@@ -447,6 +449,21 @@ pub async fn process_folder(
     // ═══════════════════════════════════════════════════════
     // 异步阶段 6: FocusScoring — 后台计算合焦程度
     // ═══════════════════════════════════════════════════════
+    // 解析 GPS：用户选择省份 > 默认中国中心
+    let gps = match (lat, lng) {
+        (Some(la), Some(ln)) if la != 0.0 || ln != 0.0 => {
+            log::info!("使用用户选择的省份 GPS: ({:.1}, {:.1})", la, ln);
+            Some((la, ln))
+        }
+        _ => {
+            log::info!("使用默认 GPS: ({:.1}, {:.1})",
+                bird_classification::DEFAULT_GPS.unwrap().0,
+                bird_classification::DEFAULT_GPS.unwrap().1,
+            );
+            bird_classification::DEFAULT_GPS
+        }
+    };
+
     // 启动后台任务，不阻塞主流程返回
     {
         let app = app.clone();
@@ -457,7 +474,7 @@ pub async fn process_folder(
         let state_arc = Arc::clone(&state);
 
         tokio::spawn(async move {
-            if let Err(e) = compute_focus_scores_background(&app, &results, total, &pipeline_start, &group_result_clone, state_arc)
+            if let Err(e) = compute_focus_scores_background(&app, &results, total, &pipeline_start, &group_result_clone, state_arc, gps)
                 .await
             {
                 log::error!("后台合焦评分失败: {}", e);
@@ -856,6 +873,7 @@ async fn compute_focus_scores_background(
     focus_scoring_start: &Instant,
     group_result: &GroupResult,
     state: Arc<Mutex<SessionState>>,
+    gps: Option<(f64, f64)>,
 ) -> Result<(), String> {
     if results.is_empty() {
         return Ok(());
@@ -890,7 +908,9 @@ async fn compute_focus_scores_background(
         .ok()
         .filter(|p| p.exists());
     if geo_grid_path.is_some() {
-        log::info!("地理过滤网格数据已找到，将启用 GPS 物种过滤");
+        if let Some((la, ln)) = gps {
+            log::info!("地理过滤网格数据已找到，将启用 GPS 物种过滤 ({:.1}°N, {:.1}°E)", la, ln);
+        }
     }
 
     // 并发计算配置
@@ -909,6 +929,7 @@ async fn compute_focus_scores_background(
     );
 
     // 为每个结果生成任务
+    let gps_for_tasks = gps; // f64 Copy，无需 Arc
     for (idx, result) in results.iter().enumerate() {
         let sem = Arc::clone(&semaphore);
         let hash = result.hash.clone();
@@ -929,6 +950,7 @@ async fn compute_focus_scores_background(
             let classifier_model_clone = classifier_model_for_task.clone();
             let species_db_clone = species_db_for_task.clone();
             let geo_grid_clone = geo_grid_for_task.clone();
+            let gps_clone = gps_for_tasks;
             let result = tokio::task::spawn_blocking(move || {
                 // 1. 鸟类检测
                 let detection = bird_detection::detect_birds(&medium_path_clone, model_path_clone.as_deref());
@@ -954,7 +976,7 @@ async fn compute_focus_scores_background(
                         &mut all_bboxes,
                         classifier_model_clone.as_deref(),
                         species_db_clone.as_deref(),
-                        None,
+                        gps_clone,
                         geo_grid_clone.as_deref(),
                     );
                 }
@@ -1115,7 +1137,7 @@ async fn compute_focus_scores_background(
             &mut vote_bboxes_refs,
             classifier_model_path.as_deref(),
             species_db_path.as_deref(),
-            None,
+            gps,
             geo_grid_path.as_deref(),
         ) {
             log::warn!("分组 {} 投票融合失败: {}", group.id, e);
