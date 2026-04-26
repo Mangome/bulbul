@@ -6,7 +6,7 @@
 
 专为鸟友设计的快速筛图应用。自动将连拍照片智能分组，配合放大镜检查合焦，一键导出精选图片。
 
-连拍一时爽，选片不再慌！
+连拍一时爽，选片一直爽！
 
 ## 功能概览
 
@@ -65,23 +65,9 @@
 | ---------------- | ------------------- |
 | 滚轮             | 缩放画布            |
 | 点击图片         | 选中 / 取消选中     |
-| 在图片上按住拖动 | 弹出 1:1 像素放大镜 |
+| 在图片上按住拖动 | 弹出放大镜          |
 | 悬停图片         | 显示淡色描边        |
 
-#### 键盘快捷键
-
-| 快捷键    | 功能                |
-| --------- | ------------------- |
-| `←` / `A` | 上一分组            |
-| `→` / `D` | 下一分组            |
-| `W` / `S` | 上下滚动到相邻分组  |
-| `Ctrl+A`  | 全选当前分组        |
-| `Q`       | 清除所有选中        |
-| `Esc`     | 清除选中 / 取消处理 |
-| `Ctrl+O`  | 打开新目录          |
-| `Ctrl+E`  | 导出选中图片        |
-
-> 输入框聚焦时快捷键不生效。
 
 #### 底部胶片条
 
@@ -182,31 +168,12 @@ bulbul/
 
 - **前端**: React 18 + TypeScript + Zustand + Canvas 2D
 - **后端**: Tauri 2 + Rust（NEF 解析、pHash、分组、合焦评分）
+- **鸟类检测**: [YOLOv8s](https://github.com/ultralytics/ultralytics)（目标检测）
+- **鸟种分类**: [osea_mobile](https://github.com/sun-jiao/osea_mobile)（GPL-3.0）
 - **构建**: Vite 6
 - **测试**: Vitest（前端）+ cargo test（后端）
 
-### 关键注意事项
-
-- InfiniteCanvas 使用 dirty flag + rAF 按需渲染，状态变化需调用 `markDirty()` 触发重绘
-- EXIF orientation 5-8 表示旋转，后端自动交换 width/height，前端做视觉旋转
-- 前端测试需要 mock Canvas 2D context、matchMedia、ResizeObserver 和 Tauri 的 `invoke()`
-- 用户偏好持久化到 `$APPDATA/bulbul/settings.json`，500ms 防抖写入
-
-### 代码规范
-
-- TypeScript 严格模式，完整类型注解
-- Rust 遵循 Clippy lint
-- React 函数组件 + Hooks，Zustand 状态管理
-- 单元测试覆盖率目标 ≥ 80%
-
-### 故障排除
-
-**Windows 编译报错**：确保已安装 Microsoft Visual C++ Build Tools。
-
-**Rust 编译缓慢**：启用增量编译 `export CARGO_BUILD_PIPELINED_COMPILATION=true`。
-
-**开发窗口不显示**：检查 `src-tauri/tauri.conf.json` 中窗口的 `visible: false` 设置，前端初始化完成后才显示。
 
 ## 许可证
 
-MIT
+[GPL-3.0](LICENSE)
