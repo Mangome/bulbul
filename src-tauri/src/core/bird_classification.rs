@@ -256,27 +256,62 @@ fn classify_crop_with_probs(
 
     // 新模型输出原始 logits，需 softmax 转概率
     let logits: Vec<f32> = out_data.to_vec();
-    let mut probs = softmax(&logits);
+    let raw_probs = softmax(&logits);
 
-    // 有 GPS 时应用地理过滤
-    if let (Some((lat, lng)), Some(gp)) = (gps, grid_path) {
+    // 有 GPS 时：同时计算过滤和不过滤的结果，取置信度更高的
+    // 原因：分布数据不完整时，正确鸟种可能不在当地列表中被错误清零，
+    // 此时不过滤的结果反而更准确
+    let (best_idx, best_prob) = if let (Some((lat, lng)), Some(gp)) = (gps, grid_path) {
         if let Some(local_species) = geo_filter::query_local_species(lat, lng, gp) {
             log::info!(
                 "地理过滤已应用: ({:.2}, {:.2}) → {} 个当地物种",
                 lat, lng, local_species.len()
             );
-            geo_filter::apply_geo_filter(&mut probs, &local_species);
+
+            // 不过滤：直接 argmax
+            let (raw_idx, &raw_prob) = raw_probs
+                .iter()
+                .enumerate()
+                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))?;
+
+            // 过滤后：argmax
+            let mut filtered_probs = raw_probs.clone();
+            geo_filter::apply_geo_filter(&mut filtered_probs, &local_species);
+            let (filtered_idx, &filtered_prob) = filtered_probs
+                .iter()
+                .enumerate()
+                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))?;
+
+            if filtered_prob >= raw_prob {
+                log::debug!(
+                    "采用过滤结果: {} ({:.1}%) > 原始 {} ({:.1}%)",
+                    filtered_idx, filtered_prob * 100.0, raw_idx, raw_prob * 100.0
+                );
+                (filtered_idx, filtered_prob)
+            } else {
+                log::debug!(
+                    "采用原始结果: {} ({:.1}%) > 过滤 {} ({:.1}%)",
+                    raw_idx, raw_prob * 100.0, filtered_idx, filtered_prob * 100.0
+                );
+                (raw_idx, raw_prob)
+            }
         } else {
             log::debug!("地理过滤: ({:.2}, {:.2}) 无网格数据，跳过过滤", lat, lng);
+            let (idx, &prob) = raw_probs
+                .iter()
+                .enumerate()
+                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))?;
+            (idx, prob)
         }
-    }
+    } else {
+        let (idx, &prob) = raw_probs
+            .iter()
+            .enumerate()
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))?;
+        (idx, prob)
+    };
 
-    let (best_idx, &best_prob) = probs
-        .iter()
-        .enumerate()
-        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))?;
-
-    Some((probs, best_idx, best_prob))
+    Some((raw_probs, best_idx, best_prob))
 }
 
 /// 对单个裁剪区域执行分类推理（便捷包装，仅返回最佳结果）
@@ -616,23 +651,59 @@ pub fn classify_group_with_fusion(
             *p *= scale;
         }
 
-        // 融合后应用地理过滤
-        if let (Some((lat, lng)), Some(gp)) = (gps, grid_path) {
+        // 融合后地理过滤：同时比较过滤和不过滤的结果，取置信度更高的
+        let (best_idx, best_prob) = if let (Some((lat, lng)), Some(gp)) = (gps, grid_path) {
             if let Some(local_species) = geo_filter::query_local_species(lat, lng, gp) {
                 log::info!(
                     "融合后地理过滤: ({:.2}, {:.2}) → {} 个当地物种",
                     lat, lng, local_species.len()
                 );
-                geo_filter::apply_geo_filter(&mut fused_probs, &local_species);
-            }
-        }
 
-        // argmax
-        let (best_idx, &best_prob) = fused_probs
-            .iter()
-            .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-            .unwrap_or((0, &0.0));
+                // 不过滤：直接 argmax
+                let (raw_idx, &raw_prob) = fused_probs
+                    .iter()
+                    .enumerate()
+                    .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                    .unwrap_or((0, &0.0));
+
+                // 过滤后：argmax
+                let mut filtered_probs = fused_probs.clone();
+                geo_filter::apply_geo_filter(&mut filtered_probs, &local_species);
+                let (filtered_idx, &filtered_prob) = filtered_probs
+                    .iter()
+                    .enumerate()
+                    .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                    .unwrap_or((0, &0.0));
+
+                if filtered_prob >= raw_prob {
+                    log::debug!(
+                        "融合采用过滤结果: bbox {} → cls {} ({:.1}%) > 原始 cls {} ({:.1}%)",
+                        bbox_idx, filtered_idx, filtered_prob * 100.0, raw_idx, raw_prob * 100.0
+                    );
+                    (filtered_idx, filtered_prob)
+                } else {
+                    log::debug!(
+                        "融合采用原始结果: bbox {} → cls {} ({:.1}%) > 过滤 cls {} ({:.1}%)",
+                        bbox_idx, raw_idx, raw_prob * 100.0, filtered_idx, filtered_prob * 100.0
+                    );
+                    (raw_idx, raw_prob)
+                }
+            } else {
+                fused_probs
+                    .iter()
+                    .enumerate()
+                    .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                    .map(|(idx, &prob)| (idx, prob))
+                    .unwrap_or((0, 0.0))
+            }
+        } else {
+            fused_probs
+                .iter()
+                .enumerate()
+                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                .map(|(idx, &prob)| (idx, prob))
+                .unwrap_or((0, 0.0))
+        };
 
         if best_prob < SPECIES_CONFIDENCE_THRESHOLD {
             log::debug!(
