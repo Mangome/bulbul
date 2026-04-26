@@ -4,21 +4,18 @@
 // 全宽顶部条，44px 高度。
 // 左区：分组导航箭头 + 分组名 + 路径
 // 中区：进度条
-// 右区：工具按钮（检测框、分组参数、切换目录、主题）+ 导出
+// 右区：工具按钮（省份、设置、切换目录、主题）+ 导出
 // ============================================================
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Button } from '../common/Button';
 import { Badge } from '../common/Badge';
-import { Slider } from '../common/Slider';
 import { useCanvasStore } from '../../stores/useCanvasStore';
 import { useSelectionStore } from '../../stores/useSelectionStore';
 import { useThemeStore } from '../../stores/useThemeStore';
-import { useGroupingStore } from '../../stores/useGroupingStore';
 import { useAppStore } from '../../stores/useAppStore';
 import { useGeoStore } from '../../stores/useGeoStore';
-import { useProcessing } from '../../hooks/useProcessing';
 import { reclassify } from '../../services/processService';
 import { PROVINCES } from '../../data/provinces';
 import type { Province } from '../../data/provinces';
@@ -52,28 +49,20 @@ function IconFolder() {
   );
 }
 
-function IconDetection() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-      <circle cx="7.5" cy="7.5" r="2.5" stroke="currentColor" strokeWidth="1.3" />
-      <path d="M7.5 1v2M7.5 12v2M1 7.5h2M12 7.5h2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function IconTune() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-      <path d="M2 4h3M8 4h5M5 2.5v3M2 7.5h5M10 7.5h3M7 6v3M2 11h7M12 11h1M9 9.5v3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 function IconMap() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
       <path d="M5.5 1.5v11.5M9.5 2v11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
       <path d="M1.5 4.5l4-1 4 1.5 4-1v7l-4 1-4-1.5-4 1z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconSettings() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+      <path d="M7.5 9.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M12.9 9.3l-.6-.4a.5.5 0 0 1-.2-.6l.2-.7a.5.5 0 0 1 .6-.3l.7.1a.5.5 0 0 0 .5-.3 5.2 5.2 0 0 0 .1-1.2.5.5 0 0 0-.4-.4l-.7-.1a.5.5 0 0 1-.4-.4l-.2-.7a.5.5 0 0 1 .2-.6l.6-.4a.5.5 0 0 0 .1-.6 5.4 5.4 0 0 0-.8-1 .5.5 0 0 0-.6 0l-.5.5a.5.5 0 0 1-.6 0l-.6-.3a.5.5 0 0 1-.3-.5l.1-.7a.5.5 0 0 0-.3-.5 5.2 5.2 0 0 0-1.2-.1.5.5 0 0 0-.4.4l-.1.7a.5.5 0 0 1-.4.4l-.7.2a.5.5 0 0 1-.6-.2l-.4-.6a.5.5 0 0 0-.6-.1 5.4 5.4 0 0 0-1 .8.5.5 0 0 0 0 .6l.5.5a.5.5 0 0 1 0 .6l-.3.6a.5.5 0 0 1-.5.3l-.7-.1a.5.5 0 0 0-.5.3 5.2 5.2 0 0 0-.1 1.2.5.5 0 0 0 .4.4l.7.1a.5.5 0 0 1 .4.4l.2.7a.5.5 0 0 1-.2.6l-.6.4a.5.5 0 0 0-.1.6 5.4 5.4 0 0 0 .8 1 .5.5 0 0 0 .6 0l.5-.5a.5.5 0 0 1 .6 0l.6.3a.5.5 0 0 1 .3.5l-.1.7a.5.5 0 0 0 .3.5 5.2 5.2 0 0 0 1.2.1.5.5 0 0 0 .4-.4l.1-.7a.5.5 0 0 1 .4-.4l.7-.2a.5.5 0 0 1 .6.2l.4.6a.5.5 0 0 0 .6.1 5.4 5.4 0 0 0 1-.8.5.5 0 0 0 0-.6l-.5-.5Z" stroke="currentColor" strokeWidth="1" />
     </svg>
   );
 }
@@ -86,6 +75,7 @@ export interface TopNavBarProps {
   folderPath: string | null;
   onExport: () => void;
   onSwitchFolder: () => void;
+  onOpenSettings: () => void;
 }
 
 // ─── 工具函数 ─────────────────────────────────────────
@@ -105,6 +95,7 @@ export function TopNavBar({
   folderPath,
   onExport,
   onSwitchFolder,
+  onOpenSettings,
 }: TopNavBarProps) {
   const currentGroupIndex = useCanvasStore((s) => s.currentGroupIndex);
   const groupCount = useCanvasStore((s) => s.groupCount);
@@ -116,21 +107,10 @@ export function TopNavBar({
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
 
-  // 检测框
-  const showDetectionOverlay = useCanvasStore((s) => s.showDetectionOverlay);
-  const toggleDetectionOverlay = useCanvasStore((s) => s.toggleDetectionOverlay);
-
-  // 分组参数
-  const similarityThreshold = useGroupingStore((s) => s.similarityThreshold);
-  const timeGapSeconds = useGroupingStore((s) => s.timeGapSeconds);
-  const setSimilarityThreshold = useGroupingStore((s) => s.setSimilarityThreshold);
-  const setTimeGapSeconds = useGroupingStore((s) => s.setTimeGapSeconds);
-  const hasGroups = useAppStore((s) => s.groups.length > 0);
-  const { regroupWith } = useProcessing();
-
   // 省份选择
   const selectedProvince = useGeoStore((s) => s.selectedProvince);
   const setProvince = useGeoStore((s) => s.setProvince);
+  const hasGroups = useAppStore((s) => s.groups.length > 0);
   const [provinceSearch, setProvinceSearch] = useState('');
 
   const filteredProvinces = useMemo(
@@ -157,12 +137,9 @@ export function TopNavBar({
   }, [setProvince]);
 
   const [copied, setCopied] = useState(false);
-  const [showGroupingPopover, setShowGroupingPopover] = useState(false);
   const [showProvincePopover, setShowProvincePopover] = useState(false);
   const [reclassifyLoading, setReclassifyLoading] = useState(false);
-  const popoverRef = useRef<HTMLDivElement>(null);
   const provincePopoverRef = useRef<HTMLDivElement>(null);
-  const regroupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const displayPath = useMemo(
     () => (folderPath ? shortenPath(folderPath) : null),
@@ -176,50 +153,18 @@ export function TopNavBar({
     setTimeout(() => setCopied(false), 1500);
   }, [folderPath]);
 
-  // 点击外部关闭弹窗
+  // 点击外部关闭省份弹窗
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (showGroupingPopover && popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-        setShowGroupingPopover(false);
-      }
       if (showProvincePopover && provincePopoverRef.current && !provincePopoverRef.current.contains(e.target as Node)) {
         setShowProvincePopover(false);
       }
     };
-    if (showGroupingPopover || showProvincePopover) {
+    if (showProvincePopover) {
       document.addEventListener('pointerdown', handleClickOutside);
     }
     return () => document.removeEventListener('pointerdown', handleClickOutside);
-  }, [showGroupingPopover, showProvincePopover]);
-
-  // 防抖触发 regroup
-  const scheduleRegroup = useCallback(
-    (similarity: number, timeGap: number) => {
-      if (!hasGroups) return;
-      if (regroupTimerRef.current) clearTimeout(regroupTimerRef.current);
-      regroupTimerRef.current = setTimeout(() => {
-        regroupTimerRef.current = null;
-        regroupWith(similarity, timeGap);
-      }, 500);
-    },
-    [hasGroups, regroupWith],
-  );
-
-  const handleSimilarityChange = useCallback(
-    (value: number) => {
-      setSimilarityThreshold(value);
-      scheduleRegroup(value, useGroupingStore.getState().timeGapSeconds);
-    },
-    [setSimilarityThreshold, scheduleRegroup],
-  );
-
-  const handleTimeGapChange = useCallback(
-    (value: number) => {
-      setTimeGapSeconds(value);
-      scheduleRegroup(useGroupingStore.getState().similarityThreshold, value);
-    },
-    [setTimeGapSeconds, scheduleRegroup],
-  );
+  }, [showProvincePopover]);
 
   const group = groups[currentGroupIndex];
   if (!group) return null;
@@ -320,16 +265,6 @@ export function TopNavBar({
 
       {/* 右区：工具按钮 */}
       <div className={cls.toolsSection}>
-        {/* 检测框切换 */}
-        <button
-          className={`${cls.toolBtn} ${showDetectionOverlay ? cls.toolBtnActive : ''}`}
-          onClick={toggleDetectionOverlay}
-          title={showDetectionOverlay ? '隐藏检测框' : '显示检测框'}
-          aria-label={showDetectionOverlay ? '隐藏检测框' : '显示检测框'}
-        >
-          <IconDetection />
-        </button>
-
         {/* 省份选择器 */}
         <div className={cls.popoverAnchor} ref={provincePopoverRef}>
           <button
@@ -388,60 +323,15 @@ export function TopNavBar({
           </AnimatePresence>
         </div>
 
-        {/* 分组参数 */}
-        <div className={cls.popoverAnchor} ref={popoverRef}>
-          <button
-            className={`${cls.toolBtn} ${cls.toolBtnWithLabel} ${showGroupingPopover ? cls.toolBtnActive : ''}`}
-            onClick={() => setShowGroupingPopover((v) => !v)}
-            title={`分组参数（相似度 ${Math.round(similarityThreshold)}% · 间隔 ${timeGapSeconds}s）`}
-            aria-label="分组参数"
-          >
-            <IconTune />
-            <span className={cls.toolBtnLabel}>
-              {Math.round(similarityThreshold)}%·{timeGapSeconds}s
-            </span>
-          </button>
-          <AnimatePresence>
-            {showGroupingPopover && (
-              <motion.div
-                className={cls.popover}
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.15 }}
-              >
-                <div className={cls.popoverSection}>
-                  <div className={cls.popoverLabel}>
-                    <span>相似度</span>
-                    <span className={cls.popoverValue}>{Math.round(similarityThreshold)}%</span>
-                  </div>
-                  <Slider
-                    min={50}
-                    max={100}
-                    value={Math.round(similarityThreshold)}
-                    step={1}
-                    onChange={handleSimilarityChange}
-                    aria-label="相似度阈值"
-                  />
-                </div>
-                <div className={cls.popoverSection}>
-                  <div className={cls.popoverLabel}>
-                    <span>时间间隔</span>
-                    <span className={cls.popoverValue}>{timeGapSeconds}s</span>
-                  </div>
-                  <Slider
-                    min={1}
-                    max={120}
-                    value={timeGapSeconds}
-                    step={1}
-                    onChange={handleTimeGapChange}
-                    aria-label="时间间隔阈值"
-                  />
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+        {/* 设置 */}
+        <button
+          className={cls.toolBtn}
+          onClick={onOpenSettings}
+          title="设置"
+          aria-label="打开设置"
+        >
+          <IconSettings />
+        </button>
 
         <span className={cls.toolSep} />
 

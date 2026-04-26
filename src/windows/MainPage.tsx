@@ -11,6 +11,7 @@ import { ProgressDialog } from '../components/dialogs/ProgressDialog';
 import InfiniteCanvas, { type InfiniteCanvasHandle } from '../components/canvas/InfiniteCanvas';
 import { TopNavBar } from '../components/panels/TopNavBar';
 import { BottomFilmstrip } from '../components/panels/BottomFilmstrip';
+import { SettingsPanel } from '../components/panels/SettingsPanel';
 import { computeVerticalGridLayout, type LayoutResult, type ImageDimension } from '../utils/layout';
 import * as imageService from '../services/imageService';
 import { runExportFlow } from '../services/exportService';
@@ -36,6 +37,9 @@ function MainPage() {
   const canvasRef = useRef<InfiniteCanvasHandle>(null);
 
   const { addToast } = useToastStore();
+
+  // ── 设置面板状态 ──
+  const [showSettings, setShowSettings] = useState(false);
 
   // ── 导出流程 ──
   const handleExport = useCallback(async () => {
@@ -295,6 +299,20 @@ function MainPage() {
     await cancelProcessing();
   }, [cancelProcessing]);
 
+  // ── 缓存清理回调 ──
+  const handleCacheCleared = useCallback(() => {
+    // 清空 ImageBitmap 内存缓存
+    canvasRef.current?.clearMemoryCache();
+
+    const { currentFolder } = useAppStore.getState();
+    if (currentFolder) {
+      addToast({ type: 'info', message: '缓存已清理，正在重新处理...' });
+      startProcessing(currentFolder);
+    } else {
+      addToast({ type: 'success', message: '缓存已清理' });
+    }
+  }, [addToast, startProcessing]);
+
   const isCanvasReady = processingState === 'completed' && layout !== null;
 
   return (
@@ -323,12 +341,21 @@ function MainPage() {
               folderPath={currentFolder}
               onExport={handleExport}
               onSwitchFolder={handleOpenFolder}
+              onOpenSettings={() => setShowSettings(true)}
             />
 
             {/* 底部胶片条 */}
             <BottomFilmstrip
               groups={groups}
               onGroupClick={handleGroupClick}
+            />
+
+            {/* 设置面板 */}
+            <SettingsPanel
+              open={showSettings}
+              onClose={() => setShowSettings(false)}
+              onCacheCleared={handleCacheCleared}
+              processingState={processingState}
             />
           </>
         ) : (

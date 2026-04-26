@@ -87,6 +87,8 @@ pub fn run() {
             commands::image_commands::get_batch_metadata,
             commands::export_commands::select_export_dir,
             commands::export_commands::export_images,
+            commands::cache_commands::get_cache_size,
+            commands::cache_commands::clear_cache,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

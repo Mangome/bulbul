@@ -82,6 +82,8 @@ export interface InfiniteCanvasHandle {
   scrollToGroup: (groupIndex: number) => void;
   /** 更新指定 hash 的 item 元数据（合焦评分逐张到达时调用） */
   updateItemMetadata: (hash: string) => void;
+  /** 清空所有 ImageBitmap 内存缓存 */
+  clearMemoryCache: () => void;
 }
 
 // ─── 缓动函数 ────────────────────────────────────────
@@ -983,6 +985,15 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       canvasItem.setDetectionBoxes(bboxes);
       const { showDetectionOverlay } = useCanvasStore.getState();
       canvasItem.setDetectionVisible(showDetectionOverlay && bboxes.length > 0);
+      markDirty();
+    },
+    clearMemoryCache: () => {
+      // 销毁当前可见的 CanvasImageItem 的图片引用
+      for (const [, item] of canvasItemsRef.current) {
+        item.setImageInfo('', undefined);
+      }
+      // 清空 ImageLRUCache 中所有 ImageBitmap
+      imageLoaderRef.current?.getCache().clear();
       markDirty();
     },
   }), [updateViewport, clampScrollY, markDirty]);

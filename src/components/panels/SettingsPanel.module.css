@@ -1,0 +1,291 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   SettingsPanel - 右侧滑出设置面板
+
+   320px 固定宽度，毛玻璃背景，三个区域：分组参数、外观、缓存管理
+════════════════════════════════════════════════════════════════════════════ */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  justify-content: flex-end;
+  pointer-events: auto;
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.panel {
+  position: relative;
+  width: 320px;
+  height: 100%;
+  background: var(--panel-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-left: 1px solid var(--panel-border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ─── 头部 ──────────────────────────────────────────── */
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--color-border-light);
+  flex-shrink: 0;
+}
+
+.title {
+  font-size: 15px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  user-select: none;
+}
+
+.closeBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: none;
+  padding: 0;
+
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.closeBtn:hover {
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+}
+
+/* ─── 区域通用 ──────────────────────────────────────── */
+
+.section {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.sectionTitle {
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 14px;
+  user-select: none;
+}
+
+/* ─── 滑块行 ────────────────────────────────────────── */
+
+.sliderRow {
+  margin-bottom: 14px;
+}
+
+.sliderRow:last-child {
+  margin-bottom: 0;
+}
+
+.sliderLabel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.sliderLabelText {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  user-select: none;
+}
+
+.sliderValue {
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+  min-width: 40px;
+  text-align: right;
+}
+
+/* ─── 开关行 ────────────────────────────────────────── */
+
+.toggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.toggleLabel {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  user-select: none;
+}
+
+.toggle {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--color-border);
+  cursor: pointer;
+  border: none;
+  padding: 0;
+  flex-shrink: 0;
+
+  transition: background-color var(--transition-fast);
+}
+
+.toggleActive {
+  background: var(--color-primary);
+}
+
+.toggleKnob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+
+  transition: transform var(--transition-fast);
+}
+
+.toggleActive .toggleKnob {
+  transform: translateX(18px);
+}
+
+/* ─── 缓存管理 ──────────────────────────────────────── */
+
+.cacheInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.cachePath {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  word-break: break-all;
+  line-height: 1.4;
+  user-select: text;
+}
+
+.cacheStats {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cacheSize {
+  font-size: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.cacheFileCount {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.cacheError {
+  font-size: 12px;
+  color: var(--color-danger);
+  margin-bottom: 14px;
+}
+
+.cacheActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.refreshBtn,
+.clearBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  border: none;
+  user-select: none;
+
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast),
+    opacity var(--transition-fast);
+}
+
+.refreshBtn {
+  width: 32px;
+  padding: 0;
+  color: var(--color-text-muted);
+  background: var(--color-bg-tertiary);
+}
+
+.refreshBtn:hover {
+  color: var(--color-text-primary);
+  background: var(--color-border);
+}
+
+.refreshBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.clearBtn {
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+}
+
+.clearBtn:hover {
+  background: color-mix(in srgb, var(--color-danger) 15%, transparent);
+}
+
+.confirmBtn {
+  color: white;
+  background: var(--color-danger);
+}
+
+.confirmBtn:hover {
+  opacity: 0.9;
+}
+
+.clearBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ─── 旋转动画 ──────────────────────────────────────── */
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

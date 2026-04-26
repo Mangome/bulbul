@@ -71,20 +71,16 @@
 - **THEN** `showDetectionOverlay` SHALL 恢复为 `true`
 
 ### Requirement: RightControlPanel 检测框切换按钮
+检测框开关 SHALL 迁移到设置面板的外观设置区域中，TopNavBar 不再提供检测框切换按钮。
 
-RightControlPanel SHALL 在视图区域（适应窗口/实际大小按钮下方）新增检测框切换图标按钮，点击调用 `useCanvasStore.toggleDetectionOverlay()`。
+#### Scenario: 通过设置面板切换检测框
+- **WHEN** 用户在设置面板中切换检测框开关
+- **THEN** `showDetectionOverlay` 状态 SHALL 切换，检测框可见性立即变化
 
-#### Scenario: 按钮点击切换
+#### Scenario: 开关反映当前状态
+- **WHEN** 设置面板打开且 `showDetectionOverlay` 为 `true`
+- **THEN** 检测框开关 SHALL 显示为开启状态
 
-- **WHEN** 用户点击检测框切换按钮
-- **THEN** `showDetectionOverlay` 状态切换，检测框可见性立即变化
-
-#### Scenario: 按钮视觉反馈
-
-- **WHEN** `showDetectionOverlay` 为 `true`
-- **THEN** 按钮 SHALL 显示激活态（高亮背景色）
-
-#### Scenario: 按钮视觉反馈-关闭态
-
-- **WHEN** `showDetectionOverlay` 为 `false`
-- **THEN** 按钮 SHALL 显示默认态（与普通图标按钮一致）
+#### Scenario: 开关反映关闭状态
+- **WHEN** 设置面板打开且 `showDetectionOverlay` 为 `false`
+- **THEN** 检测框开关 SHALL 显示为关闭状态

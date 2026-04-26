@@ -275,54 +275,11 @@
 }
 
 /* ────────────────────────────────────────────────────────────────
-   分组参数弹窗（下拉式）
+   弹窗锚点
 ──────────────────────────────────────────────────────────────── */
 
 .popoverAnchor {
   position: relative;
-}
-
-.popover {
-  position: absolute;
-  top: calc(100% + 12px);
-  right: -8px;
-  width: 220px;
-  padding: 14px;
-
-  background: var(--panel-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--panel-border);
-  border-radius: var(--panel-radius);
-  box-shadow: var(--shadow-elevated);
-
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-
-  pointer-events: auto;
-  z-index: 200;
-}
-
-.popoverSection {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.popoverLabel {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 11px;
-  color: var(--color-text-secondary);
-  user-select: none;
-}
-
-.popoverValue {
-  font-variant-numeric: tabular-nums;
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
 }
 
 /* ────────────────────────────────────────────────────────────────
