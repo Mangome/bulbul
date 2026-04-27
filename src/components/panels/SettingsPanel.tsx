@@ -54,7 +54,8 @@ export function SettingsPanel({ open, onClose, onCacheCleared, processingState }
   const setSimilarityThreshold = useGroupingStore((s) => s.setSimilarityThreshold);
   const setTimeGapSeconds = useGroupingStore((s) => s.setTimeGapSeconds);
   const hasGroups = useAppStore((s) => s.groups.length > 0);
-  const { cancelProcessing, regroupWith } = useProcessing();
+  const currentFolder = useAppStore((s) => s.currentFolder);
+  const { startProcessing, cancelProcessing, regroupWith } = useProcessing();
 
   // 处理是否处于活跃状态（需要先取消才能清理缓存）
   const isActive = processingState === 'scanning'
@@ -286,6 +287,15 @@ export function SettingsPanel({ open, onClose, onCacheCleared, processingState }
               )}
 
               <div className={cls.cacheActions}>
+                <button
+                  className={cls.reprocessBtn}
+                  onClick={() => currentFolder && startProcessing(currentFolder, true)}
+                  disabled={!currentFolder || isActive || processingState === 'cancelling'}
+                  title="强制重新处理当前目录"
+                  aria-label="重新处理"
+                >
+                  重新处理
+                </button>
                 <button
                   className={cls.refreshBtn}
                   onClick={fetchCacheSize}

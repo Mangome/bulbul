@@ -4,6 +4,7 @@
 //! 使用顺序扫描 + 早期终止策略。
 
 use chrono::NaiveDateTime;
+use serde::{Deserialize, Serialize};
 
 use crate::core::similarity;
 use crate::models::GroupData;
@@ -38,7 +39,7 @@ fn should_group_with_phash(
 }
 
 /// 分组算法的输入（含 pHash 值），用于 Grouping 阶段
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImageInfoWithPhash {
     /// 文件路径 hash（MD5）
     pub hash: String,
@@ -49,7 +50,38 @@ pub struct ImageInfoWithPhash {
     /// 原始文件路径
     pub file_path: String,
     /// 拍摄时间（可为 None）
+    #[serde(with = "naive_datetime_opt")]
     pub capture_time: Option<NaiveDateTime>,
+}
+
+mod naive_datetime_opt {
+    use chrono::NaiveDateTime;
+    use serde::{self, Deserialize, Deserializer, Serializer};
+
+    const FORMAT: &str = "%Y-%m-%dT%H:%M:%S";
+
+    pub fn serialize<S>(date: &Option<NaiveDateTime>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match date {
+            Some(d) => serializer.serialize_str(&d.format(FORMAT).to_string()),
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<NaiveDateTime>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let opt: Option<String> = Option::deserialize(deserializer)?;
+        match opt {
+            Some(s) => NaiveDateTime::parse_from_str(&s, FORMAT)
+                .map(Some)
+                .map_err(serde::de::Error::custom),
+            None => Ok(None),
+        }
+    }
 }
 
 /// 对已排序且已计算 pHash 的图片列表执行分组

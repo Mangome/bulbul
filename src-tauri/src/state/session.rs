@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use crate::core::grouping::ImageInfoWithPhash;
+use crate::core::raw_processor::ProcessResult;
 use crate::models::{DetectionCache, GroupResult, ImageMetadata, ProcessingState};
 
 /// 全局会话状态，跨 Command 共享
@@ -23,6 +24,8 @@ pub struct SessionState {
     pub cache_dir: PathBuf,
     /// 照片 hash → 检测结果缓存，供 reclassify 复用
     pub detection_cache: DetectionCache,
+    /// 处理结果缓存（阶段 2 输出），用于缓存恢复
+    pub process_results: Option<Vec<ProcessResult>>,
 }
 
 impl SessionState {
@@ -40,6 +43,7 @@ impl SessionState {
             cancel_flag: Arc::new(AtomicBool::new(false)),
             cache_dir: PathBuf::new(),
             detection_cache: HashMap::new(),
+            process_results: None,
         }
     }
 
@@ -67,6 +71,68 @@ impl SessionState {
         self.processing_state = ProcessingState::Idle;
         self.cancel_flag.store(false, Ordering::Relaxed);
         self.detection_cache.clear();
+        self.process_results = None;
+    }
+
+    /// 从缓存数据恢复 SessionState 的所有映射字段
+    ///
+    /// 从图片结果缓存和目录分组缓存中恢复 filename_hash_map、hash_filename_map、
+    /// hash_path_map、metadata_cache、phash_cache、detection_cache、image_infos、
+    /// group_result 和 process_results。
+    pub fn restore_from_cache(
+        &mut self,
+        group_cache: &crate::models::DirectoryGroupCache,
+        image_results: &[crate::models::ImageResultCache],
+    ) {
+        self.current_folder = Some(PathBuf::from(&group_cache.folder_path));
+        self.group_result = Some(group_cache.group_result.clone());
+        self.image_infos = Some(group_cache.image_infos.clone());
+
+        let mut process_results = Vec::with_capacity(image_results.len());
+
+        for irc in image_results {
+            // 恢复映射
+            self.filename_hash_map
+                .insert(irc.filename.clone(), irc.hash.clone());
+            self.hash_filename_map
+                .insert(irc.hash.clone(), irc.filename.clone());
+            self.hash_path_map
+                .insert(irc.hash.clone(), PathBuf::from(&irc.file_path));
+            self.metadata_cache
+                .insert(irc.hash.clone(), irc.metadata.clone());
+
+            if let Some(phash) = irc.phash {
+                self.phash_cache.insert(irc.hash.clone(), phash);
+            }
+
+            // 恢复 detection_cache（focus_score_method 为 Some 表示 FocusScoring 已运行）
+            if irc.metadata.focus_score_method.is_some() || !irc.metadata.detection_bboxes.is_empty() {
+                self.detection_cache.insert(
+                    irc.hash.clone(),
+                    crate::models::DetectionCacheEntry {
+                        score: irc.metadata.focus_score,
+                        method: irc
+                            .metadata
+                            .focus_score_method
+                            .clone()
+                            .unwrap_or(crate::core::focus_score::FocusScoringMethod::Undetected),
+                        bboxes: irc.metadata.detection_bboxes.clone(),
+                    },
+                );
+            }
+
+            // 构建 ProcessResult
+            process_results.push(ProcessResult {
+                hash: irc.hash.clone(),
+                filename: irc.filename.clone(),
+                file_path: irc.file_path.clone(),
+                metadata: irc.metadata.clone(),
+                medium_path: irc.medium_path.clone(),
+                thumbnail_path: irc.thumbnail_path.clone(),
+            });
+        }
+
+        self.process_results = Some(process_results);
     }
 }
 
@@ -95,6 +161,7 @@ mod tests {
         assert!(!state.cancel_flag.load(Ordering::Relaxed));
         assert!(state.detection_cache.is_empty());
         assert_eq!(state.cache_dir, PathBuf::new());
+        assert!(state.process_results.is_none());
     }
 
     #[test]
@@ -151,6 +218,7 @@ mod tests {
         // cache_dir 应保留
         assert_eq!(state.cache_dir, PathBuf::from("/cache"));
         assert!(state.detection_cache.is_empty());
+        assert!(state.process_results.is_none());
     }
 
     #[test]

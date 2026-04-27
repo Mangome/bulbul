@@ -279,6 +279,35 @@
   cursor: not-allowed;
 }
 
+.reprocessBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  border: none;
+  user-select: none;
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+
+  transition:
+    background-color var(--transition-fast),
+    opacity var(--transition-fast);
+}
+
+.reprocessBtn:hover {
+  background: color-mix(in srgb, var(--color-primary) 15%, transparent);
+}
+
+.reprocessBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ─── 旋转动画 ──────────────────────────────────────── */
 
 .spinning {

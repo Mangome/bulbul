@@ -46,7 +46,7 @@
 - **THEN** 检测框开关 SHALL 显示为开启状态
 
 ### Requirement: 设置面板缓存管理区域
-设置面板 SHALL 包含缓存管理区域，显示缓存目录路径、磁盘占用大小（人类可读格式）和文件数量，提供刷新按钮和清理按钮。
+设置面板 SHALL 包含缓存管理区域，显示缓存目录路径、磁盘占用大小（人类可读格式）和文件数量，提供刷新按钮、清理按钮和**重新处理按钮**。
 
 #### Scenario: 显示缓存信息
 - **WHEN** 缓存信息查询成功
@@ -59,6 +59,16 @@
 #### Scenario: 缓存信息查询失败
 - **WHEN** `getCacheSize()` 调用失败
 - **THEN** SHALL 显示 "无法获取缓存信息" 错误提示
+
+#### Scenario: 重新处理按钮
+
+- **WHEN** 用户点击「重新处理」按钮
+- **THEN** SHALL 调用 `processFolder(currentFolder, { forceRefresh: true })` 强制跳过缓存重新处理当前目录
+
+#### Scenario: 重新处理按钮禁用
+
+- **WHEN** 没有打开的目录或正在处理中
+- **THEN** 「重新处理」按钮 SHALL 显示为禁用状态
 
 ### Requirement: TopNavBar 设置按钮
 TopNavBar 右区 SHALL 新增设置按钮（齿轮图标 IconSettings），点击打开设置面板。

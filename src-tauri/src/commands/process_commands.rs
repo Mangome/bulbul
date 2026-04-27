@@ -23,15 +23,29 @@ use crate::core::grouping::{self, ImageInfoWithPhash};
 use crate::core::phash;
 use crate::core::raw_parser;
 use crate::core::raw_processor::{self, ProcessResult};
+use crate::models::directory_cache::{DirectoryGroupCache, FileFingerprint, ImageResultCache};
 use crate::models::{DetectionCacheEntry, GroupResult, PerformanceMetrics, ProcessingProgress, ProcessingState};
 use crate::state::SessionState;
-use crate::utils::cache;
+use crate::utils::{cache, result_cache};
 
 /// 获取最大并发处理数（根据 CPU 核数动态调整）
 fn get_max_concurrency() -> usize {
     let cpu_count = num_cpus::get();
     // 1x CPU 核数，但不超过 8（降低内存峰值）
     std::cmp::min(cpu_count, 8)
+}
+
+/// 计算文件的指纹（mtime + size），用于缓存验证
+fn compute_file_fingerprint(path: &Path) -> Option<FileFingerprint> {
+    let metadata = std::fs::metadata(path).ok()?;
+    let modified = metadata
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_secs_f64();
+    let size = metadata.len();
+    Some(FileFingerprint { modified, size })
 }
 
 /// 处理文件夹：完整 5 阶段流水线
@@ -48,6 +62,7 @@ pub async fn process_folder(
     time_gap_seconds: Option<u64>,
     lat: Option<f64>,
     lng: Option<f64>,
+    force_refresh: Option<bool>,
 ) -> Result<GroupResult, String> {
     let pipeline_start = Instant::now();
 
@@ -109,6 +124,130 @@ pub async fn process_folder(
         .map_err(|e| e.to_string())?;
 
     // ═══════════════════════════════════════════════════════
+    // 缓存检查（force_refresh 不为 true 时）
+    // ═══════════════════════════════════════════════════════
+    let force = force_refresh.unwrap_or(false);
+
+    // 用于部分命中路径的缓存数据
+    let mut cached_image_results: Option<Vec<ImageResultCache>> = None;
+
+    if !force && total > 0 {
+        // 计算所有文件的 hash 和指纹
+        let mut file_entries: Vec<(PathBuf, String, FileFingerprint)> = Vec::with_capacity(total);
+        for file_path in &nef_files {
+            let hash = match crate::utils::paths::compute_path_hash(file_path) {
+                Ok(h) => h,
+                Err(_) => continue,
+            };
+            let fingerprint = match compute_file_fingerprint(file_path) {
+                Some(fp) => fp,
+                None => continue,
+            };
+            file_entries.push((file_path.clone(), hash, fingerprint));
+        }
+
+        // 尝试加载目录分组缓存
+        if let Some(group_cache) = result_cache::load_group_cache(&cache_dir, &folder_path).await {
+            // 逐个验证图片缓存
+            let mut valid_cached: Vec<ImageResultCache> = Vec::new();
+            let mut all_hit = true;
+
+            for (_, hash, fingerprint) in &file_entries {
+                if let Some(image_cache) = result_cache::load_image_result(&cache_dir, hash).await {
+                    // 比较指纹：mtime 和 size 均需匹配
+                    if (image_cache.fingerprint.modified - fingerprint.modified).abs() < 1.0
+                        && image_cache.fingerprint.size == fingerprint.size
+                    {
+                        valid_cached.push(image_cache);
+                    } else {
+                        all_hit = false;
+                    }
+                } else {
+                    all_hit = false;
+                }
+            }
+
+            if all_hit && valid_cached.len() == file_entries.len() {
+                // ── 全部命中：恢复 SessionState，返回缓存结果 ──
+                println!("[process_folder] 缓存全部命中，跳过流水线");
+
+                {
+                    let mut s = state.lock().map_err(|e| e.to_string())?;
+                    s.restore_from_cache(&group_cache, &valid_cached);
+                    s.processing_state = ProcessingState::Completed;
+                }
+
+                let group_result = group_cache.group_result.clone();
+                emit_progress(&app, ProcessingState::Completed, total, total, None, &pipeline_start);
+                let _ = app.emit("processing-completed", &group_result);
+
+                // 检查是否需要后台 FocusScoring（focus_score_method 为 None 表示未运行过）
+                let needs_focus_scoring = valid_cached.iter().any(|r| {
+                    r.metadata.focus_score_method.is_none()
+                });
+
+                if needs_focus_scoring {
+                    let results: Vec<ProcessResult> = valid_cached.iter().map(|irc| ProcessResult {
+                        hash: irc.hash.clone(),
+                        filename: irc.filename.clone(),
+                        file_path: irc.file_path.clone(),
+                        metadata: irc.metadata.clone(),
+                        medium_path: irc.medium_path.clone(),
+                        thumbnail_path: irc.thumbnail_path.clone(),
+                    }).collect();
+
+                    let gps = match (lat, lng) {
+                        (Some(la), Some(ln)) if la != 0.0 || ln != 0.0 => Some((la, ln)),
+                        _ => bird_classification::DEFAULT_GPS,
+                    };
+
+                    let app_clone = app.clone();
+                    let group_result_clone = group_result.clone();
+                    let state_arc = Arc::clone(&state);
+                    let focus_start = Instant::now();
+
+                    tokio::spawn(async move {
+                        if let Err(e) = compute_focus_scores_background(
+                            &app_clone, &results, results.len(), &focus_start,
+                            &group_result_clone, state_arc, gps,
+                        ).await {
+                            log::error!("后台合焦评分失败: {}", e);
+                        }
+                    });
+                }
+
+                return Ok(group_result);
+            } else if !valid_cached.is_empty() {
+                // ── 部分命中：仅处理 missing 文件 ──
+                let cached_hashes: std::collections::HashSet<String> = valid_cached.iter()
+                    .map(|r| r.hash.clone())
+                    .collect();
+
+                let missing_files: Vec<PathBuf> = file_entries.iter()
+                    .filter(|(_, hash, _)| !cached_hashes.contains(hash))
+                    .map(|(path, _, _)| path.clone())
+                    .collect();
+
+                println!(
+                    "[process_folder] 缓存部分命中: cached={}, missing={}",
+                    valid_cached.len(),
+                    missing_files.len()
+                );
+
+                cached_image_results = Some(valid_cached);
+
+                // 替换 nef_files 为仅 missing 的文件
+                // 注意：total 仍使用原始值用于进度显示
+                // 但实际的并发处理数量为 missing_files.len()
+            } else {
+                println!("[process_folder] 缓存未命中，走完整流水线");
+            }
+        } else {
+            println!("[process_folder] 目录缓存不存在，走完整流水线");
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════
     // 阶段 2: Processing — 提取 JPEG + Exif + 缩略图
     // ═══════════════════════════════════════════════════════
     {
@@ -126,9 +265,25 @@ pub async fn process_folder(
     let semaphore = Arc::new(Semaphore::new(max_concurrency));
     let mut join_set = tokio::task::JoinSet::new();
 
-    println!("[process_folder] 阶段2开始: nef_files={}, cancel_flag={}", nef_files.len(), cancel_flag.load(Ordering::Relaxed));
+    // 如果有缓存命中，只处理 missing 的文件
+    let files_to_process = if cached_image_results.is_some() {
+        let cached_hashes: std::collections::HashSet<String> = cached_image_results.as_ref().unwrap()
+            .iter().map(|r| r.hash.clone()).collect();
+        nef_files.iter()
+            .filter(|f| {
+                crate::utils::paths::compute_path_hash(f)
+                    .map(|h| !cached_hashes.contains(&h))
+                    .unwrap_or(true)
+            })
+            .cloned()
+            .collect::<Vec<_>>()
+    } else {
+        nef_files.clone()
+    };
 
-    for file_path in &nef_files {
+    println!("[process_folder] 阶段2开始: files_to_process={}, total={}, cancel_flag={}", files_to_process.len(), total, cancel_flag.load(Ordering::Relaxed));
+
+    for file_path in &files_to_process {
         if cancel_flag.load(Ordering::Relaxed) {
             println!("[process_folder] spawn 循环中检测到取消, 已 spawn {} 个任务", join_set.len());
             break;
@@ -166,6 +321,20 @@ pub async fn process_folder(
                 let filename = file_path
                     .file_name()
                     .map(|n| n.to_string_lossy().to_string());
+
+                // 保存图片结果缓存（阶段 2）
+                if let Ok(hash) = crate::utils::paths::compute_path_hash(&file_path) {
+                    if let Some(fp) = compute_file_fingerprint(&file_path) {
+                        let mut irc = ImageResultCache::from(&result);
+                        irc.fingerprint = fp;
+                        let cache = cache_dir.clone();
+                        let hash_clone = hash.clone();
+                        tokio::spawn(async move {
+                            let _ = result_cache::save_image_result(&cache, &hash_clone, &irc).await;
+                        });
+                    }
+                }
+
                 results.push(result);
                 let current = results.len() + failed_files.len();
                 emit_progress(
@@ -213,6 +382,21 @@ pub async fn process_folder(
         for (i, f) in failed_files.iter().enumerate().take(3) {
             println!("[process_folder] failed[{}]: {}", i, f);
         }
+    }
+
+    // 合并缓存结果（部分命中路径）
+    if let Some(cached) = cached_image_results.take() {
+        for irc in &cached {
+            results.push(ProcessResult {
+                hash: irc.hash.clone(),
+                filename: irc.filename.clone(),
+                file_path: irc.file_path.clone(),
+                metadata: irc.metadata.clone(),
+                medium_path: irc.medium_path.clone(),
+                thumbnail_path: irc.thumbnail_path.clone(),
+            });
+        }
+        println!("[process_folder] 合并缓存结果后: total_results={}", results.len());
     }
 
     // 检查取消
@@ -344,6 +528,19 @@ pub async fn process_folder(
         }
     }
 
+    // 更新图片结果缓存的 phash 字段（阶段 3）
+    for (_, hash, phash_val) in &phash_results {
+        let cache = cache_dir.clone();
+        let hash_clone = hash.clone();
+        let phash = *phash_val;
+        tokio::spawn(async move {
+            if let Some(mut irc) = result_cache::load_image_result(&cache, &hash_clone).await {
+                irc.phash = Some(phash);
+                let _ = result_cache::save_image_result(&cache, &hash_clone, &irc).await;
+            }
+        });
+    }
+
     // 构建用于分组的 pHash 映射
     let phash_map: std::collections::HashMap<String, u64> = phash_results
         .iter()
@@ -430,9 +627,27 @@ pub async fn process_folder(
     // 更新 SessionState - 阶段5
     {
         let mut s = state.lock().map_err(|e| e.to_string())?;
-        s.image_infos = Some(image_infos);
+        s.image_infos = Some(image_infos.clone());
         s.group_result = Some(group_result.clone());
         s.processing_state = ProcessingState::Completed;
+        s.process_results = Some(results.clone());
+    }
+
+    // 保存目录分组缓存（阶段 5）
+    {
+        let file_hashes: Vec<String> = results.iter().map(|r| r.hash.clone()).collect();
+        let group_cache = DirectoryGroupCache {
+            folder_path: folder_path.clone(),
+            file_hashes,
+            group_result: group_result.clone(),
+            image_infos,
+            cached_at: chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S").to_string(),
+        };
+        let cache = cache_dir.clone();
+        let folder = folder_path.clone();
+        tokio::spawn(async move {
+            let _ = result_cache::save_group_cache(&cache, &folder, &group_cache).await;
+        });
     }
 
     // emit 完成事件
@@ -525,6 +740,27 @@ pub async fn regroup(
     {
         let mut s = state.lock().map_err(|e| e.to_string())?;
         s.group_result = Some(group_result.clone());
+
+        // 更新目录分组缓存
+        if let Some(ref current_folder) = s.current_folder {
+            let file_hashes: Vec<String> = s.process_results
+                .as_ref()
+                .map(|prs| prs.iter().map(|p| p.hash.clone()).collect())
+                .unwrap_or_default();
+            let image_infos_clone = s.image_infos.clone().unwrap_or_default();
+            let group_cache = DirectoryGroupCache {
+                folder_path: current_folder.to_string_lossy().to_string(),
+                file_hashes,
+                group_result: group_result.clone(),
+                image_infos: image_infos_clone,
+                cached_at: chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S").to_string(),
+            };
+            let cache = s.cache_dir.clone();
+            let folder = current_folder.to_string_lossy().to_string();
+            tokio::spawn(async move {
+                let _ = result_cache::save_group_cache(&cache, &folder, &group_cache).await;
+            });
+        }
     }
 
     Ok(group_result)
@@ -686,10 +922,51 @@ pub async fn reclassify(
         }
     }
 
-    // 写回 detection_cache
+    // 写回 detection_cache，更新图片结果缓存和目录分组缓存
     {
         let mut s = state.lock().map_err(|e| e.to_string())?;
-        s.detection_cache = updated_cache;
+        s.detection_cache = updated_cache.clone();
+
+        // 更新图片结果缓存（Task 4.2）
+        for (hash, entry) in &updated_cache {
+            if let Some(pr) = s.process_results.as_ref().and_then(|prs| prs.iter().find(|p| p.hash == *hash)) {
+                let mut updated_metadata = pr.metadata.clone();
+                updated_metadata.focus_score = entry.score;
+                updated_metadata.focus_score_method = Some(entry.method.clone());
+                updated_metadata.detection_bboxes = entry.bboxes.clone();
+                let cache = s.cache_dir.clone();
+                let hash_clone = hash.clone();
+                tokio::spawn(async move {
+                    if let Some(mut irc) = result_cache::load_image_result(&cache, &hash_clone).await {
+                        irc.metadata = updated_metadata;
+                        let _ = result_cache::save_image_result(&cache, &hash_clone, &irc).await;
+                    }
+                });
+            }
+        }
+
+        // 更新目录分组缓存（Task 4.3）
+        if let Some(ref current_folder) = s.current_folder {
+            if let Some(ref gr) = s.group_result {
+                let file_hashes: Vec<String> = s.process_results
+                    .as_ref()
+                    .map(|prs| prs.iter().map(|p| p.hash.clone()).collect())
+                    .unwrap_or_default();
+                let image_infos_clone = s.image_infos.clone().unwrap_or_default();
+                let group_cache = DirectoryGroupCache {
+                    folder_path: current_folder.to_string_lossy().to_string(),
+                    file_hashes,
+                    group_result: gr.clone(),
+                    image_infos: image_infos_clone,
+                    cached_at: chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S").to_string(),
+                };
+                let cache = s.cache_dir.clone();
+                let folder = current_folder.to_string_lossy().to_string();
+                tokio::spawn(async move {
+                    let _ = result_cache::save_group_cache(&cache, &folder, &group_cache).await;
+                });
+            }
+        }
     }
 
     // 发送完成事件
@@ -1020,6 +1297,21 @@ async fn compute_focus_scores_background(
                         method: method.clone(),
                         bboxes: bboxes.clone(),
                     });
+                    // 更新图片结果缓存的 metadata（阶段 6）
+                    if let Some(pr) = s.process_results.as_ref().and_then(|prs| prs.iter().find(|p| p.hash == hash)) {
+                        let mut updated_metadata = pr.metadata.clone();
+                        updated_metadata.focus_score = score;
+                        updated_metadata.focus_score_method = Some(method.clone());
+                        updated_metadata.detection_bboxes = bboxes.clone();
+                        let cache_dir = s.cache_dir.clone();
+                        let hash_clone = hash.clone();
+                        tokio::spawn(async move {
+                            if let Some(mut irc) = result_cache::load_image_result(&cache_dir, &hash_clone).await {
+                                irc.metadata = updated_metadata;
+                                let _ = result_cache::save_image_result(&cache_dir, &hash_clone, &irc).await;
+                            }
+                        });
+                    }
                 }
 
                 frame_results.push(FrameDetectionResult { hash, score, method, bboxes });
@@ -1044,6 +1336,21 @@ async fn compute_focus_scores_background(
                         method: FocusScoringMethod::Undetected,
                         bboxes: vec![],
                     });
+                    // 更新图片结果缓存的 metadata（阶段 6 - 检测失败）
+                    if let Some(pr) = s.process_results.as_ref().and_then(|prs| prs.iter().find(|p| p.hash == hash)) {
+                        let mut updated_metadata = pr.metadata.clone();
+                        updated_metadata.focus_score = None;
+                        updated_metadata.focus_score_method = Some(FocusScoringMethod::Undetected);
+                        updated_metadata.detection_bboxes = vec![];
+                        let cache_dir = s.cache_dir.clone();
+                        let hash_clone = hash.clone();
+                        tokio::spawn(async move {
+                            if let Some(mut irc) = result_cache::load_image_result(&cache_dir, &hash_clone).await {
+                                irc.metadata = updated_metadata;
+                                let _ = result_cache::save_image_result(&cache_dir, &hash_clone, &irc).await;
+                            }
+                        });
+                    }
                 }
 
                 frame_results.push(FrameDetectionResult {

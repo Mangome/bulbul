@@ -10,6 +10,7 @@ export async function processFolder(
     timeGapSeconds?: number;
     lat?: number;
     lng?: number;
+    forceRefresh?: boolean;
   }
 ): Promise<GroupResult> {
   return await invoke<GroupResult>('process_folder', {
@@ -18,6 +19,7 @@ export async function processFolder(
     timeGapSeconds: options?.timeGapSeconds ?? 10,
     lat: options?.lat,
     lng: options?.lng,
+    forceRefresh: options?.forceRefresh,
   });
 }
 

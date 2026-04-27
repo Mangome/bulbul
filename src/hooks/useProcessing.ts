@@ -33,7 +33,7 @@ export function useProcessing() {
   });
 
   const startProcessing = useCallback(
-    async (folderPath: string) => {
+    async (folderPath: string, forceRefresh?: boolean) => {
       try {
         setProcessingState('scanning');
         const { similarityThreshold, timeGapSeconds } = useGroupingStore.getState();
@@ -43,6 +43,7 @@ export function useProcessing() {
           timeGapSeconds,
           lat: selectedProvince?.lat,
           lng: selectedProvince?.lng,
+          forceRefresh,
         });
         setGroups(result.groups, result.totalImages);
       } catch (err) {
