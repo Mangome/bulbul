@@ -58,6 +58,26 @@ describe('drawDetectionOverlay', () => {
     expect(ctx.strokeStyle).toBe('#F97316');
   });
 
+  it('鸟种置信度低于50%时显示为仅检测框（黄色），不显示鸟种名称', () => {
+    const boxes: DetectionBox[] = [
+      { x1: 0.2, y1: 0.1, x2: 0.8, y2: 0.9, confidence: 0.95, speciesName: '白头鹎', speciesConfidence: 0.40 },
+    ];
+    drawDetectionOverlay(ctx, boxes, 400, 300);
+
+    expect(ctx.strokeStyle).toBe('#EAB308');
+    const fillTextCalls = (ctx.fillText as any).mock.calls;
+    expect(fillTextCalls.length).toBe(0);
+  });
+
+  it('鸟种置信度正好50%显示为低置信（橙色）', () => {
+    const boxes: DetectionBox[] = [
+      { x1: 0.2, y1: 0.1, x2: 0.8, y2: 0.9, confidence: 0.95, speciesName: '白头鹎', speciesConfidence: 0.50 },
+    ];
+    drawDetectionOverlay(ctx, boxes, 400, 300);
+
+    expect(ctx.strokeStyle).toBe('#F97316');
+  });
+
   it('仅检测框（无鸟种名）为黄色', () => {
     const boxes: DetectionBox[] = [
       { x1: 0.2, y1: 0.1, x2: 0.8, y2: 0.9, confidence: 0.95 },
@@ -96,26 +116,25 @@ describe('drawDetectionOverlay', () => {
     expect(fillTextCalls[0][0]).toBe('白头鹎 92%');
   });
 
-  it('低置信标签带问号：白头鹎? 45%', () => {
+  it('低置信标签带问号：白头鹎? 55%', () => {
     const boxes: DetectionBox[] = [
-      { x1: 0.2, y1: 0.2, x2: 0.8, y2: 0.8, confidence: 0.95, speciesName: '白头鹎', speciesConfidence: 0.45 },
+      { x1: 0.2, y1: 0.2, x2: 0.8, y2: 0.8, confidence: 0.95, speciesName: '白头鹎', speciesConfidence: 0.55 },
     ];
     drawDetectionOverlay(ctx, boxes, 400, 300);
 
     const fillTextCalls = (ctx.fillText as any).mock.calls;
     expect(fillTextCalls.length).toBeGreaterThan(0);
-    expect(fillTextCalls[0][0]).toBe('白头鹎? 45%');
+    expect(fillTextCalls[0][0]).toBe('白头鹎? 55%');
   });
 
-  it('仅检测标签：Bird: 95%', () => {
+  it('仅检测框（detect 级别）不显示文本标签', () => {
     const boxes: DetectionBox[] = [
       { x1: 0.2, y1: 0.2, x2: 0.8, y2: 0.8, confidence: 0.95 },
     ];
     drawDetectionOverlay(ctx, boxes, 400, 300);
 
     const fillTextCalls = (ctx.fillText as any).mock.calls;
-    expect(fillTextCalls.length).toBeGreaterThan(0);
-    expect(fillTextCalls[0][0]).toBe('Bird: 95%');
+    expect(fillTextCalls.length).toBe(0);
   });
 
   it('鸟种名存在但无 speciesConfidence 时使用 detection confidence 判定等级', () => {
@@ -140,8 +159,8 @@ describe('drawDetectionOverlay', () => {
 
     // 每个框 5 次 stroke（边框 + 4 折角），共 15 次
     expect((ctx.stroke as any).mock.calls.length).toBe(15);
-    // 3 个标签
-    expect((ctx.fillText as any).mock.calls.length).toBe(3);
+    // detect 级别不绘制标签，只有 2 个标签
+    expect((ctx.fillText as any).mock.calls.length).toBe(2);
   });
 
   it('过小的框不绘制（< 10px）', () => {
@@ -167,7 +186,7 @@ describe('drawDetectionOverlay', () => {
 
   it('标签位置在框上方不足时向下调整', () => {
     const boxes: DetectionBox[] = [
-      { x1: 0.1, y1: 0.0, x2: 0.5, y2: 0.5, confidence: 0.9 },
+      { x1: 0.1, y1: 0.0, x2: 0.5, y2: 0.5, confidence: 0.95, speciesName: '白头鹎', speciesConfidence: 0.92 },
     ];
     // y1 = 0, 框顶部在最上方，标签应该向下调整
     drawDetectionOverlay(ctx, boxes, 400, 300);

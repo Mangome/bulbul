@@ -18,6 +18,8 @@ const LOW_CONFIDENCE_BOX_COLOR = '#F97316';
 const SECONDARY_BOX_COLOR = '#EAB308';
 /** 鸟种高置信阈值，>= 此值视为可信鸟种 */
 const SPECIES_HIGH_CONFIDENCE = 0.85;
+/** 鸟种低置信阈值，< 此值不显示鸟种名称 */
+const SPECIES_LOW_CONFIDENCE = 0.50;
 /** 框线宽度 */
 const BOX_LINE_WIDTH = 2;
 /** 折角尺寸（px） */
@@ -72,6 +74,7 @@ type BoxTier = 'high' | 'low' | 'detect';
 function getBoxTier(box: DetectionBox): BoxTier {
   if (box.speciesName) {
     const conf = box.speciesConfidence ?? box.confidence;
+    if (conf < SPECIES_LOW_CONFIDENCE) return 'detect';
     return conf >= SPECIES_HIGH_CONFIDENCE ? 'high' : 'low';
   }
   return 'detect';
@@ -110,14 +113,16 @@ function drawSingleBox(
   // 绘制边框
   drawBoxBorder(ctx, px1, py1, px2, py2, color);
 
-  // 绘制标签
-  const label = buildLabel(box, tier);
-  drawConfidenceLabel(ctx, px1, py1, label, color);
+  // 绘制标签（仅高/低置信显示文本，detect 级别只保留识别框）
+  if (tier !== 'detect') {
+    const label = buildLabel(box, tier);
+    drawConfidenceLabel(ctx, px1, py1, label, color);
+  }
 }
 
 /** 构建标签文本 */
 function buildLabel(box: DetectionBox, tier: BoxTier): string {
-  if (box.speciesName) {
+  if (box.speciesName && tier !== 'detect') {
     const conf = Math.round((box.speciesConfidence ?? box.confidence) * 100);
     return tier === 'high'
       ? `${box.speciesName} ${conf}%`
