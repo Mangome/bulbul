@@ -124,6 +124,8 @@ export const Loupe = forwardRef<LoupeHandle, LoupeProps>(function Loupe(
   const vSideRef = useRef<'above' | 'below' | null>(null);
 
   const [opacity, setOpacity] = useState(0);
+  /** bitmap 加载完成后的版本号，用于触发绘制 effect 重新执行 */
+  const [bitmapVersion, setBitmapVersion] = useState(0);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadAbortRef = useRef<AbortController | null>(null);
 
@@ -132,7 +134,10 @@ export const Loupe = forwardRef<LoupeHandle, LoupeProps>(function Loupe(
   // ── Medium ImageBitmap 加载 + 离屏 canvas 预旋转 ──
 
   useEffect(() => {
-    if (!hash || hash === prevHashRef.current) return;
+    if (!hash) return;
+
+    // hash 未变且 bitmap 已就绪 → 无需重新加载
+    if (hash === prevHashRef.current && orientedCanvasRef.current) return;
 
     // 取消上一次加载
     loadAbortRef.current?.abort();
@@ -165,6 +170,8 @@ export const Loupe = forwardRef<LoupeHandle, LoupeProps>(function Loupe(
             const meta = metadataMap.get(hash);
             const orientation = meta?.orientation ?? 1;
             orientedCanvasRef.current = createOrientedCanvas(bitmap, orientation);
+            // 触发绘制 effect 重新执行
+            setBitmapVersion(v => v + 1);
           })
           .catch(() => {
             // 加载失败，静默处理
@@ -175,7 +182,7 @@ export const Loupe = forwardRef<LoupeHandle, LoupeProps>(function Loupe(
     return () => {
       abortController.abort();
     };
-  }, [hash, metadataMap]);
+  }, [hash, visible, metadataMap]);
 
   // ── 组件卸载时释放资源 ──
 
@@ -286,7 +293,7 @@ export const Loupe = forwardRef<LoupeHandle, LoupeProps>(function Loupe(
     const thumbW = (sourceW / srcW) * itemRect.width;
     const thumbH = (sourceH / srcH) * itemRect.height;
     onSourceRectChange({ x: thumbX, y: thumbY, w: thumbW, h: thumbH });
-  }, [opacity, mouseX, mouseY, itemRect, scrollY, hash, metadataMap, onSourceRectChange, loupeSize.w, loupeSize.h]);
+  }, [opacity, mouseX, mouseY, itemRect, scrollY, hash, metadataMap, onSourceRectChange, loupeSize.w, loupeSize.h, bitmapVersion]);
 
   // ── 定位计算 ──
 
