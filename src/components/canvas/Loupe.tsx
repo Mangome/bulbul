@@ -132,11 +132,10 @@ export const Loupe = forwardRef<LoupeHandle, LoupeProps>(function Loupe(
   useImperativeHandle(ref, () => ({}), []);
 
   // ── Medium ImageBitmap 加载 + 离屏 canvas 预旋转 ──
+  // 注意：visible 不在依赖中，避免隐藏时 abort 正在进行的加载
 
   useEffect(() => {
     if (!hash) return;
-
-    // hash 未变且 bitmap 已就绪 → 无需重新加载
     if (hash === prevHashRef.current && orientedCanvasRef.current) return;
 
     // 取消上一次加载
@@ -170,7 +169,7 @@ export const Loupe = forwardRef<LoupeHandle, LoupeProps>(function Loupe(
             const meta = metadataMap.get(hash);
             const orientation = meta?.orientation ?? 1;
             orientedCanvasRef.current = createOrientedCanvas(bitmap, orientation);
-            // 触发绘制 effect 重新执行
+            // 触发绘制 effect 和淡入 effect 重新执行
             setBitmapVersion(v => v + 1);
           })
           .catch(() => {
@@ -182,7 +181,7 @@ export const Loupe = forwardRef<LoupeHandle, LoupeProps>(function Loupe(
     return () => {
       abortController.abort();
     };
-  }, [hash, visible, metadataMap]);
+  }, [hash, metadataMap]);
 
   // ── 组件卸载时释放资源 ──
 
@@ -305,7 +304,7 @@ export const Loupe = forwardRef<LoupeHandle, LoupeProps>(function Loupe(
   }
   const position = calculatePosition(mouseX, mouseY, loupeSize.w, loupeSize.h, viewportWidth, viewportHeight, sideRef.current, vSideRef.current);
 
-  if (opacity <= 0 && !visible) return null;
+  if (opacity <= 0 || !orientedCanvasRef.current) return null;
 
   return (
     <div

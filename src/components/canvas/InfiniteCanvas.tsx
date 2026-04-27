@@ -13,7 +13,7 @@
 //
 // 交互模式:
 // - 普通滚轮 → 纵向滚动
-// - 左键在图片上长按或拖动 → 放大镜
+// - 左键在图片上拖拽 → 放大镜
 // - 点击 → 选中/取消图片
 // - W/S → 纵向滚动到上/下一组
 // ============================================================
@@ -44,7 +44,7 @@ import { easeOutQuart, lerpColorNum } from '../../utils/easing';
 
 /** 长按触发放大镜的延迟时间（ms） */
 const LONG_PRESS_DELAY = 300;
-/** 长按期间允许的最大移动距离（px），超过则取消长按 */
+/** 长按期间允许的最大移动距离（px），超过则视为拖动 */
 const LONG_PRESS_MOVE_THRESHOLD = 10;
 const BG_COLOR_LIGHT = '#FFFFFF';
 const BG_COLOR_DARK = '#000000';
@@ -133,7 +133,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
   // ── 纵向滚动状态 ──
   const scrollYRef = useRef(0);
 
-  // ── Pointer press state (用于区分点击 vs 图片上长按放大镜) ──
+  // ── Pointer press state (用于区分点击 vs 图片上长按/拖拽放大镜) ──
   const isPointerDownRef = useRef(false);
   const pointerStartRef = useRef({ x: 0, y: 0 });
   const hasDraggedRef = useRef(false);
@@ -619,11 +619,12 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
             ? { x: ci.x, y: ci.y, width: ci.getWidth(), height: ci.getHeight() }
             : hitImage.itemRect;
 
+          const currentRect = canvas.getBoundingClientRect();
           setMagnifierState({
             visible: true,
             hash: hitImage.hash,
-            mouseX: pointerStartRef.current.x - canvas.getBoundingClientRect().left,
-            mouseY: pointerStartRef.current.y - canvas.getBoundingClientRect().top,
+            mouseX: pointerStartRef.current.x - currentRect.left,
+            mouseY: pointerStartRef.current.y - currentRect.top,
             itemRect,
           });
         }, LONG_PRESS_DELAY);
