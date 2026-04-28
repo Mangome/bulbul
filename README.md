@@ -1,14 +1,17 @@
-<div align="center">
-  <img src="https://static-1317922524.cos.ap-guangzhou.myqcloud.com/static/icon.png" alt="Bulbul Logo" width="128" height="128">
-</div>
+# Bulbul - RAW 图像快速选片
 
-# Bulbul - RAW 图像智能筛选工具
+<div align="center">
+  <a href="https://static-1317922524.cos.ap-guangzhou.myqcloud.com/static/2026-04-29%2000-58-08.mp4">
+    <img src="https://static-1317922524.cos.ap-guangzhou.myqcloud.com/static/icon.png" alt="Bulbul Demo" width="360">
+  </a>
+  <p><a href="https://static-1317922524.cos.ap-guangzhou.myqcloud.com/static/2026-04-29%2000-58-08.mp4">▶ 观看演示视频</a></p>
+</div>
 
 [![Tauri](https://img.shields.io/badge/Tauri-2-blue?logo=tauri)](https://tauri.app)
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react)](https://react.dev)
 [![Rust](https://img.shields.io/badge/Rust-Latest-CE422B?logo=rust)](https://www.rust-lang.org)
 
-专为鸟友设计的快速筛图应用。自动将连拍照片智能分组，配合放大镜检查合焦，一键导出精选图片。
+专为鸟友设计的快速筛图应用。极速预览，快速选片。
 
 连拍一时爽，选片一直爽！
 
@@ -20,15 +23,9 @@
 - 分组参数可调：相似度阈值（50%-100%）和时间间隔（1-120 秒）
 - 自动评估每张照片的合焦程度（1-5 星），帮你快速定位最清晰的一张
 
-### 画布浏览
-
-- 瀑布流布局，分组标题清晰分隔
-- 滚轮缩放（10%-300%），拖拽平移，流畅浏览大量图片
-- 每张图片下方显示文件名、拍摄时间和参数
-
 ### 放大镜
 
-- 在图片上按住左键拖动，弹出 1:1 像素级放大镜
+- 在图片上按住左键拖动，弹出局部放大镜
 - 无需切换视图，直接检查对焦细节
 - 松开即消失，不干扰浏览节奏
 
@@ -58,20 +55,6 @@
 > | CR3 | Canon | - |
 > | RW2 | Panasonic | - |
 > | PEF | Pentax | - |
-
-### 处理过程
-
-选择目录后会显示进度对话框，包含以下阶段：
-
-| 阶段       | 说明                               |
-| ---------- | ---------------------------------- |
-| 扫描文件   | 查找目录下的 RAW 文件              |
-| 处理图片   | 提取预览图和 EXIF 元数据           |
-| 分析相似度 | 计算感知哈希                       |
-| 分组       | 按时间+相似度聚类                  |
-| 合焦评分   | 评估清晰度（后台进行，不阻塞操作） |
-
-处理过程中可随时点击**取消**中断。合焦评分在后台异步进行，分组完成后即可开始浏览和选片。
 
 ### 浏览与选片
 
@@ -110,11 +93,11 @@
 ### 导出
 
 1. 点击选中想要导出的图片（可跨分组多选）
-2. 点击导航栏右侧的**导出**按钮或按 `Ctrl+E`
+2. 点击导航栏右侧的**导出**按钮
 3. 选择目标目录
-4. 等待导出完成，Toast 提示结果
+4. 等待导出完成
 
-导出的是原始 RAW 文件，不是格式转换。
+导出的是原始 RAW 文件。
 
 ---
 
@@ -150,34 +133,6 @@ npx vitest run                         # 前端全部测试
 npx vitest run src/hooks/useImageLoader.test.ts  # 单个测试
 cd src-tauri && cargo test              # Rust 测试
 cd src-tauri && cargo test focus_score  # 指定模块测试
-```
-
-### 项目结构
-
-```
-bulbul/
-├── src/                          # 前端 React 代码
-│   ├── components/
-│   │   ├── canvas/               # 画布组件（InfiniteCanvas、CanvasImageItem、Loupe）
-│   │   ├── panels/               # 面板（TopNavBar、BottomFilmstrip、ProgressDialog）
-│   │   ├── dialogs/              # 对话框
-│   │   └── common/               # 通用 UI 组件
-│   ├── stores/                   # Zustand 状态管理
-│   ├── services/                 # IPC 服务层
-│   ├── hooks/                    # React Hooks
-│   ├── utils/                    # 工具函数（布局计算等）
-│   ├── windows/                  # 页面（WelcomePage、MainPage）
-│   └── styles/                   # CSS + 主题系统
-│
-├── src-tauri/                    # Rust 后端代码
-│   ├── src/
-│   │   ├── commands/             # Tauri IPC 命令
-│   │   ├── core/                 # 核心算法（RAW 解析、pHash、分组、合焦评分）
-│   │   ├── models/               # 数据模型
-│   │   └── utils/                # 工具函数（缓存等）
-│   └── Cargo.toml
-│
-└── package.json
 ```
 
 ### 技术栈
