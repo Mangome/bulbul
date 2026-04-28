@@ -80,6 +80,7 @@ pub async fn process_folder(
     emit_progress(&app, ProcessingState::Scanning, 0, 0, None, &pipeline_start);
 
     let scan_start = Instant::now();
+    log::info!("[process_folder] 开始扫描: folder_path={}", folder_path);
     let nef_files = scan_raw_files_internal(Path::new(&folder_path)).map_err(|e| e.to_string())?;
     let total = nef_files.len();
     let scan_time_ms = scan_start.elapsed().as_secs_f64() * 1000.0;
@@ -1048,17 +1049,26 @@ fn handle_cancelled(
 /// 扫描文件夹中的 RAW 文件（非递归，大小写不敏感）
 fn scan_raw_files_internal(folder: &Path) -> Result<Vec<PathBuf>, std::io::Error> {
     let mut files = Vec::new();
+    let mut total_entries = 0usize;
+    let mut file_count = 0usize;
     for entry in std::fs::read_dir(folder)? {
         let entry = entry?;
         let path = entry.path();
+        total_entries += 1;
         if path.is_file() {
+            file_count += 1;
             if let Some(ext) = path.extension() {
-                if raw_parser::is_raw_extension(&ext.to_string_lossy()) {
+                let ext_str = ext.to_string_lossy();
+                if raw_parser::is_raw_extension(&ext_str) {
                     files.push(path);
                 }
             }
         }
     }
+    log::debug!(
+        "[scan_raw_files] folder={}, total_entries={}, file_count={}, raw_count={}",
+        folder.display(), total_entries, file_count, files.len()
+    );
     Ok(files)
 }
 

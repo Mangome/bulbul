@@ -20,9 +20,21 @@ pub fn is_raw_extension(extension: &str) -> bool {
 // ─── TIFF 常量 ─────────────────────────────────────────
 
 const TIFF_MAGIC: u16 = 42;
+/// Olympus ORF little-endian magic: "RO" (bytes: 0x52, 0x4F → LE u16: 0x4F52)
+const ORF_MAGIC_LE_RO: u16 = 0x4F52;
+/// Olympus ORF little-endian magic (newer): "RS" (bytes: 0x52, 0x53 → LE u16: 0x5352)
+const ORF_MAGIC_LE_RS: u16 = 0x5352;
+/// Olympus ORF big-endian magic: "RO" (bytes: 0x4F, 0x52 → BE u16: 0x4F52)
+const ORF_MAGIC_BE_RO: u16 = 0x4F52;
+/// Olympus ORF big-endian magic (newer): "RS" (bytes: 0x53, 0x52 → BE u16: 0x5352)
+const ORF_MAGIC_BE_RS: u16 = 0x5352;
 const TAG_SUB_IFDS: u16 = 0x014A;
 const TAG_JPEG_OFFSET: u16 = 0x0201; // JPEGInterchangeFormat
 const TAG_JPEG_LENGTH: u16 = 0x0202; // JPEGInterchangeFormatLength
+const TAG_COMPRESSION: u16 = 0x0103; // Compression
+const TAG_STRIP_OFFSETS: u16 = 0x0111; // StripOffsets
+const TAG_STRIP_BYTE_COUNTS: u16 = 0x0117; // StripByteCounts
+const COMPRESSION_JPEG: u16 = 7; // JPEG 压缩（DNG 等格式使用）
 const JPEG_SOI: [u8; 2] = [0xFF, 0xD8];
 
 // ─── 字节序 ─────────────────────────────────────────────
@@ -91,9 +103,14 @@ fn parse_tiff_header(data: &[u8]) -> Result<(ByteOrder, usize), AppError> {
         .read_u16(data, 2)
         .ok_or_else(|| AppError::RawParseError("无法读取 TIFF 魔数".into()))?;
 
-    if magic != TIFF_MAGIC {
+    if magic != TIFF_MAGIC
+        && magic != ORF_MAGIC_LE_RO
+        && magic != ORF_MAGIC_LE_RS
+        && magic != ORF_MAGIC_BE_RO
+        && magic != ORF_MAGIC_BE_RS
+    {
         return Err(AppError::RawParseError(format!(
-            "无效的 TIFF 魔数: {}，期望 42",
+            "无效的 TIFF 魔数: {}，期望 42 或 ORF 变体",
             magic
         )));
     }
@@ -127,6 +144,9 @@ fn parse_ifd(
 
     let mut jpeg_offset: Option<u32> = None;
     let mut jpeg_length: Option<u32> = None;
+    let mut compression: Option<u16> = None;
+    let mut strip_offsets: Option<Vec<u32>> = None;
+    let mut strip_byte_counts: Option<Vec<u32>> = None;
     let mut sub_ifd_offsets = Vec::new();
 
     for i in 0..entry_count {
@@ -156,6 +176,15 @@ fn parse_ifd(
             TAG_JPEG_LENGTH => {
                 jpeg_length = read_entry_value(data, bo, entry_offset + 8, data_type, count);
             }
+            TAG_COMPRESSION => {
+                compression = bo.read_u16(data, entry_offset + 8);
+            }
+            TAG_STRIP_OFFSETS => {
+                strip_offsets = read_entry_values(data, bo, entry_offset + 8, data_type, count as usize);
+            }
+            TAG_STRIP_BYTE_COUNTS => {
+                strip_byte_counts = read_entry_values(data, bo, entry_offset + 8, data_type, count as usize);
+            }
             TAG_SUB_IFDS => {
                 // SubIFD 指针可能是单个或多个偏移
                 let offsets = read_sub_ifd_offsets(data, bo, entry_offset + 8, count as usize);
@@ -166,11 +195,45 @@ fn parse_ifd(
     }
 
     let mut candidates = Vec::new();
+
+    // 方式 1：标准 JPEGInterchangeFormat + JPEGInterchangeFormatLength
     if let (Some(offset), Some(length)) = (jpeg_offset, jpeg_length) {
         candidates.push(JpegCandidate {
             offset: offset as usize,
             length: length as usize,
         });
+    }
+
+    // 方式 2：DNG 等格式使用 StripOffsets + StripByteCounts + Compression=7 (JPEG)
+    if compression == Some(COMPRESSION_JPEG) {
+        if let (Some(offsets), Some(counts)) = (&strip_offsets, &strip_byte_counts) {
+            if offsets.len() == counts.len() {
+                // 多 strip 拼接为单个 JPEG
+                let total_length: u32 = counts.iter().sum();
+                let first_offset = offsets[0];
+                // 验证 strips 是连续的
+                let is_contiguous = offsets.windows(2).all(|w| {
+                    let idx = offsets.iter().position(|&o| o == w[0]).unwrap_or(0);
+                    w[0] + counts[idx] == w[1]
+                });
+                if is_contiguous && total_length > 0 {
+                    candidates.push(JpegCandidate {
+                        offset: first_offset as usize,
+                        length: total_length as usize,
+                    });
+                } else {
+                    // 非连续 strips，逐个添加
+                    for (off, len) in offsets.iter().zip(counts.iter()) {
+                        if *len > 0 {
+                            candidates.push(JpegCandidate {
+                                offset: *off as usize,
+                                length: *len as usize,
+                            });
+                        }
+                    }
+                }
+            }
+        }
     }
 
     // next IFD offset
@@ -184,7 +247,7 @@ fn parse_ifd(
     Ok((candidates, sub_ifd_offsets, next_ifd))
 }
 
-/// 读取 IFD entry 的值（LONG 或 SHORT 类型）
+/// 读取 IFD entry 的值（LONG 或 SHORT 类型，单个）
 fn read_entry_value(data: &[u8], bo: ByteOrder, value_offset: usize, data_type: u16, count: u32) -> Option<u32> {
     match data_type {
         // SHORT (type 3): 2 bytes
@@ -193,6 +256,56 @@ fn read_entry_value(data: &[u8], bo: ByteOrder, value_offset: usize, data_type: 
         4 if count == 1 => bo.read_u32(data, value_offset),
         _ => bo.read_u32(data, value_offset),
     }
+}
+
+/// 读取 IFD entry 的值数组（StripOffsets / StripByteCounts 等）
+///
+/// 当 count=1 时值直接存储在 value 字段；count>1 时 value 字段存储指向数组的偏移
+fn read_entry_values(data: &[u8], bo: ByteOrder, value_offset: usize, data_type: u16, count: usize) -> Option<Vec<u32>> {
+    if count == 0 {
+        return None;
+    }
+
+    let value_size = match data_type {
+        3 => 2, // SHORT
+        4 => 4, // LONG
+        _ => 4,
+    };
+
+    // 值是否能直接存在 value 字段（4 字节）中
+    let inline = count * value_size <= 4;
+    let read_single = |pos: usize| -> Option<u32> {
+        match data_type {
+            3 => bo.read_u16(data, pos).map(|v| v as u32),
+            _ => bo.read_u32(data, pos),
+        }
+    };
+
+    let mut values = Vec::with_capacity(count);
+    if inline {
+        let mut pos = value_offset;
+        for _ in 0..count {
+            if let Some(v) = read_single(pos) {
+                values.push(v);
+            }
+            pos += value_size;
+        }
+    } else {
+        // 值存在别处，value 字段存的是偏移
+        let array_offset = bo.read_u32(data, value_offset)? as usize;
+        let mut pos = array_offset;
+        for _ in 0..count {
+            if pos + value_size > data.len() {
+                break;
+            }
+            if let Some(v) = read_single(pos) {
+                values.push(v);
+            }
+            pos += value_size;
+        }
+    }
+
+    if values.is_empty() { None } else { Some(values) }
 }
 
 /// 读取 SubIFD 偏移数组
@@ -389,6 +502,126 @@ impl RawExtractor for DngExtractor {
     }
 }
 
+/// 从 Olympus ORF 文件中提取嵌入的 JPEG 预览
+///
+/// ORF 文件的 JPEG 预览不通过标准 TIFF IFD 标签（JPEGInterchangeFormat）引用，
+/// 而是嵌入在 MakerNote 或文件数据区域中。此函数通过搜索最大的有效 JPEG 块来提取预览。
+fn extract_orf_jpeg(data: &[u8]) -> Result<Vec<u8>, AppError> {
+    // 首先尝试标准 TIFF IFD 方式
+    if let Ok(jpeg) = extract_largest_jpeg(data) {
+        return Ok(jpeg);
+    }
+
+    // 回退：在文件中搜索最大的有效 JPEG 块
+    // 有效 JPEG 以 FFD8 开头，后跟标准 JPEG 标记（FFXX，其中 XX != 00 且 XX != D8）
+    let mut best_offset = 0;
+    let mut best_size = 0usize;
+
+    let mut i = 0;
+    while i + 1 < data.len() {
+        if data[i] != 0xFF || data[i + 1] != 0xD8 {
+            i += 1;
+            continue;
+        }
+
+        // 找到 SOI，验证下一个字节是有效的 JPEG 标记
+        if i + 3 < data.len() && data[i + 2] == 0xFF {
+            let marker = data[i + 3];
+            // 标准 JPEG 标记：DQT(0xDB), SOF(0xC0-0xCF), DHT(0xC4), DRI(0xDD),
+            // SOS(0xDA), DNL(0xDC), APPn(0xE0-0xEF)
+            let is_valid_marker = (0xC0..=0xCF).contains(&marker)
+                || marker == 0xDB
+                || marker == 0xC4
+                || marker == 0xDD
+                || marker == 0xDA
+                || marker == 0xDC
+                || (0xE0..=0xEF).contains(&marker);
+
+            if is_valid_marker {
+                // 搜索对应的 EOI (FFD9)
+                if let Some(eoi_pos) = find_jpeg_eoi(data, i) {
+                    let size = eoi_pos - i;
+                    // 忽略太小的 JPEG（< 50KB，可能是缩略图或噪声）
+                    if size > 50 * 1024 && size > best_size {
+                        best_offset = i;
+                        best_size = size;
+                    }
+                }
+            }
+        }
+        i += 1;
+    }
+
+    if best_size > 0 {
+        Ok(data[best_offset..best_offset + best_size].to_vec())
+    } else {
+        Err(AppError::NoEmbeddedJpeg)
+    }
+}
+
+/// 从 JPEG SOI 位置开始搜索对应的 EOI 标记
+///
+/// 正确处理 JPEG 标记结构，避免误判数据中的 FFD9 字节序列。
+fn find_jpeg_eoi(data: &[u8], start: usize) -> Option<usize> {
+    let mut pos = start + 2; // 跳过 SOI
+
+    while pos + 1 < data.len() {
+        if data[pos] != 0xFF {
+            pos += 1;
+            continue;
+        }
+
+        // 跳过填充字节
+        while pos + 1 < data.len() && data[pos + 1] == 0xFF {
+            pos += 1;
+        }
+        if pos + 1 >= data.len() {
+            break;
+        }
+
+        let marker = data[pos + 1];
+
+        if marker == 0xD9 {
+            // EOI
+            return Some(pos + 2);
+        }
+
+        if marker == 0x00 || marker == 0x01 || (0xD0..=0xD7).contains(&marker) {
+            // 无长度的标记（RSTn, TEM, STUFF）
+            pos += 2;
+            continue;
+        }
+
+        if marker == 0xDA {
+            // SOS - 后面是熵编码数据，需要扫描直到找到标记
+            // 读取 SOS 段长度
+            if pos + 3 >= data.len() {
+                break;
+            }
+            let seg_len = u16::from_be_bytes([data[pos + 2], data[pos + 3]]) as usize;
+            pos += 2 + seg_len;
+
+            // 扫描熵编码数据，查找下一个标记
+            while pos + 1 < data.len() {
+                if data[pos] == 0xFF && data[pos + 1] != 0x00 && data[pos + 1] != 0xFF {
+                    break;
+                }
+                pos += 1;
+            }
+            continue;
+        }
+
+        // 其他标记：读取段长度并跳过
+        if pos + 3 >= data.len() {
+            break;
+        }
+        let seg_len = u16::from_be_bytes([data[pos + 2], data[pos + 3]]) as usize;
+        pos += 2 + seg_len;
+    }
+
+    None
+}
+
 /// Olympus ORF 格式提取器
 pub struct OrfExtractor;
 
@@ -398,11 +631,30 @@ impl RawExtractor for OrfExtractor {
     }
 
     fn extract_jpeg(&self, data: &[u8]) -> Result<Vec<u8>, AppError> {
-        extract_largest_jpeg(data)
+        extract_orf_jpeg(data)
     }
 
     fn extract_metadata(&self, data: &[u8]) -> Result<ImageMetadata, AppError> {
-        crate::core::metadata::parse_exif(data)
+        // ORF 使用非标准 TIFF magic (IIRO/IIRS/MMOR/MMSR)
+        // kamadak-exif 只认标准 TIFF 签名 (II*\x00 / MM\x00*)，需要替换头部
+        if data.len() < 8 {
+            return Err(AppError::ExifError("ORF 文件过短".into()));
+        }
+        let mut normalized = data.to_vec();
+        match (data[0], data[1]) {
+            // Little-endian ORF: II + RO/RS → 替换为 II*\x00
+            (0x49, 0x49) if data[2] == 0x52 && (data[3] == 0x4F || data[3] == 0x53) => {
+                normalized[2] = 0x2A;
+                normalized[3] = 0x00;
+            }
+            // Big-endian ORF: MM + OR/SR → 替换为 MM\x00*
+            (0x4D, 0x4D) if (data[2] == 0x4F || data[2] == 0x53) && data[3] == 0x52 => {
+                normalized[2] = 0x00;
+                normalized[3] = 0x2A;
+            }
+            _ => {}
+        }
+        crate::core::metadata::parse_exif(&normalized)
     }
 
     fn exif_header_size(&self) -> usize {
@@ -524,11 +776,15 @@ impl RawExtractor for RafExtractor {
     }
 
     fn extract_metadata(&self, data: &[u8]) -> Result<ImageMetadata, AppError> {
-        crate::core::metadata::parse_exif(data)
+        // RAF 使用 FUJIFILMCCD-RAW 容器，不是 TIFF 格式
+        // kamadak-exif 不认识此容器，但内嵌 JPEG 包含 APP1/EXIF 段
+        let jpeg_data = extract_raf_jpeg(data)?;
+        crate::core::metadata::parse_exif(&jpeg_data)
     }
 
     fn exif_header_size(&self) -> usize {
-        65536
+        // RAF 的 EXIF 在 JPEG 内部，无法仅读头部解析
+        0
     }
 }
 
@@ -1174,7 +1430,8 @@ mod tests {
     fn test_raf_extractor() {
         let ext = RafExtractor;
         assert_eq!(ext.supported_extensions(), &["raf"]);
-        assert_eq!(ext.exif_header_size(), 65536);
+        // RAF 的 EXIF 在 JPEG 内部，无法仅读头部解析
+        assert_eq!(ext.exif_header_size(), 0);
         let via_factory = get_extractor("raf").unwrap();
         assert_eq!(via_factory.supported_extensions(), &["raf"]);
     }
@@ -1322,5 +1579,195 @@ mod tests {
 
         let result = extract_largest_jpeg(&data).unwrap();
         assert_eq!(result, jpeg_data);
+    }
+
+    // ─── DNG StripOffsets + Compression=7 JPEG 提取测试 ──────
+
+    /// 构建 DNG 风格的 TIFF：IFD0 包含 SubIFD，SubIFD 使用
+    /// StripOffsets + StripByteCounts + Compression=7 引用 JPEG 数据
+    fn build_dng_with_strip_jpeg(jpeg_data: &[u8]) -> Vec<u8> {
+        let mut buf = Vec::new();
+
+        // TIFF Header (8 bytes)
+        buf.extend_from_slice(&[0x49, 0x49]); // II
+        buf.extend_from_slice(&42u16.to_le_bytes()); // magic
+        buf.extend_from_slice(&8u32.to_le_bytes()); // IFD0 offset = 8
+
+        // IFD0: 1 entry (SubIFDs pointing to one SubIFD)
+        let ifd0_entries: u16 = 1;
+        buf.extend_from_slice(&ifd0_entries.to_le_bytes());
+
+        // SubIFD entry at IFD0
+        // The SubIFD offset will point to sub_ifd_offset
+        // IFD0 size = 2 + 1*12 + 4 = 18, so SubIFD starts at 8 + 18 = 26
+        let sub_ifd_offset: u32 = 26;
+        buf.extend_from_slice(&TAG_SUB_IFDS.to_le_bytes()); // tag
+        buf.extend_from_slice(&4u16.to_le_bytes()); // type = LONG
+        buf.extend_from_slice(&1u32.to_le_bytes()); // count = 1
+        buf.extend_from_slice(&sub_ifd_offset.to_le_bytes()); // value = offset
+
+        // next IFD = 0
+        buf.extend_from_slice(&0u32.to_le_bytes());
+
+        // SubIFD at offset 26: 3 entries (Compression, StripOffsets, StripByteCounts)
+        let sub_ifd_entries: u16 = 3;
+        buf.extend_from_slice(&sub_ifd_entries.to_le_bytes());
+
+        // JPEG data starts after SubIFD
+        // SubIFD size = 2 + 3*12 + 4 = 42
+        let jpeg_data_offset: u32 = sub_ifd_offset + 42;
+
+        // Entry 1: Compression = 7 (JPEG)
+        buf.extend_from_slice(&TAG_COMPRESSION.to_le_bytes());
+        buf.extend_from_slice(&3u16.to_le_bytes()); // SHORT
+        buf.extend_from_slice(&1u32.to_le_bytes()); // count
+        buf.extend_from_slice(&COMPRESSION_JPEG.to_le_bytes()); // value = 7
+        buf.extend_from_slice(&[0u8; 2]); // padding to 4 bytes
+
+        // Entry 2: StripOffsets
+        buf.extend_from_slice(&TAG_STRIP_OFFSETS.to_le_bytes());
+        buf.extend_from_slice(&4u16.to_le_bytes()); // LONG
+        buf.extend_from_slice(&1u32.to_le_bytes()); // count = 1
+        buf.extend_from_slice(&jpeg_data_offset.to_le_bytes());
+
+        // Entry 3: StripByteCounts
+        buf.extend_from_slice(&TAG_STRIP_BYTE_COUNTS.to_le_bytes());
+        buf.extend_from_slice(&4u16.to_le_bytes()); // LONG
+        buf.extend_from_slice(&1u32.to_le_bytes()); // count = 1
+        buf.extend_from_slice(&(jpeg_data.len() as u32).to_le_bytes());
+
+        // next IFD = 0
+        buf.extend_from_slice(&0u32.to_le_bytes());
+
+        // Append JPEG data
+        buf.extend_from_slice(jpeg_data);
+
+        buf
+    }
+
+    #[test]
+    fn test_dng_strip_jpeg_extraction() {
+        let jpeg_data = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x00, 0x00, 0xFF, 0xD9];
+        let dng = build_dng_with_strip_jpeg(&jpeg_data);
+        let result = extract_largest_jpeg(&dng).unwrap();
+        assert_eq!(result, jpeg_data);
+    }
+
+    #[test]
+    fn test_dng_strip_jpeg_larger_than_standard_tag() {
+        // DNG with both standard JPEGInterchangeFormat and StripOffsets+Compression=7
+        // StripOffsets should produce larger JPEG candidate
+        let small_jpeg = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x02, 0xFF, 0xD9]; // 8 bytes
+        let large_jpeg = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x41, 0x42, 0x43, 0x44, 0xFF, 0xD9]; // 12 bytes
+
+        let mut buf = Vec::new();
+
+        // TIFF Header
+        buf.extend_from_slice(&[0x49, 0x49]);
+        buf.extend_from_slice(&42u16.to_le_bytes());
+        buf.extend_from_slice(&8u32.to_le_bytes()); // IFD0 at 8
+
+        // IFD0: 5 entries
+        let entry_count: u16 = 5;
+        buf.extend_from_slice(&entry_count.to_le_bytes());
+
+        // Calculate offsets
+        let ifd_size = 2 + 5 * 12 + 4; // = 66
+        let small_jpeg_offset: u32 = 8 + ifd_size as u32; // after IFD
+        let large_jpeg_offset: u32 = small_jpeg_offset + small_jpeg.len() as u32;
+
+        // Entry 1: JPEGInterchangeFormat (small JPEG)
+        buf.extend_from_slice(&TAG_JPEG_OFFSET.to_le_bytes());
+        buf.extend_from_slice(&4u16.to_le_bytes());
+        buf.extend_from_slice(&1u32.to_le_bytes());
+        buf.extend_from_slice(&small_jpeg_offset.to_le_bytes());
+
+        // Entry 2: JPEGInterchangeFormatLength
+        buf.extend_from_slice(&TAG_JPEG_LENGTH.to_le_bytes());
+        buf.extend_from_slice(&4u16.to_le_bytes());
+        buf.extend_from_slice(&1u32.to_le_bytes());
+        buf.extend_from_slice(&(small_jpeg.len() as u32).to_le_bytes());
+
+        // Entry 3: Compression = 7
+        buf.extend_from_slice(&TAG_COMPRESSION.to_le_bytes());
+        buf.extend_from_slice(&3u16.to_le_bytes());
+        buf.extend_from_slice(&1u32.to_le_bytes());
+        buf.extend_from_slice(&COMPRESSION_JPEG.to_le_bytes());
+        buf.extend_from_slice(&[0u8; 2]);
+
+        // Entry 4: StripOffsets (large JPEG)
+        buf.extend_from_slice(&TAG_STRIP_OFFSETS.to_le_bytes());
+        buf.extend_from_slice(&4u16.to_le_bytes());
+        buf.extend_from_slice(&1u32.to_le_bytes());
+        buf.extend_from_slice(&large_jpeg_offset.to_le_bytes());
+
+        // Entry 5: StripByteCounts
+        buf.extend_from_slice(&TAG_STRIP_BYTE_COUNTS.to_le_bytes());
+        buf.extend_from_slice(&4u16.to_le_bytes());
+        buf.extend_from_slice(&1u32.to_le_bytes());
+        buf.extend_from_slice(&(large_jpeg.len() as u32).to_le_bytes());
+
+        // next IFD = 0
+        buf.extend_from_slice(&0u32.to_le_bytes());
+
+        // Append JPEG data
+        buf.extend_from_slice(&small_jpeg);
+        buf.extend_from_slice(&large_jpeg);
+
+        let result = extract_largest_jpeg(&buf).unwrap();
+        assert_eq!(result, large_jpeg, "应该选择更大的 StripOffsets JPEG");
+    }
+
+    // ─── ORF 头部标准化测试 ──────────────────────────────────
+
+    #[test]
+    fn test_orf_header_normalization_le() {
+        // ORF little-endian with IIRO header
+        let jpeg_data = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x02, 0x00, 0x00, 0xFF, 0xD9];
+        let mut data = build_tiff_with_jpeg(&jpeg_data, true);
+        data[2] = 0x52; // 'R'
+        data[3] = 0x4F; // 'O'
+
+        // parse_tiff_header should now accept ORF magic
+        let result = parse_tiff_header(&data);
+        assert!(result.is_ok(), "ORF header should be accepted: {:?}", result);
+
+        // OrfExtractor.extract_metadata should normalize header
+        let extractor = OrfExtractor;
+        let meta_result = extractor.extract_metadata(&data);
+        // 可能因数据不完整而失败，但不应是 "Unknown image format" 错误
+        if let Err(e) = &meta_result {
+            let err_str = e.to_string();
+            assert!(!err_str.contains("Unknown image format"),
+                "ORF should not fail with 'Unknown image format', got: {}", err_str);
+        }
+    }
+
+    #[test]
+    fn test_orf_header_normalization_be() {
+        // ORF big-endian with MMOR header
+        let mut data = vec![0x4D, 0x4D]; // MM
+        data.push(0x4F); // 'O'
+        data.push(0x52); // 'R'
+        data.extend_from_slice(&8u32.to_be_bytes()); // IFD0 offset
+
+        // 1 entry: JPEG offset tag
+        data.extend_from_slice(&1u16.to_be_bytes());
+        data.extend_from_slice(&0x0201u16.to_be_bytes()); // JPEGInterchangeFormat
+        data.extend_from_slice(&0x4u16.to_be_bytes()); // LONG
+        data.extend_from_slice(&1u32.to_be_bytes()); // count
+        let jpeg_offset_pos = data.len();
+        data.extend_from_slice(&0u32.to_be_bytes()); // placeholder offset
+        data.extend_from_slice(&0u32.to_be_bytes()); // next IFD
+
+        // Append JPEG
+        let jpeg_data = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x02, 0x00, 0x00, 0xFF, 0xD9];
+        let jpeg_offset = data.len() as u32;
+        data[jpeg_offset_pos..jpeg_offset_pos + 4].copy_from_slice(&jpeg_offset.to_be_bytes());
+        data.extend_from_slice(&jpeg_data);
+
+        // parse_tiff_header should accept ORF magic
+        let result = parse_tiff_header(&data);
+        assert!(result.is_ok(), "ORF BE header should be accepted: {:?}", result);
     }
 }

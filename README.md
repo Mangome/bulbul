@@ -45,7 +45,19 @@
 
 启动应用后，点击**选择文件夹**按钮，选择包含 RAW 文件的目录。应用会自动扫描、分组并展示结果。
 
-> 支持 Nikon (NEF)、Canon (CR2/CR3)、Sony (ARW)、Adobe (DNG)、Fujifilm (RAF)、Olympus (ORF)、Panasonic (RW2)、Pentax (PEF) 等 9 种 RAW 格式，不扫描子目录。
+> 支持以下 RAW 格式，不扫描子目录：
+>
+> | 格式 | 厂商 | 已验证 |
+> | ---- | ---- | ------ |
+> | NEF | Nikon | ✅ |
+> | ARW | Sony | ✅ |
+> | DNG | Adobe | ✅ |
+> | RAF | Fujifilm | ✅ |
+> | ORF | Olympus | ✅ |
+> | CR2 | Canon | - |
+> | CR3 | Canon | - |
+> | RW2 | Panasonic | - |
+> | PEF | Pentax | - |
 
 ### 处理过程
 

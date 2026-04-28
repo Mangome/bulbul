@@ -80,15 +80,15 @@ pub async fn process_single_raw(
             let data = tokio::fs::read(file_path).await.map_err(|e| {
                 AppError::FileNotFound(format!("{}: {}", file_path.display(), e))
             })?;
-            crate::core::metadata::parse_exif(&data)?
+            extractor.extract_metadata(&data)?
         } else {
-            match read_exif_from_header(file_path, header_size).await {
+            match read_exif_from_header(file_path, header_size, &*extractor).await {
                 Ok(m) => m,
                 Err(_) => {
                     let data = tokio::fs::read(file_path).await.map_err(|e| {
                         AppError::FileNotFound(format!("{}: {}", file_path.display(), e))
                     })?;
-                    crate::core::metadata::parse_exif(&data)?
+                    extractor.extract_metadata(&data)?
                 }
             }
         };
@@ -112,9 +112,9 @@ pub async fn process_single_raw(
         AppError::FileNotFound(format!("{}: {}", file_path.display(), e))
     })?;
 
-    // 从同一份数据中并行提取 JPEG 和 Exif
+    // 从同一份数据中提取 JPEG 和 Exif（使用格式特定的 Extractor）
     let jpeg_data = extractor.extract_jpeg(&data)?;
-    let metadata = crate::core::metadata::parse_exif(&data)?;
+    let metadata = extractor.extract_metadata(&data)?;
 
     // 不再需要原始 RAW 数据，尽早释放
     drop(data);
@@ -151,7 +151,11 @@ pub async fn process_single_raw(
 /// 相比全量读取 30-60MB，头部读取速度提升 ~500x。
 ///
 /// 当 `exif_header_size` 为 0 时返回错误，由调用方执行全量读取。
-async fn read_exif_from_header(file_path: &Path, exif_header_size: usize) -> Result<ImageMetadata, AppError> {
+async fn read_exif_from_header(
+    file_path: &Path,
+    exif_header_size: usize,
+    extractor: &dyn raw_parser::RawExtractor,
+) -> Result<ImageMetadata, AppError> {
     use tokio::io::AsyncReadExt;
 
     let mut file = tokio::fs::File::open(file_path).await.map_err(|e| {
@@ -173,7 +177,7 @@ async fn read_exif_from_header(file_path: &Path, exif_header_size: usize) -> Res
         ))
     })?;
 
-    crate::core::metadata::parse_exif(&header)
+    extractor.extract_metadata(&header)
 }
 
 /// 生成 200px 宽缩略图
