@@ -657,7 +657,11 @@ export class CanvasImageItem {
     if (meta.fNumber != null) parts.push(`f/${meta.fNumber}`);
     if (meta.exposureTime != null) parts.push(`${meta.exposureTime}s`);
     if (meta.isoSpeed != null) parts.push(`ISO ${meta.isoSpeed}`);
-    if (meta.focalLength != null) parts.push(`${meta.focalLength}mm`);
+    if (meta.focalLength35mm != null && meta.focalLength35mm !== meta.focalLength) {
+      parts.push(`${meta.focalLength35mm}mm`);
+    } else if (meta.focalLength != null) {
+      parts.push(`${meta.focalLength}mm`);
+    }
     if (meta.focusScore != null) {
       const score = Math.round(Math.max(1, Math.min(5, meta.focusScore)));
       parts.push(STAR_FILLED.repeat(score) + STAR_EMPTY.repeat(5 - score));

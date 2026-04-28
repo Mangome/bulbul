@@ -38,6 +38,27 @@ fn map_exif_to_metadata(exif: &Exif) -> ImageMetadata {
     meta.lens_serial = get_string(exif, Tag::LensSerialNumber);
     meta.focal_length = get_rational_f64(exif, Tag::FocalLength);
 
+    // 35mm 等效焦段与裁切系数
+    let fl_35mm_from_exif = get_rational_f64(exif, Tag::FocalLengthIn35mmFilm);
+    if let (Some(fl), Some(fl_35mm)) = (meta.focal_length, fl_35mm_from_exif) {
+        // EXIF 同时提供两个值：直接使用，并推导裁切系数
+        meta.focal_length_35mm = Some(fl_35mm);
+        if fl > 0.0 {
+            meta.crop_factor = Some(fl_35mm / fl);
+        }
+    } else if meta.focal_length.is_some() {
+        // EXIF 缺少等效焦段：从相机型号推算（兜底）
+        let computed = compute_focal_length_35mm(meta.focal_length, meta.camera_model.as_deref());
+        if let Some(fl_35mm) = computed {
+            meta.focal_length_35mm = Some(fl_35mm);
+            if let Some(fl) = meta.focal_length {
+                if fl > 0.0 {
+                    meta.crop_factor = Some(fl_35mm / fl);
+                }
+            }
+        }
+    }
+
     // 曝光参数
     meta.f_number = get_rational_f64(exif, Tag::FNumber);
     meta.exposure_time = get_exposure_time_string(exif);
@@ -266,6 +287,93 @@ fn get_color_space(exif: &Exif) -> Option<String> {
         }
         _ => None,
     }
+}
+
+/// 根据相机型号获取裁切系数
+///
+/// 主要覆盖 Nikon（本项目处理 NEF），同时包含其他常见品牌。
+/// 当相机为全画幅时返回 1.0（等效焦段与原生相同，无需额外计算），
+/// 因此仅当裁切系数 ≠ 1.0 时才有计算意义。
+pub fn get_crop_factor(camera_model: &str) -> Option<f64> {
+    let model = camera_model.to_uppercase();
+
+    // ── Nikon ──
+    if model.contains("NIKON") {
+        // FX 全画幅机型——D 系列用 "D<数字>" 后跟空格/结尾/后缀 来精确匹配，
+        // Z 系列用 "Z" 后跟空格或紧跟单数字（Z5/Z6/Z7/Z8/Z9），
+        // 避免含双数字的 DX 机型（Z50/Z30/Zfc）被误匹配。
+        let is_fx = model.contains("D3 ") || model.contains("D3X") || model.contains("D3S")
+            || model.contains("D4 ") || model.contains("D4S")
+            || model.contains("D5 ")
+            || model.contains("D6 ")
+            || model.contains("D700") || model.contains("D750") || model.contains("D780")
+            || model.contains("D800") || model.contains("D810") || model.contains("D850")
+            || model.contains("DF ")
+            || model.contains("Z 5") || model.contains("Z 6") || model.contains("Z 7")
+            || model.contains("Z 8") || model.contains("Z 9")
+            // Z5/Z6/Z7/Z8/Z9 后跟下划线或结尾（排除 Z50/Z30/Zfc）
+            || model.contains("Z5_") || model.contains("Z6_") || model.contains("Z7_")
+            || model.contains("Z8_") || model.contains("Z9_")
+            // Z5/Z6/Z7/Z8/Z9 后跟 II/III 后缀（如 Z6II, Z7III）
+            || model.contains("Z6II") || model.contains("Z7II") || model.contains("Z7III")
+            // 以 Z5/Z6/Z7/Z8/Z9 结尾
+            || model.ends_with("Z5") || model.ends_with("Z6") || model.ends_with("Z7")
+            || model.ends_with("Z8") || model.ends_with("Z9")
+            || model.ends_with("Z5II") || model.ends_with("Z6II") || model.ends_with("Z6III")
+            || model.ends_with("Z7II") || model.ends_with("Z7III");
+        if is_fx {
+            return Some(1.0);
+        }
+        // 其余 Nikon 机型默认为 DX (APS-C, 1.5x)
+        return Some(1.5);
+    }
+
+    // ── Canon ──
+    if model.contains("CANON") {
+        let is_ff = model.contains("5D") || model.contains("6D") || model.contains("1D")
+            || model.contains("EOS R") || model.contains(" R5") || model.contains(" R6")
+            || model.contains(" R3") || model.contains(" R1");
+        return if is_ff { Some(1.0) } else { Some(1.6) };
+    }
+
+    // ── Sony ──
+    if model.contains("SONY") {
+        let is_ff = model.contains("A1 ") || model.contains("A7") || model.contains("A9")
+            || model.contains("FX") || model.contains("A99");
+        return if is_ff { Some(1.0) } else { Some(1.5) };
+    }
+
+    // ── Fujifilm ──
+    if model.contains("FUJIFILM") || model.contains("FUJI") {
+        return if model.contains("GFX") { Some(0.79) } else { Some(1.5) };
+    }
+
+    // ── OM System / Olympus (M4/3) ──
+    if model.contains("OLYMPUS") || model.contains("OM SYSTEM") {
+        return Some(2.0);
+    }
+
+    // ── Panasonic ──
+    if model.contains("PANASONIC") || model.contains("LUMIX") {
+        let is_ff = model.contains("S1") || model.contains("S5") || model.contains("S9");
+        return if is_ff { Some(1.0) } else { Some(2.0) };
+    }
+
+    None
+}
+
+/// 计算 35mm 等效焦段（当 EXIF 中无 FocalLengthIn35mmFilm 时的回退方案）
+pub fn compute_focal_length_35mm(focal_length: Option<f64>, camera_model: Option<&str>) -> Option<f64> {
+    let fl = focal_length?;
+    let model = camera_model?;
+    let crop = get_crop_factor(model)?;
+
+    // 全画幅时等效焦段 = 原生焦段，无需单独存储
+    if (crop - 1.0).abs() < f64::EPSILON {
+        return None;
+    }
+
+    Some((fl * crop).round())
 }
 
 #[cfg(test)]

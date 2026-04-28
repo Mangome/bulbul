@@ -172,6 +172,11 @@ pub async fn process_folder(
                 // ── 全部命中：恢复 SessionState，返回缓存结果 ──
                 println!("[process_folder] 缓存全部命中，跳过流水线");
 
+                // 补算旧缓存中缺失的 focal_length_35mm
+                for irc in &mut valid_cached {
+                    irc.metadata.backfill_focal_length_35mm();
+                }
+
                 {
                     let mut s = state.lock().map_err(|e| e.to_string())?;
                     s.restore_from_cache(&group_cache, &valid_cached);
@@ -387,7 +392,9 @@ pub async fn process_folder(
 
     // 合并缓存结果（部分命中路径）
     if let Some(cached) = cached_image_results.take() {
-        for irc in &cached {
+        for mut irc in cached {
+            // 补算旧缓存中缺失的 focal_length_35mm
+            irc.metadata.backfill_focal_length_35mm();
             results.push(ProcessResult {
                 hash: irc.hash.clone(),
                 filename: irc.filename.clone(),

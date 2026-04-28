@@ -86,6 +86,8 @@ describe('CanvasImageItem', () => {
         lensModel: null,
         lensSerial: null,
         focalLength: 85,
+        focalLength35mm: null,
+        cropFactor: null,
         fNumber: 1.4,
         exposureTime: '1/125',
         isoSpeed: 100,

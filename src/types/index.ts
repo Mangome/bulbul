@@ -34,6 +34,10 @@ export interface ImageMetadata {
   lensModel: string | null;
   lensSerial: string | null;
   focalLength: number | null;
+  /** 35mm 等效焦段（EXIF 或根据裁切系数计算） */
+  focalLength35mm: number | null;
+  /** 裁切系数（从 EXIF 推导或从相机型号推算） */
+  cropFactor: number | null;
 
   // 曝光参数
   fNumber: number | null;

@@ -21,6 +21,11 @@ pub struct ImageMetadata {
     pub lens_model: Option<String>,
     pub lens_serial: Option<String>,
     pub focal_length: Option<f64>,
+    /// 35mm 等效焦段（EXIF FocalLengthIn35mmFilm 或根据裁切系数计算）
+    pub focal_length_35mm: Option<f64>,
+    /// 裁切系数（从 EXIF FocalLengthIn35mmFilm / FocalLength 推导，或从相机型号推算）
+    #[serde(default)]
+    pub crop_factor: Option<f64>,
 
     // 曝光参数
     pub f_number: Option<f64>,
@@ -59,6 +64,35 @@ pub struct ImageMetadata {
     // 合焦评分方法标记
     #[serde(default)]
     pub focus_score_method: Option<FocusScoringMethod>,
+}
+
+impl ImageMetadata {
+    /// 补算 35mm 等效焦段（用于从旧版缓存加载时补全缺失字段）
+    ///
+    /// 优先级：
+    /// 1. 已有 crop_factor → focal_length * crop_factor
+    /// 2. 相机型号匹配推算裁切系数（兜底）
+    pub fn backfill_focal_length_35mm(&mut self) {
+        if self.focal_length_35mm.is_some() || self.focal_length.is_none() {
+            return;
+        }
+
+        let fl = self.focal_length.unwrap();
+
+        // 优先使用已保存的 crop_factor
+        if let Some(crop) = self.crop_factor {
+            if (crop - 1.0).abs() > f64::EPSILON {
+                self.focal_length_35mm = Some((fl * crop).round());
+            }
+            return;
+        }
+
+        // 兜底：从相机型号推算
+        self.focal_length_35mm = crate::core::metadata::compute_focal_length_35mm(
+            self.focal_length,
+            self.camera_model.as_deref(),
+        );
+    }
 }
 
 #[cfg(test)]
