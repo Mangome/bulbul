@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="https://static-1317922524.cos.ap-guangzhou.myqcloud.com/static/icon.png" alt="Bulbul Logo" width="128" height="128">
+</div>
+
 # Bulbul - RAW 图像智能筛选工具
 
 [![Tauri](https://img.shields.io/badge/Tauri-2-blue?logo=tauri)](https://tauri.app)
@@ -39,9 +43,9 @@
 
 ### 打开文件夹
 
-启动应用后，点击**选择文件夹**按钮，选择包含 NEF 文件的目录。应用会自动扫描、分组并展示结果。
+启动应用后，点击**选择文件夹**按钮，选择包含 RAW 文件的目录。应用会自动扫描、分组并展示结果。
 
-> 目前仅支持 Nikon NEF 格式，不扫描子目录。
+> 支持 Nikon (NEF)、Canon (CR2/CR3)、Sony (ARW)、Adobe (DNG)、Fujifilm (RAF)、Olympus (ORF)、Panasonic (RW2)、Pentax (PEF) 等 9 种 RAW 格式，不扫描子目录。
 
 ### 处理过程
 
@@ -49,7 +53,7 @@
 
 | 阶段       | 说明                               |
 | ---------- | ---------------------------------- |
-| 扫描文件   | 查找目录下的 NEF 文件              |
+| 扫描文件   | 查找目录下的 RAW 文件              |
 | 处理图片   | 提取预览图和 EXIF 元数据           |
 | 分析相似度 | 计算感知哈希                       |
 | 分组       | 按时间+相似度聚类                  |
@@ -156,7 +160,7 @@ bulbul/
 ├── src-tauri/                    # Rust 后端代码
 │   ├── src/
 │   │   ├── commands/             # Tauri IPC 命令
-│   │   ├── core/                 # 核心算法（NEF 解析、pHash、分组、合焦评分）
+│   │   ├── core/                 # 核心算法（RAW 解析、pHash、分组、合焦评分）
 │   │   ├── models/               # 数据模型
 │   │   └── utils/                # 工具函数（缓存等）
 │   └── Cargo.toml
@@ -167,7 +171,7 @@ bulbul/
 ### 技术栈
 
 - **前端**: React 18 + TypeScript + Zustand + Canvas 2D
-- **后端**: Tauri 2 + Rust（NEF 解析、pHash、分组、合焦评分）
+- **后端**: Tauri 2 + Rust（多格式 RAW 解析、pHash、分组、合焦评分）
 - **鸟类检测**: [YOLOv8s](https://github.com/ultralytics/ultralytics)（目标检测）
 - **鸟种分类**: [osea_mobile](https://github.com/sun-jiao/osea_mobile)（GPL-3.0）
 - **构建**: Vite 6
