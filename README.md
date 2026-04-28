@@ -1,11 +1,8 @@
-# Bulbul - RAW 图像快速选片
-
 <div align="center">
-  <a href="https://static-1317922524.cos.ap-guangzhou.myqcloud.com/static/2026-04-29%2000-58-08.mp4">
-    <img src="https://static-1317922524.cos.ap-guangzhou.myqcloud.com/static/icon.png" alt="Bulbul Demo" width="360">
-  </a>
-  <p><a href="https://static-1317922524.cos.ap-guangzhou.myqcloud.com/static/2026-04-29%2000-58-08.mp4">▶ 观看演示视频</a></p>
+  <img src="https://static-1317922524.cos.ap-guangzhou.myqcloud.com/static/icon.png" alt="Bulbul Logo" width="128" height="128">
 </div>
+
+# Bulbul - RAW 图像快速选片
 
 [![Tauri](https://img.shields.io/badge/Tauri-2-blue?logo=tauri)](https://tauri.app)
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react)](https://react.dev)
