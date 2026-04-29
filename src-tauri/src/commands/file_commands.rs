@@ -28,10 +28,7 @@ pub struct ScanResult {
 /// 弹出系统文件夹选择对话框
 #[tauri::command]
 pub async fn select_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    let folder = app
-        .dialog()
-        .file()
-        .blocking_pick_folder();
+    let folder = app.dialog().file().blocking_pick_folder();
 
     match folder {
         Some(path) => Ok(Some(path.to_string())),
@@ -51,8 +48,7 @@ pub async fn get_folder_info(path: String) -> Result<FolderInfo, String> {
     let mut file_count = 0usize;
     let mut raw_count = 0usize;
 
-    let entries = std::fs::read_dir(dir_path)
-        .map_err(|e| AppError::IoError(e).to_string())?;
+    let entries = std::fs::read_dir(dir_path).map_err(|e| AppError::IoError(e).to_string())?;
 
     for entry in entries {
         let entry = entry.map_err(|e| AppError::IoError(e).to_string())?;
@@ -89,8 +85,7 @@ pub async fn scan_raw_files(path: String) -> Result<ScanResult, String> {
         return Err(AppError::FileNotFound(path).to_string());
     }
 
-    let entries = std::fs::read_dir(dir_path)
-        .map_err(|e| AppError::IoError(e).to_string())?;
+    let entries = std::fs::read_dir(dir_path).map_err(|e| AppError::IoError(e).to_string())?;
 
     let mut files = Vec::new();
 
@@ -116,7 +111,9 @@ pub async fn get_current_folder(
     state: tauri::State<'_, Arc<Mutex<SessionState>>>,
 ) -> Result<Option<String>, String> {
     let s = state.lock().map_err(|e| e.to_string())?;
-    Ok(s.current_folder.as_ref().map(|p| p.to_string_lossy().to_string()))
+    Ok(s.current_folder
+        .as_ref()
+        .map(|p| p.to_string_lossy().to_string()))
 }
 
 #[cfg(test)]
@@ -138,13 +135,30 @@ mod tests {
         let dir_path = dir.path();
 
         // 创建测试文件
-        File::create(dir_path.join("img1.nef")).unwrap().write_all(b"nef1").unwrap();
-        File::create(dir_path.join("img2.NEF")).unwrap().write_all(b"nef2").unwrap();
-        File::create(dir_path.join("img3.jpg")).unwrap().write_all(b"jpg1").unwrap();
-        File::create(dir_path.join("img4.nef")).unwrap().write_all(b"nef3").unwrap();
-        File::create(dir_path.join("img5.txt")).unwrap().write_all(b"txt1").unwrap();
+        File::create(dir_path.join("img1.nef"))
+            .unwrap()
+            .write_all(b"nef1")
+            .unwrap();
+        File::create(dir_path.join("img2.NEF"))
+            .unwrap()
+            .write_all(b"nef2")
+            .unwrap();
+        File::create(dir_path.join("img3.jpg"))
+            .unwrap()
+            .write_all(b"jpg1")
+            .unwrap();
+        File::create(dir_path.join("img4.nef"))
+            .unwrap()
+            .write_all(b"nef3")
+            .unwrap();
+        File::create(dir_path.join("img5.txt"))
+            .unwrap()
+            .write_all(b"txt1")
+            .unwrap();
 
-        let info = get_folder_info(dir_path.to_string_lossy().to_string()).await.unwrap();
+        let info = get_folder_info(dir_path.to_string_lossy().to_string())
+            .await
+            .unwrap();
         assert_eq!(info.file_count, 5);
         assert_eq!(info.raw_count, 3); // img1.nef, img2.NEF, img4.nef
     }
@@ -160,11 +174,22 @@ mod tests {
         let dir = tempdir().unwrap();
         let dir_path = dir.path();
 
-        File::create(dir_path.join("photo1.nef")).unwrap().write_all(b"nef").unwrap();
-        File::create(dir_path.join("photo2.NEF")).unwrap().write_all(b"nef").unwrap();
-        File::create(dir_path.join("photo3.jpg")).unwrap().write_all(b"jpg").unwrap();
+        File::create(dir_path.join("photo1.nef"))
+            .unwrap()
+            .write_all(b"nef")
+            .unwrap();
+        File::create(dir_path.join("photo2.NEF"))
+            .unwrap()
+            .write_all(b"nef")
+            .unwrap();
+        File::create(dir_path.join("photo3.jpg"))
+            .unwrap()
+            .write_all(b"jpg")
+            .unwrap();
 
-        let result = scan_raw_files(dir_path.to_string_lossy().to_string()).await.unwrap();
+        let result = scan_raw_files(dir_path.to_string_lossy().to_string())
+            .await
+            .unwrap();
         assert_eq!(result.count, 2);
         assert_eq!(result.files.len(), 2);
     }
@@ -172,7 +197,9 @@ mod tests {
     #[tokio::test]
     async fn test_scan_raw_files_empty_folder() {
         let dir = tempdir().unwrap();
-        let result = scan_raw_files(dir.path().to_string_lossy().to_string()).await.unwrap();
+        let result = scan_raw_files(dir.path().to_string_lossy().to_string())
+            .await
+            .unwrap();
         assert_eq!(result.count, 0);
         assert!(result.files.is_empty());
     }

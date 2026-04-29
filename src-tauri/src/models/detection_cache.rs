@@ -50,7 +50,10 @@ mod tests {
         let json = serde_json::to_string(&entry).unwrap();
         let deserialized: DetectionCacheEntry = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(deserialized.bboxes[0].species_name, Some("Silver Pheasant".to_string()));
+        assert_eq!(
+            deserialized.bboxes[0].species_name,
+            Some("Silver Pheasant".to_string())
+        );
         assert_eq!(deserialized.bboxes[0].species_confidence, Some(0.85));
     }
 
@@ -74,16 +77,22 @@ mod tests {
     fn test_detection_cache_hashmap() {
         let mut cache: DetectionCache = HashMap::new();
 
-        cache.insert("hash_a".to_string(), DetectionCacheEntry {
-            score: Some(3),
-            method: FocusScoringMethod::FullImage,
-            bboxes: vec![],
-        });
-        cache.insert("hash_b".to_string(), DetectionCacheEntry {
-            score: Some(5),
-            method: FocusScoringMethod::BirdRegion,
-            bboxes: vec![DetectionBox::new(0.2, 0.3, 0.7, 0.8, 0.88)],
-        });
+        cache.insert(
+            "hash_a".to_string(),
+            DetectionCacheEntry {
+                score: Some(3),
+                method: FocusScoringMethod::FullImage,
+                bboxes: vec![],
+            },
+        );
+        cache.insert(
+            "hash_b".to_string(),
+            DetectionCacheEntry {
+                score: Some(5),
+                method: FocusScoringMethod::BirdRegion,
+                bboxes: vec![DetectionBox::new(0.2, 0.3, 0.7, 0.8, 0.88)],
+            },
+        );
 
         assert_eq!(cache.len(), 2);
         assert_eq!(cache.get("hash_a").unwrap().score, Some(3));

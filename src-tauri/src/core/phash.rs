@@ -34,11 +34,7 @@ pub fn compute_phash(jpeg_path: &Path) -> Result<u64, AppError> {
     })?;
 
     let gray = img.grayscale();
-    let resized = gray.resize_exact(
-        MATRIX_COLS as u32,
-        MATRIX_ROWS as u32,
-        FilterType::Lanczos3,
-    );
+    let resized = gray.resize_exact(MATRIX_COLS as u32, MATRIX_ROWS as u32, FilterType::Lanczos3);
 
     let luma = resized.to_luma8();
     let mut matrix = build_matrix(&luma);
@@ -200,11 +196,8 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = create_colored_jpeg(dir.path(), "mid.jpg", 200, 133, 128, 128, 128);
         let img = image::open(&path).unwrap().grayscale();
-        let resized = img.resize_exact(
-            MATRIX_COLS as u32,
-            MATRIX_ROWS as u32,
-            FilterType::Lanczos3,
-        );
+        let resized =
+            img.resize_exact(MATRIX_COLS as u32, MATRIX_ROWS as u32, FilterType::Lanczos3);
         let luma = resized.to_luma8();
         let matrix = build_matrix(&luma);
 

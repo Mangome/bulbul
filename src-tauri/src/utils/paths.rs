@@ -8,9 +8,8 @@ use crate::models::AppError;
 
 /// 规范化文件路径为绝对路径，消除 `..`、`.`、符号链接等
 pub fn canonicalize_path(path: &Path) -> Result<PathBuf, AppError> {
-    std::fs::canonicalize(path).map_err(|e| {
-        AppError::HashError(format!("无法规范化路径 '{}': {}", path.display(), e))
-    })
+    std::fs::canonicalize(path)
+        .map_err(|e| AppError::HashError(format!("无法规范化路径 '{}': {}", path.display(), e)))
 }
 
 /// 计算文件路径的 MD5 哈希值
@@ -47,7 +46,10 @@ mod tests {
     fn test_canonicalize_path_existing_file() {
         let dir = tempdir().unwrap();
         let file_path = dir.path().join("test.nef");
-        File::create(&file_path).unwrap().write_all(b"test").unwrap();
+        File::create(&file_path)
+            .unwrap()
+            .write_all(b"test")
+            .unwrap();
 
         let result = canonicalize_path(&file_path).unwrap();
         assert!(result.is_absolute());
@@ -72,7 +74,9 @@ mod tests {
         assert_eq!(hash1, hash2);
         assert_eq!(hash1.len(), 32);
         // 验证是十六进制小写
-        assert!(hash1.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
+        assert!(hash1
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
     }
 
     #[test]
@@ -108,7 +112,10 @@ mod tests {
     fn test_get_cache_base_dir() {
         let cache_dir = Path::new("C:\\Users\\test\\AppData\\Local");
         let result = get_cache_base_dir(cache_dir);
-        assert_eq!(result, PathBuf::from("C:\\Users\\test\\AppData\\Local\\bulbul"));
+        assert_eq!(
+            result,
+            PathBuf::from("C:\\Users\\test\\AppData\\Local\\bulbul")
+        );
     }
 
     #[test]

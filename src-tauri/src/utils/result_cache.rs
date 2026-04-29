@@ -27,15 +27,10 @@ pub async fn save_image_result(
     result: &ImageResultCache,
 ) -> Result<(), AppError> {
     let path = cache_dir.join("result").join(format!("{}.json", hash));
-    let data = serde_json::to_vec(result).map_err(|e| {
-        AppError::CacheError(format!("序列化图片结果缓存失败 '{}': {}", hash, e))
-    })?;
+    let data = serde_json::to_vec(result)
+        .map_err(|e| AppError::CacheError(format!("序列化图片结果缓存失败 '{}': {}", hash, e)))?;
     tokio::fs::write(&path, &data).await.map_err(|e| {
-        AppError::CacheError(format!(
-            "写入图片结果缓存失败 '{}': {}",
-            path.display(),
-            e
-        ))
+        AppError::CacheError(format!("写入图片结果缓存失败 '{}': {}", path.display(), e))
     })
 }
 
@@ -45,11 +40,7 @@ pub async fn delete_image_result(cache_dir: &Path, hash: &str) -> Result<(), App
     let path = cache_dir.join("result").join(format!("{}.json", hash));
     if path.exists() {
         tokio::fs::remove_file(&path).await.map_err(|e| {
-            AppError::CacheError(format!(
-                "删除图片结果缓存失败 '{}': {}",
-                path.display(),
-                e
-            ))
+            AppError::CacheError(format!("删除图片结果缓存失败 '{}': {}", path.display(), e))
         })?;
     }
     Ok(())
@@ -81,11 +72,7 @@ pub async fn save_group_cache(
         AppError::CacheError(format!("序列化目录分组缓存失败 '{}': {}", folder_path, e))
     })?;
     tokio::fs::write(&path, &data).await.map_err(|e| {
-        AppError::CacheError(format!(
-            "写入目录分组缓存失败 '{}': {}",
-            path.display(),
-            e
-        ))
+        AppError::CacheError(format!("写入目录分组缓存失败 '{}': {}", path.display(), e))
     })
 }
 
@@ -98,11 +85,7 @@ pub async fn delete_group_cache(cache_dir: &Path, folder_path: &str) -> Result<(
     let path = cache_dir.join("groups").join(format!("{}.json", dir_hash));
     if path.exists() {
         tokio::fs::remove_file(&path).await.map_err(|e| {
-            AppError::CacheError(format!(
-                "删除目录分组缓存失败 '{}': {}",
-                path.display(),
-                e
-            ))
+            AppError::CacheError(format!("删除目录分组缓存失败 '{}': {}", path.display(), e))
         })?;
     }
     Ok(())

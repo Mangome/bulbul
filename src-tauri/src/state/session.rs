@@ -106,7 +106,9 @@ impl SessionState {
             }
 
             // 恢复 detection_cache（focus_score_method 为 Some 表示 FocusScoring 已运行）
-            if irc.metadata.focus_score_method.is_some() || !irc.metadata.detection_bboxes.is_empty() {
+            if irc.metadata.focus_score_method.is_some()
+                || !irc.metadata.detection_bboxes.is_empty()
+            {
                 self.detection_cache.insert(
                     irc.hash.clone(),
                     crate::models::DetectionCacheEntry {
@@ -194,10 +196,18 @@ mod tests {
 
         // 填充一些数据
         state.current_folder = Some(PathBuf::from("/photos"));
-        state.filename_hash_map.insert("a.nef".into(), "hash_a".into());
-        state.hash_filename_map.insert("hash_a".into(), "a.nef".into());
-        state.hash_path_map.insert("hash_a".into(), PathBuf::from("/photos/a.nef"));
-        state.metadata_cache.insert("hash_a".into(), ImageMetadata::default());
+        state
+            .filename_hash_map
+            .insert("a.nef".into(), "hash_a".into());
+        state
+            .hash_filename_map
+            .insert("hash_a".into(), "a.nef".into());
+        state
+            .hash_path_map
+            .insert("hash_a".into(), PathBuf::from("/photos/a.nef"));
+        state
+            .metadata_cache
+            .insert("hash_a".into(), ImageMetadata::default());
         state.phash_cache.insert("hash_a".into(), 0xAAAA);
         state.processing_state = ProcessingState::Processing;
         state.cancel_flag.store(true, Ordering::Relaxed);

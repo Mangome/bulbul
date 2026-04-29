@@ -93,9 +93,9 @@ lazy_static::lazy_static! {
 
 /// 加载分类器 ONNX 模型到内存缓存
 fn load_classifier_model(model_path: &Path) -> Result<(), AppError> {
-    let mut session = CLASSIFIER_SESSION.lock().map_err(|_| {
-        AppError::ClassificationFailed("分类器模型缓存锁定失败".to_string())
-    })?;
+    let mut session = CLASSIFIER_SESSION
+        .lock()
+        .map_err(|_| AppError::ClassificationFailed("分类器模型缓存锁定失败".to_string()))?;
 
     if session.is_some() {
         return Ok(());
@@ -114,21 +114,19 @@ fn load_classifier_model(model_path: &Path) -> Result<(), AppError> {
 
 /// 加载物种数据库到内存缓存
 fn load_species_database(db_path: &Path) -> Result<(), AppError> {
-    let mut db = SPECIES_DATABASE.lock().map_err(|_| {
-        AppError::ClassificationFailed("物种数据库缓存锁定失败".to_string())
-    })?;
+    let mut db = SPECIES_DATABASE
+        .lock()
+        .map_err(|_| AppError::ClassificationFailed("物种数据库缓存锁定失败".to_string()))?;
 
     if db.is_some() {
         return Ok(());
     }
 
-    let content = std::fs::read_to_string(db_path).map_err(|e| {
-        AppError::ClassificationFailed(format!("物种数据库读取失败: {}", e))
-    })?;
+    let content = std::fs::read_to_string(db_path)
+        .map_err(|e| AppError::ClassificationFailed(format!("物种数据库读取失败: {}", e)))?;
 
-    let entries: Vec<SpeciesEntry> = serde_json::from_str(&content).map_err(|e| {
-        AppError::ClassificationFailed(format!("物种数据库解析失败: {}", e))
-    })?;
+    let entries: Vec<SpeciesEntry> = serde_json::from_str(&content)
+        .map_err(|e| AppError::ClassificationFailed(format!("物种数据库解析失败: {}", e)))?;
 
     log::info!("物种数据库已加载: {} 个物种", entries.len());
     *db = Some(entries);
@@ -147,10 +145,7 @@ const CROP_PADDING_RATIO: f32 = 0.25;
 ///
 /// bbox 坐标为 [0, 1] 归一化坐标，裁剪前先向外扩展 `CROP_PADDING_RATIO`
 /// 比例的 padding（受图片边界约束），以保留背景上下文信息。
-fn crop_bbox_region(
-    img: &image::DynamicImage,
-    bbox: &DetectionBox,
-) -> image::DynamicImage {
+fn crop_bbox_region(img: &image::DynamicImage, bbox: &DetectionBox) -> image::DynamicImage {
     let (img_w, img_h) = (img.width() as f32, img.height() as f32);
 
     // bbox 像素尺寸
@@ -187,9 +182,7 @@ fn crop_bbox_region(
 /// 5. HWC → CHW 通道排列
 ///
 /// 返回 (shape, flat_data)，shape = [1, 3, 224, 224]
-fn image_to_classifier_input(
-    img: &image::DynamicImage,
-) -> (Vec<i64>, Vec<f32>) {
+fn image_to_classifier_input(img: &image::DynamicImage) -> (Vec<i64>, Vec<f32>) {
     // 1. 直接 Resize 到 224×224
     let resized = img.resize_exact(
         CLASSIFIER_INPUT_SIZE,
@@ -211,7 +204,8 @@ fn image_to_classifier_input(
             let pixel = rgb.get_pixel(x as u32, y as u32);
             data[0 * h * w + y * w + x] = (pixel[0] as f32 / 255.0 - mean[0]) / std[0]; // R
             data[1 * h * w + y * w + x] = (pixel[1] as f32 / 255.0 - mean[1]) / std[1]; // G
-            data[2 * h * w + y * w + x] = (pixel[2] as f32 / 255.0 - mean[2]) / std[2]; // B
+            data[2 * h * w + y * w + x] = (pixel[2] as f32 / 255.0 - mean[2]) / std[2];
+            // B
         }
     }
 
@@ -265,7 +259,9 @@ fn classify_crop_with_probs(
         if let Some(local_species) = geo_filter::query_local_species(lat, lng, gp) {
             log::info!(
                 "地理过滤已应用: ({:.2}, {:.2}) → {} 个当地物种",
-                lat, lng, local_species.len()
+                lat,
+                lng,
+                local_species.len()
             );
 
             // 不过滤：直接 argmax
@@ -285,13 +281,19 @@ fn classify_crop_with_probs(
             if filtered_prob >= raw_prob {
                 log::debug!(
                     "采用过滤结果: {} ({:.1}%) > 原始 {} ({:.1}%)",
-                    filtered_idx, filtered_prob * 100.0, raw_idx, raw_prob * 100.0
+                    filtered_idx,
+                    filtered_prob * 100.0,
+                    raw_idx,
+                    raw_prob * 100.0
                 );
                 (filtered_idx, filtered_prob)
             } else {
                 log::debug!(
                     "采用原始结果: {} ({:.1}%) > 过滤 {} ({:.1}%)",
-                    raw_idx, raw_prob * 100.0, filtered_idx, filtered_prob * 100.0
+                    raw_idx,
+                    raw_prob * 100.0,
+                    filtered_idx,
+                    filtered_prob * 100.0
                 );
                 (raw_idx, raw_prob)
             }
@@ -415,17 +417,16 @@ fn resolve_path(
         }
     }
 
-    Err(AppError::ClassificationFailed(
-        format!("文件 {} 未找到", file_name)
-    ))
+    Err(AppError::ClassificationFailed(format!(
+        "文件 {} 未找到",
+        file_name
+    )))
 }
 
 // ─── 公开 API ────────────────────────────────────
 
 /// 基于 Tauri resource_dir 解析分类器模型和物种数据库路径
-pub fn resolve_classifier_paths_from_resource_dir(
-    resource_dir: &Path,
-) -> (PathBuf, PathBuf) {
+pub fn resolve_classifier_paths_from_resource_dir(resource_dir: &Path) -> (PathBuf, PathBuf) {
     let model = resource_dir
         .join("resources")
         .join("models")
@@ -492,28 +493,18 @@ pub fn classify_detections(
         match classify_crop(&crop, gps, grid_path) {
             Some((class_idx, confidence)) => {
                 if confidence < SPECIES_CONFIDENCE_THRESHOLD {
-                    log::debug!(
-                        "分类置信度过低 ({:.1}%)，跳过物种标注",
-                        confidence * 100.0
-                    );
+                    log::debug!("分类置信度过低 ({:.1}%)，跳过物种标注", confidence * 100.0);
                     continue;
                 }
 
                 match lookup_species_name(class_idx) {
                     Some(name) => {
-                        log::debug!(
-                            "鸟种分类: {} (置信度 {:.1}%)",
-                            name,
-                            confidence * 100.0
-                        );
+                        log::debug!("鸟种分类: {} (置信度 {:.1}%)", name, confidence * 100.0);
                         bbox.species_name = Some(name);
                         bbox.species_confidence = Some(confidence);
                     }
                     None => {
-                        log::warn!(
-                            "类别索引 {} 在物种数据库中未找到",
-                            class_idx
-                        );
+                        log::warn!("类别索引 {} 在物种数据库中未找到", class_idx);
                     }
                 }
             }
@@ -656,7 +647,9 @@ pub fn classify_group_with_fusion(
             if let Some(local_species) = geo_filter::query_local_species(lat, lng, gp) {
                 log::info!(
                     "融合后地理过滤: ({:.2}, {:.2}) → {} 个当地物种",
-                    lat, lng, local_species.len()
+                    lat,
+                    lng,
+                    local_species.len()
                 );
 
                 // 不过滤：直接 argmax
@@ -678,13 +671,21 @@ pub fn classify_group_with_fusion(
                 if filtered_prob >= raw_prob {
                     log::debug!(
                         "融合采用过滤结果: bbox {} → cls {} ({:.1}%) > 原始 cls {} ({:.1}%)",
-                        bbox_idx, filtered_idx, filtered_prob * 100.0, raw_idx, raw_prob * 100.0
+                        bbox_idx,
+                        filtered_idx,
+                        filtered_prob * 100.0,
+                        raw_idx,
+                        raw_prob * 100.0
                     );
                     (filtered_idx, filtered_prob)
                 } else {
                     log::debug!(
                         "融合采用原始结果: bbox {} → cls {} ({:.1}%) > 过滤 cls {} ({:.1}%)",
-                        bbox_idx, raw_idx, raw_prob * 100.0, filtered_idx, filtered_prob * 100.0
+                        bbox_idx,
+                        raw_idx,
+                        raw_prob * 100.0,
+                        filtered_idx,
+                        filtered_prob * 100.0
                     );
                     (raw_idx, raw_prob)
                 }
@@ -833,7 +834,11 @@ mod tests {
         let logits = vec![1.0, 2.0, 3.0, 4.0];
         let probs = softmax(&logits);
         let sum: f32 = probs.iter().sum();
-        assert!((sum - 1.0).abs() < 1e-5, "softmax 概率和应为 1.0，实际 {}", sum);
+        assert!(
+            (sum - 1.0).abs() < 1e-5,
+            "softmax 概率和应为 1.0，实际 {}",
+            sum
+        );
     }
 
     #[test]
@@ -866,9 +871,11 @@ mod tests {
 
     #[test]
     fn test_image_to_classifier_input_shape() {
-        let img = image::DynamicImage::ImageRgb8(
-            image::ImageBuffer::from_pixel(300, 200, image::Rgb([128u8, 64u8, 32u8]))
-        );
+        let img = image::DynamicImage::ImageRgb8(image::ImageBuffer::from_pixel(
+            300,
+            200,
+            image::Rgb([128u8, 64u8, 32u8]),
+        ));
         let (shape, data) = image_to_classifier_input(&img);
         assert_eq!(shape, vec![1, 3, 224, 224]);
         assert_eq!(data.len(), 3 * 224 * 224);
@@ -881,9 +888,11 @@ mod tests {
         // G = (64/255 - 0.456) / 0.224 ≈ -0.860
         // B = (32/255 - 0.406) / 0.225 ≈ -1.234
         // 使用 224×224 避免 resize 插值误差
-        let img = image::DynamicImage::ImageRgb8(
-            image::ImageBuffer::from_pixel(224, 224, image::Rgb([128u8, 64u8, 32u8]))
-        );
+        let img = image::DynamicImage::ImageRgb8(image::ImageBuffer::from_pixel(
+            224,
+            224,
+            image::Rgb([128u8, 64u8, 32u8]),
+        ));
         let (_, data) = image_to_classifier_input(&img);
         let hw = (224 * 224) as usize;
         let center = 112 * 224 + 112;
@@ -893,35 +902,66 @@ mod tests {
         let expected_r = (128.0f32 / 255.0 - 0.485) / 0.229;
         let expected_g = (64.0f32 / 255.0 - 0.456) / 0.224;
         let expected_b = (32.0f32 / 255.0 - 0.406) / 0.225;
-        assert!((r - expected_r).abs() < 1e-4, "R 通道应为 {}, 实际 {}", expected_r, r);
-        assert!((g - expected_g).abs() < 1e-4, "G 通道应为 {}, 实际 {}", expected_g, g);
-        assert!((b - expected_b).abs() < 1e-4, "B 通道应为 {}, 实际 {}", expected_b, b);
+        assert!(
+            (r - expected_r).abs() < 1e-4,
+            "R 通道应为 {}, 实际 {}",
+            expected_r,
+            r
+        );
+        assert!(
+            (g - expected_g).abs() < 1e-4,
+            "G 通道应为 {}, 实际 {}",
+            expected_g,
+            g
+        );
+        assert!(
+            (b - expected_b).abs() < 1e-4,
+            "B 通道应为 {}, 实际 {}",
+            expected_b,
+            b
+        );
     }
 
     #[test]
     fn test_image_to_classifier_input_channel_order() {
         // 纯红像素 (255, 0, 0) → R=(1.0-0.485)/0.229, G=(0.0-0.456)/0.224, B=(0.0-0.406)/0.225
-        let img = image::DynamicImage::ImageRgb8(
-            image::ImageBuffer::from_pixel(100, 100, image::Rgb([255u8, 0u8, 0u8]))
-        );
+        let img = image::DynamicImage::ImageRgb8(image::ImageBuffer::from_pixel(
+            100,
+            100,
+            image::Rgb([255u8, 0u8, 0u8]),
+        ));
         let (_, data) = image_to_classifier_input(&img);
         let hw = (224 * 224) as usize;
         let center = 112 * 224 + 112;
         let expected_r = (255.0f32 / 255.0 - 0.485) / 0.229; // ≈ 2.251
-        let expected_g = (0.0f32 / 255.0 - 0.456) / 0.224;   // ≈ -2.036
-        let expected_b = (0.0f32 / 255.0 - 0.406) / 0.225;   // ≈ -1.804
-        assert!((data[0 * hw + center] - expected_r).abs() < 1e-4, "R 通道应为 {}", expected_r);
-        assert!((data[1 * hw + center] - expected_g).abs() < 1e-4, "G 通道应为 {}", expected_g);
-        assert!((data[2 * hw + center] - expected_b).abs() < 1e-4, "B 通道应为 {}", expected_b);
+        let expected_g = (0.0f32 / 255.0 - 0.456) / 0.224; // ≈ -2.036
+        let expected_b = (0.0f32 / 255.0 - 0.406) / 0.225; // ≈ -1.804
+        assert!(
+            (data[0 * hw + center] - expected_r).abs() < 1e-4,
+            "R 通道应为 {}",
+            expected_r
+        );
+        assert!(
+            (data[1 * hw + center] - expected_g).abs() < 1e-4,
+            "G 通道应为 {}",
+            expected_g
+        );
+        assert!(
+            (data[2 * hw + center] - expected_b).abs() < 1e-4,
+            "B 通道应为 {}",
+            expected_b
+        );
     }
 
     // ── 裁剪测试 ──
 
     #[test]
     fn test_crop_bbox_region_normal() {
-        let img = image::DynamicImage::ImageRgb8(
-            image::ImageBuffer::from_pixel(800, 600, image::Rgb([100u8, 100u8, 100u8]))
-        );
+        let img = image::DynamicImage::ImageRgb8(image::ImageBuffer::from_pixel(
+            800,
+            600,
+            image::Rgb([100u8, 100u8, 100u8]),
+        ));
         let bbox = DetectionBox {
             x1: 0.25,
             y1: 0.25,
@@ -940,9 +980,11 @@ mod tests {
 
     #[test]
     fn test_crop_bbox_region_full_image() {
-        let img = image::DynamicImage::ImageRgb8(
-            image::ImageBuffer::from_pixel(800, 600, image::Rgb([100u8, 100u8, 100u8]))
-        );
+        let img = image::DynamicImage::ImageRgb8(image::ImageBuffer::from_pixel(
+            800,
+            600,
+            image::Rgb([100u8, 100u8, 100u8]),
+        ));
         let bbox = DetectionBox {
             x1: 0.0,
             y1: 0.0,
@@ -960,9 +1002,11 @@ mod tests {
 
     #[test]
     fn test_crop_bbox_region_near_edge() {
-        let img = image::DynamicImage::ImageRgb8(
-            image::ImageBuffer::from_pixel(800, 600, image::Rgb([100u8, 100u8, 100u8]))
-        );
+        let img = image::DynamicImage::ImageRgb8(image::ImageBuffer::from_pixel(
+            800,
+            600,
+            image::Rgb([100u8, 100u8, 100u8]),
+        ));
         // bbox 紧贴左上角，padding 应被 clamp
         let bbox = DetectionBox {
             x1: 0.0,
@@ -983,9 +1027,11 @@ mod tests {
 
     #[test]
     fn test_crop_bbox_region_zero_size_fallback() {
-        let img = image::DynamicImage::ImageRgb8(
-            image::ImageBuffer::from_pixel(800, 600, image::Rgb([100u8, 100u8, 100u8]))
-        );
+        let img = image::DynamicImage::ImageRgb8(image::ImageBuffer::from_pixel(
+            800,
+            600,
+            image::Rgb([100u8, 100u8, 100u8]),
+        ));
         // x1 == x2，裁剪区域宽度为 0
         let bbox = DetectionBox {
             x1: 0.5,
@@ -1051,7 +1097,8 @@ mod tests {
                 let output_info = &sess.outputs()[0];
                 println!(
                     "QDQ 模型加载成功! 输入: {}, 输出: {}",
-                    input_info.name(), output_info.name()
+                    input_info.name(),
+                    output_info.name()
                 );
 
                 // 构造全零输入进行推理测试（与 classify_crop_with_probs 相同的 API）

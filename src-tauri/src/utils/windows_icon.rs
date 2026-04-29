@@ -19,7 +19,8 @@ pub fn set_big_icon(hwnd: HWND, image: &Image<'_>) {
     let mut and_mask = Vec::with_capacity(pixel_count);
 
     // RGBA → BGRA，同时构建 AND mask（alpha 反转）
-    let pixels = unsafe { std::slice::from_raw_parts_mut(bgra.as_mut_ptr() as *mut [u8; 4], pixel_count) };
+    let pixels =
+        unsafe { std::slice::from_raw_parts_mut(bgra.as_mut_ptr() as *mut [u8; 4], pixel_count) };
     for pixel in pixels {
         and_mask.push(pixel[3].wrapping_sub(u8::MAX)); // invert alpha
         pixel.swap(0, 2); // R ↔ B

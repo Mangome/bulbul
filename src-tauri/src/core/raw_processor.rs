@@ -77,9 +77,9 @@ pub async fn process_single_raw(
         // 先尝试头部快速读取；若 header_size 为 0 则跳过直接全量读取
         // 若 EXIF 字段偏移超出头部范围则回退全量读取
         let metadata = if header_size == 0 {
-            let data = tokio::fs::read(file_path).await.map_err(|e| {
-                AppError::FileNotFound(format!("{}: {}", file_path.display(), e))
-            })?;
+            let data = tokio::fs::read(file_path)
+                .await
+                .map_err(|e| AppError::FileNotFound(format!("{}: {}", file_path.display(), e)))?;
             extractor.extract_metadata(&data)?
         } else {
             match read_exif_from_header(file_path, header_size, &*extractor).await {
@@ -92,8 +92,7 @@ pub async fn process_single_raw(
                 }
             }
         };
-        let medium_path =
-            crate::utils::paths::get_cache_file_path(cache_base_dir, &hash, "medium");
+        let medium_path = crate::utils::paths::get_cache_file_path(cache_base_dir, &hash, "medium");
         let thumbnail_path =
             crate::utils::paths::get_cache_file_path(cache_base_dir, &hash, "thumbnail");
 
@@ -108,9 +107,9 @@ pub async fn process_single_raw(
     }
 
     // 缓存未命中：全量读取（JPEG 提取需要完整文件）
-    let data = tokio::fs::read(file_path).await.map_err(|e| {
-        AppError::FileNotFound(format!("{}: {}", file_path.display(), e))
-    })?;
+    let data = tokio::fs::read(file_path)
+        .await
+        .map_err(|e| AppError::FileNotFound(format!("{}: {}", file_path.display(), e)))?;
 
     // 从同一份数据中提取 JPEG 和 Exif（使用格式特定的 Extractor）
     let jpeg_data = extractor.extract_jpeg(&data)?;
@@ -158,9 +157,9 @@ async fn read_exif_from_header(
 ) -> Result<ImageMetadata, AppError> {
     use tokio::io::AsyncReadExt;
 
-    let mut file = tokio::fs::File::open(file_path).await.map_err(|e| {
-        AppError::FileNotFound(format!("{}: {}", file_path.display(), e))
-    })?;
+    let mut file = tokio::fs::File::open(file_path)
+        .await
+        .map_err(|e| AppError::FileNotFound(format!("{}: {}", file_path.display(), e)))?;
 
     let file_size = file
         .metadata()
@@ -240,7 +239,6 @@ pub fn generate_medium(jpeg_data: &[u8]) -> Result<Vec<u8>, AppError> {
 
     Ok(buf.into_inner())
 }
-
 
 #[cfg(test)]
 mod tests {

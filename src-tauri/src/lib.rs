@@ -44,6 +44,10 @@ pub fn run() {
         .setup(move |app| {
             log::info!("[启动计时] setup() 开始: {:?}", app_start.elapsed());
 
+            app.handle().plugin(tauri_plugin_process::init())?;
+            app.handle()
+                .plugin(tauri_plugin_updater::Builder::new().build())?;
+
             let cache_dir = app
                 .path()
                 .cache_dir()

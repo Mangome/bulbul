@@ -1,7 +1,7 @@
 // ============================================================
 // 设置面板 (SettingsPanel)
 //
-// 右侧滑出抽屉，包含三个区域：分组参数、外观设置、缓存管理。
+// 右侧滑出抽屉，包含四个区域：分组参数、外观设置、版本更新、缓存管理。
 // 使用 motion/react 滑入动画 + 半透明遮罩。
 // ============================================================
 
@@ -13,7 +13,13 @@ import { useGroupingStore } from '../../stores/useGroupingStore';
 import { useAppStore } from '../../stores/useAppStore';
 import { useProcessing } from '../../hooks/useProcessing';
 import { getCacheSize, clearCache, formatCacheSize } from '../../services/cacheService';
+import {
+  checkForUpdate,
+  downloadAndInstallUpdate,
+  getCurrentVersion,
+} from '../../services/updaterService';
 import type { CacheSizeInfo } from '../../services/cacheService';
+import type { AvailableUpdateInfo } from '../../services/updaterService';
 import type { ProcessingState } from '../../types';
 import cls from './SettingsPanel.module.css';
 
@@ -47,6 +53,8 @@ function IconRefresh() {
 
 // ─── 组件 ─────────────────────────────────────────────
 
+type UpdateStatus = 'idle' | 'checking' | 'upToDate' | 'available' | 'downloading' | 'installing' | 'error';
+
 export function SettingsPanel({ open, onClose, onCacheCleared, processingState }: SettingsPanelProps) {
   // 分组参数
   const similarityThreshold = useGroupingStore((s) => s.similarityThreshold);
@@ -74,26 +82,21 @@ export function SettingsPanel({ open, onClose, onCacheCleared, processingState }
   const [cacheError, setCacheError] = useState(false);
   const [clearingCache, setClearingCache] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
+
+  // 更新
+  const [currentVersion, setCurrentVersion] = useState('');
+  const [updateInfo, setUpdateInfo] = useState<AvailableUpdateInfo | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle');
+  const [updateMessage, setUpdateMessage] = useState('');
+  const [downloadedBytes, setDownloadedBytes] = useState(0);
+  const [totalBytes, setTotalBytes] = useState<number | null>(null);
+
   const regroupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelAndClearRef = useRef(false);
 
-  // 打开时自动查询缓存大小
-  useEffect(() => {
-    if (open) {
-      fetchCacheSize();
-      setConfirmClear(false);
-    }
-  }, [open]);
-
-  // ESC 关闭
-  useEffect(() => {
-    if (!open) return;
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [open, onClose]);
+  const isUpdateBusy = updateStatus === 'checking'
+    || updateStatus === 'downloading'
+    || updateStatus === 'installing';
 
   const fetchCacheSize = useCallback(async () => {
     setCacheLoading(true);
@@ -107,6 +110,34 @@ export function SettingsPanel({ open, onClose, onCacheCleared, processingState }
       setCacheLoading(false);
     }
   }, []);
+
+  const loadCurrentVersion = useCallback(async () => {
+    try {
+      const version = await getCurrentVersion();
+      setCurrentVersion(version);
+    } catch {
+      setCurrentVersion('');
+    }
+  }, []);
+
+  // 打开时自动查询缓存大小并读取当前版本
+  useEffect(() => {
+    if (open) {
+      void fetchCacheSize();
+      void loadCurrentVersion();
+      setConfirmClear(false);
+    }
+  }, [open, fetchCacheSize, loadCurrentVersion]);
+
+  // ESC 关闭
+  useEffect(() => {
+    if (!open) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [open, onClose]);
 
   // 防抖触发 regroup
   const scheduleRegroup = useCallback(
@@ -143,7 +174,7 @@ export function SettingsPanel({ open, onClose, onCacheCleared, processingState }
       await clearCache();
       setConfirmClear(false);
       onCacheCleared?.();
-      fetchCacheSize();
+      await fetchCacheSize();
     } catch (err) {
       console.error('清理缓存失败:', err);
       setCacheError(true);
@@ -151,6 +182,67 @@ export function SettingsPanel({ open, onClose, onCacheCleared, processingState }
       setClearingCache(false);
     }
   }, [onCacheCleared, fetchCacheSize]);
+
+  const handleCheckUpdate = useCallback(async () => {
+    if (isUpdateBusy) return;
+
+    setUpdateStatus('checking');
+    setUpdateMessage('正在检查更新...');
+    setDownloadedBytes(0);
+    setTotalBytes(null);
+
+    try {
+      const result = await checkForUpdate();
+      const nextCurrentVersion = result.available ? result.update.currentVersion : result.currentVersion;
+      setCurrentVersion(nextCurrentVersion);
+
+      if (!result.available) {
+        setUpdateInfo(null);
+        setUpdateStatus('upToDate');
+        setUpdateMessage('当前已是最新版本');
+        return;
+      }
+
+      setUpdateInfo(result.update);
+      setUpdateStatus('available');
+      setUpdateMessage(`发现新版本 v${result.update.version}`);
+    } catch (err) {
+      setUpdateStatus('error');
+      setUpdateMessage(err instanceof Error ? err.message : '检查更新失败');
+    }
+  }, [isUpdateBusy]);
+
+  const handleInstallUpdate = useCallback(async () => {
+    if (isUpdateBusy || !updateInfo) return;
+
+    setUpdateStatus('downloading');
+    setUpdateMessage('正在下载更新...');
+    setDownloadedBytes(0);
+    setTotalBytes(null);
+
+    try {
+      await downloadAndInstallUpdate((progress) => {
+        setDownloadedBytes(progress.downloadedBytes);
+        setTotalBytes(progress.totalBytes);
+
+        if (progress.stage === 'installing') {
+          setUpdateStatus('installing');
+          setUpdateMessage('安装完成，正在重启应用...');
+          return;
+        }
+
+        setUpdateStatus('downloading');
+        setUpdateMessage('正在下载更新...');
+      });
+
+      setUpdateStatus('installing');
+      setUpdateMessage('安装完成，正在重启应用...');
+    } catch (err) {
+      setUpdateInfo(null);
+      setUpdateStatus('error');
+      setUpdateMessage(err instanceof Error ? `${err.message} 请重新检查更新后再试。` : '安装更新失败，请重新检查更新后再试。');
+    }
+  }, [isUpdateBusy, updateInfo]);
 
   const handleClearClick = useCallback(() => {
     if (!confirmClear) {
@@ -165,7 +257,7 @@ export function SettingsPanel({ open, onClose, onCacheCleared, processingState }
       return;
     }
 
-    executeClearCache();
+    void executeClearCache();
   }, [confirmClear, isActive, cancelProcessing, executeClearCache]);
 
   // 取消完成后自动执行清理
@@ -173,7 +265,7 @@ export function SettingsPanel({ open, onClose, onCacheCleared, processingState }
     if (!cancelAndClearRef.current) return;
     if (processingState !== 'cancelled' && processingState !== 'error') return;
     cancelAndClearRef.current = false;
-    executeClearCache();
+    void executeClearCache();
   }, [processingState, executeClearCache]);
 
   // 点击确认按钮后 3 秒自动取消确认状态
@@ -182,6 +274,14 @@ export function SettingsPanel({ open, onClose, onCacheCleared, processingState }
     const timer = setTimeout(() => setConfirmClear(false), 3000);
     return () => clearTimeout(timer);
   }, [confirmClear]);
+
+  const updateProgressText = updateStatus === 'downloading'
+    ? totalBytes !== null
+      ? `${formatCacheSize(downloadedBytes)} / ${formatCacheSize(totalBytes)}`
+      : downloadedBytes > 0
+        ? formatCacheSize(downloadedBytes)
+        : ''
+    : '';
 
   return (
     <AnimatePresence>
@@ -262,6 +362,67 @@ export function SettingsPanel({ open, onClose, onCacheCleared, processingState }
               </div>
             </div>
 
+            {/* 版本更新 */}
+            <div className={cls.section}>
+              <div className={cls.sectionTitle}>版本更新</div>
+
+              <div className={cls.updateMeta}>
+                <div className={cls.updateRow}>
+                  <span className={cls.updateLabel}>当前版本</span>
+                  <span className={cls.updateValue}>{currentVersion ? `v${currentVersion}` : '读取中...'}</span>
+                </div>
+                {updateInfo && (
+                  <div className={cls.updateRow}>
+                    <span className={cls.updateLabel}>最新版本</span>
+                    <span className={cls.updateValue}>v{updateInfo.version}</span>
+                  </div>
+                )}
+              </div>
+
+              {updateMessage && (
+                <div
+                  className={`${cls.updateStatus} ${updateStatus === 'error' ? cls.updateStatusError : ''}`}
+                  role={updateStatus === 'error' ? 'alert' : 'status'}
+                >
+                  {updateMessage}
+                </div>
+              )}
+
+              {updateProgressText && (
+                <div className={cls.updateProgress}>{updateProgressText}</div>
+              )}
+
+              {updateInfo?.notes && (
+                <div className={cls.updateNotes}>
+                  <div className={cls.updateNotesTitle}>更新说明</div>
+                  <div className={cls.updateNotesBody}>{updateInfo.notes}</div>
+                </div>
+              )}
+
+              <div className={cls.updateActions}>
+                <button
+                  className={cls.updateCheckBtn}
+                  onClick={() => void handleCheckUpdate()}
+                  disabled={isUpdateBusy}
+                >
+                  {updateStatus === 'checking' ? '检查中...' : '检查更新'}
+                </button>
+                {updateInfo && (
+                  <button
+                    className={cls.updateInstallBtn}
+                    onClick={() => void handleInstallUpdate()}
+                    disabled={isUpdateBusy}
+                  >
+                    {updateStatus === 'downloading'
+                      ? '下载中...'
+                      : updateStatus === 'installing'
+                        ? '安装中...'
+                        : '下载并安装'}
+                  </button>
+                )}
+              </div>
+            </div>
+
             {/* 缓存管理 */}
             <div className={cls.section}>
               <div className={cls.sectionTitle}>缓存管理</div>
@@ -298,7 +459,7 @@ export function SettingsPanel({ open, onClose, onCacheCleared, processingState }
                 </button>
                 <button
                   className={cls.refreshBtn}
-                  onClick={fetchCacheSize}
+                  onClick={() => void fetchCacheSize()}
                   disabled={cacheLoading || clearingCache}
                   title="刷新缓存信息"
                   aria-label="刷新缓存信息"

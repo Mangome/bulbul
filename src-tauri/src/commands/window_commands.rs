@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
-use tauri::{AppHandle, Manager};
 use tauri::webview::WebviewWindowBuilder;
+use tauri::{AppHandle, Manager};
 
 use crate::state::SessionState;
 use crate::utils::icon::set_window_icons;
@@ -27,17 +27,14 @@ pub async fn open_main_window(
         existing.set_focus().map_err(|e| e.to_string())?;
     } else {
         // 创建新的 Main 窗口（初始不可见，由 Rust on_page_load 回调显示）
-        let main_window = WebviewWindowBuilder::new(
-            &app,
-            "main",
-            tauri::WebviewUrl::App("index.html".into()),
-        )
-        .title("Bulbul")
-        .inner_size(1200.0, 900.0)
-        .center()
-        .visible(false)
-        .build()
-        .map_err(|e| e.to_string())?;
+        let main_window =
+            WebviewWindowBuilder::new(&app, "main", tauri::WebviewUrl::App("index.html".into()))
+                .title("Bulbul")
+                .inner_size(1200.0, 900.0)
+                .center()
+                .visible(false)
+                .build()
+                .map_err(|e| e.to_string())?;
 
         // 设置窗口图标（ICON_SMALL + ICON_BIG）
         set_window_icons(&main_window);

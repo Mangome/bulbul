@@ -17,8 +17,8 @@ use std::path::Path;
 use image::imageops::FilterType;
 use serde::{Deserialize, Serialize};
 
-use crate::models::AppError;
 use crate::core::bird_detection::DetectionBox;
+use crate::models::AppError;
 
 /// 合焦评分方法标记
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -43,11 +43,7 @@ const BLOCK_COLS: usize = 5;
 const ANALYSIS_LONG_EDGE: u32 = 512;
 
 /// Laplacian 核（标准 3×3）
-const LAPLACIAN_KERNEL: [[f32; 3]; 3] = [
-    [0.0, -1.0, 0.0],
-    [-1.0, 4.0, -1.0],
-    [0.0, -1.0, 0.0],
-];
+const LAPLACIAN_KERNEL: [[f32; 3]; 3] = [[0.0, -1.0, 0.0], [-1.0, 4.0, -1.0], [0.0, -1.0, 0.0]];
 
 /// 评估合焦时取分块方差的 Top-K
 #[cfg(test)]
@@ -75,7 +71,10 @@ pub fn calculate_focus_score_with_bbox(
 }
 
 /// 在指定检测框内计算合焦评分
-fn score_from_image_with_bbox(img: &image::DynamicImage, bbox: &DetectionBox) -> Result<u32, AppError> {
+fn score_from_image_with_bbox(
+    img: &image::DynamicImage,
+    bbox: &DetectionBox,
+) -> Result<u32, AppError> {
     // 转灰度 + 等比下采样
     let gray = img.grayscale();
     let resized = gray.resize(ANALYSIS_LONG_EDGE, ANALYSIS_LONG_EDGE, FilterType::Lanczos3);
@@ -112,9 +111,8 @@ fn score_from_image(img: &image::DynamicImage) -> u32 {
 /// 计算单个 JPEG 的合焦评分（从内存 JPEG 数据）
 #[cfg(test)]
 pub fn calculate_focus_score_from_memory(jpeg_data: &[u8]) -> Result<u32, AppError> {
-    let img = image::load_from_memory(jpeg_data).map_err(|e| {
-        AppError::ImageProcessError(format!("JPEG 解码失败: {}", e))
-    })?;
+    let img = image::load_from_memory(jpeg_data)
+        .map_err(|e| AppError::ImageProcessError(format!("JPEG 解码失败: {}", e)))?;
 
     Ok(score_from_image(&img))
 }
@@ -214,10 +212,7 @@ fn evaluate_blocks_robust(laplacian: &[Vec<f32>]) -> f64 {
 }
 
 /// 在检测框内计算方差（区域合焦评分）
-fn evaluate_blocks_in_bbox(
-    laplacian: &[Vec<f32>],
-    bbox: &DetectionBox,
-) -> Result<f64, AppError> {
+fn evaluate_blocks_in_bbox(laplacian: &[Vec<f32>], bbox: &DetectionBox) -> Result<f64, AppError> {
     let height = laplacian.len();
     if height == 0 {
         return Ok(0.0);
@@ -229,9 +224,13 @@ fn evaluate_blocks_in_bbox(
 
     // 将相对坐标 [0, 1] 映射到 Laplacian 图像坐标
     let x1_px = ((bbox.x1 as f32 * width as f32) as usize).max(0).min(width);
-    let y1_px = ((bbox.y1 as f32 * height as f32) as usize).max(0).min(height);
+    let y1_px = ((bbox.y1 as f32 * height as f32) as usize)
+        .max(0)
+        .min(height);
     let x2_px = ((bbox.x2 as f32 * width as f32) as usize).max(0).min(width);
-    let y2_px = ((bbox.y2 as f32 * height as f32) as usize).max(0).min(height);
+    let y2_px = ((bbox.y2 as f32 * height as f32) as usize)
+        .max(0)
+        .min(height);
 
     // 防止极小区域（< 10px²）
     let area = (x2_px - x1_px) * (y2_px - y1_px);
@@ -390,10 +389,7 @@ mod tests {
 
     #[test]
     fn test_laplacian_kernel_properties() {
-        let sum: f32 = LAPLACIAN_KERNEL
-            .iter()
-            .flat_map(|row| row.iter())
-            .sum();
+        let sum: f32 = LAPLACIAN_KERNEL.iter().flat_map(|row| row.iter()).sum();
         assert_eq!(sum, 0.0, "Laplacian kernel sum should be 0");
     }
 
@@ -436,7 +432,11 @@ mod tests {
             for x in 0..width {
                 let val = if x < mid_x {
                     // 左半：棋盘纹理
-                    if (x / 10 + y / 10) % 2 == 0 { 255 } else { 0 }
+                    if (x / 10 + y / 10) % 2 == 0 {
+                        255
+                    } else {
+                        0
+                    }
                 } else {
                     // 右半：纯灰色
                     128
@@ -448,7 +448,10 @@ mod tests {
     }
 
     /// 辅助函数：对 DynamicImage 做区域评分
-    fn score_image_with_bbox(img: &image::DynamicImage, bbox: &DetectionBox) -> Result<u32, AppError> {
+    fn score_image_with_bbox(
+        img: &image::DynamicImage,
+        bbox: &DetectionBox,
+    ) -> Result<u32, AppError> {
         score_from_image_with_bbox(img, bbox)
     }
 
@@ -458,14 +461,22 @@ mod tests {
         let img = create_sharp_dynamic_image(800, 600);
         let full_score = score_from_image(&img);
         let bbox = DetectionBox {
-            x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0,
+            x1: 0.0,
+            y1: 0.0,
+            x2: 1.0,
+            y2: 1.0,
             confidence: 0.9,
             ..Default::default()
         };
         let region_score = score_image_with_bbox(&img, &bbox).unwrap();
         // 算法不完全相同（分块 vs 整体方差），但评分应在 ±1 星以内
         let diff = (full_score as i32 - region_score as i32).unsigned_abs();
-        assert!(diff <= 1, "Full image score {} vs bbox full score {}, diff too large", full_score, region_score);
+        assert!(
+            diff <= 1,
+            "Full image score {} vs bbox full score {}, diff too large",
+            full_score,
+            region_score
+        );
     }
 
     #[test]
@@ -473,7 +484,10 @@ mod tests {
         // 3.7: bbox 覆盖锐利区域得分 >= 4
         let img = create_sharp_dynamic_image(800, 600);
         let bbox = DetectionBox {
-            x1: 0.1, y1: 0.1, x2: 0.9, y2: 0.9,
+            x1: 0.1,
+            y1: 0.1,
+            x2: 0.9,
+            y2: 0.9,
             confidence: 0.9,
             ..Default::default()
         };
@@ -486,12 +500,19 @@ mod tests {
         // 3.8: bbox 覆盖模糊区域得分 <= 2
         let img = create_blurred_dynamic_image(800, 600);
         let bbox = DetectionBox {
-            x1: 0.1, y1: 0.1, x2: 0.9, y2: 0.9,
+            x1: 0.1,
+            y1: 0.1,
+            x2: 0.9,
+            y2: 0.9,
             confidence: 0.9,
             ..Default::default()
         };
         let score = score_image_with_bbox(&img, &bbox).unwrap();
-        assert!(score <= 2, "Blurred region should score <= 2, got {}", score);
+        assert!(
+            score <= 2,
+            "Blurred region should score <= 2, got {}",
+            score
+        );
     }
 
     #[test]
@@ -512,13 +533,20 @@ mod tests {
         // 3.10: bbox 极小区域（< 10px²）不 panic，返回合理评分或 fallback
         let img = create_sharp_dynamic_image(800, 600);
         let bbox = DetectionBox {
-            x1: 0.5, y1: 0.5, x2: 0.501, y2: 0.501,
+            x1: 0.5,
+            y1: 0.5,
+            x2: 0.501,
+            y2: 0.501,
             confidence: 0.9,
             ..Default::default()
         };
         // 应该不 panic，返回低评分（区域太小，方差为 0）
         let score = score_image_with_bbox(&img, &bbox).unwrap();
-        assert!(score >= 1 && score <= 5, "Score must be valid 1-5, got {}", score);
+        assert!(
+            score >= 1 && score <= 5,
+            "Score must be valid 1-5, got {}",
+            score
+        );
     }
 
     #[test]
@@ -526,7 +554,10 @@ mod tests {
         // 3.11: bbox 坐标越界（x2 > 1.0）时 clamp 到有效范围
         let img = create_sharp_dynamic_image(800, 600);
         let bbox = DetectionBox {
-            x1: 0.8, y1: 0.8, x2: 1.5, y2: 1.5,
+            x1: 0.8,
+            y1: 0.8,
+            x2: 1.5,
+            y2: 1.5,
             confidence: 0.9,
             ..Default::default()
         };
@@ -564,7 +595,10 @@ mod tests {
         std::fs::write(&tmp_path, &sharp_data).unwrap();
 
         let bbox = DetectionBox {
-            x1: 0.1, y1: 0.1, x2: 0.9, y2: 0.9,
+            x1: 0.1,
+            y1: 0.1,
+            x2: 0.9,
+            y2: 0.9,
             confidence: 0.9,
             ..Default::default()
         };

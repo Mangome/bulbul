@@ -27,10 +27,7 @@ mod tests {
 
     #[test]
     fn test_hamming_distance_all_different() {
-        assert_eq!(
-            hamming_distance(0x0000000000000000, 0xFFFFFFFFFFFFFFFF),
-            64
-        );
+        assert_eq!(hamming_distance(0x0000000000000000, 0xFFFFFFFFFFFFFFFF), 64);
     }
 
     #[test]
@@ -48,10 +45,7 @@ mod tests {
 
     #[test]
     fn test_similarity_all_different() {
-        assert_eq!(
-            similarity(0x0000000000000000, 0xFFFFFFFFFFFFFFFF),
-            0.0
-        );
+        assert_eq!(similarity(0x0000000000000000, 0xFFFFFFFFFFFFFFFF), 0.0);
     }
 
     #[test]

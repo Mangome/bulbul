@@ -50,8 +50,12 @@ impl AppError {
     pub fn user_message(&self) -> String {
         match self {
             AppError::FileNotFound(path) => format!("找不到文件「{}」，请检查路径是否正确", path),
-            AppError::RawParseError(_) => "RAW 文件解析失败，该文件可能已损坏或格式不受支持".to_string(),
-            AppError::ExifError(_) => "无法读取照片的拍摄信息，该文件的 EXIF 数据可能缺失".to_string(),
+            AppError::RawParseError(_) => {
+                "RAW 文件解析失败，该文件可能已损坏或格式不受支持".to_string()
+            }
+            AppError::ExifError(_) => {
+                "无法读取照片的拍摄信息，该文件的 EXIF 数据可能缺失".to_string()
+            }
             AppError::NoEmbeddedJpeg => "该 RAW 文件中未找到预览图像".to_string(),
             AppError::ImageProcessError(_) => "图像处理过程中出现错误，请重试".to_string(),
             AppError::Cancelled => "操作已取消".to_string(),

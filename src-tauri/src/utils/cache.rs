@@ -52,7 +52,11 @@ pub async fn write_thumbnail(
 ) -> Result<PathBuf, AppError> {
     let path = get_cache_file_path(cache_base_dir, hash, "thumbnail");
     tokio::fs::write(&path, data).await.map_err(|e| {
-        AppError::CacheError(format!("写入 thumbnail 缓存失败 '{}': {}", path.display(), e))
+        AppError::CacheError(format!(
+            "写入 thumbnail 缓存失败 '{}': {}",
+            path.display(),
+            e
+        ))
     })?;
     Ok(path)
 }
@@ -239,9 +243,12 @@ mod tests {
         // thumbnail: 3 files, 100KB each
         for i in 0..3u8 {
             let data = vec![i; 102_400]; // 100KB
-            tokio::fs::write(cache_base.join("thumbnail").join(format!("h{i}.jpg")), &data)
-                .await
-                .unwrap();
+            tokio::fs::write(
+                cache_base.join("thumbnail").join(format!("h{i}.jpg")),
+                &data,
+            )
+            .await
+            .unwrap();
         }
 
         let (total_size, file_count) = get_cache_size(&cache_base).await;
@@ -336,14 +343,20 @@ mod tests {
         ensure_cache_dirs(&cache_base).await.unwrap();
 
         // medium: 1MB
-        tokio::fs::write(cache_base.join("medium").join("h1.jpg"), vec![0u8; 1_048_576])
-            .await.unwrap();
+        tokio::fs::write(
+            cache_base.join("medium").join("h1.jpg"),
+            vec![0u8; 1_048_576],
+        )
+        .await
+        .unwrap();
         // result: 2KB
         tokio::fs::write(cache_base.join("result").join("abc.json"), vec![0u8; 2048])
-            .await.unwrap();
+            .await
+            .unwrap();
         // groups: 1KB
         tokio::fs::write(cache_base.join("groups").join("def.json"), vec![0u8; 1024])
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let (total_size, file_count) = get_cache_size(&cache_base).await;
         assert_eq!(file_count, 3);
@@ -357,9 +370,11 @@ mod tests {
         ensure_cache_dirs(&cache_base).await.unwrap();
 
         tokio::fs::write(cache_base.join("result").join("test.json"), b"{}")
-            .await.unwrap();
+            .await
+            .unwrap();
         tokio::fs::write(cache_base.join("groups").join("dir.json"), b"{}")
-            .await.unwrap();
+            .await
+            .unwrap();
 
         clear_all_cache(&cache_base).await.unwrap();
 
