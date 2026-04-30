@@ -2,7 +2,7 @@
 // 顶部导航栏 (TopNavBar)
 //
 // 全宽顶部条，44px 高度。
-// 左区：分组导航箭头 + 分组名 + 路径
+// 左区：路径
 // 中区：进度条
 // 右区：工具按钮（省份、设置、切换目录、主题）+ 导出
 // ============================================================
@@ -99,8 +99,6 @@ export function TopNavBar({
 }: TopNavBarProps) {
   const currentGroupIndex = useCanvasStore((s) => s.currentGroupIndex);
   const groupCount = useCanvasStore((s) => s.groupCount);
-  const prevGroup = useCanvasStore((s) => s.prevGroup);
-  const nextGroup = useCanvasStore((s) => s.nextGroup);
   const selectedCount = useSelectionStore((s) => s.selectedCount);
 
   // 主题
@@ -169,8 +167,6 @@ export function TopNavBar({
   const group = groups[currentGroupIndex];
   if (!group) return null;
 
-  const hasPrev = currentGroupIndex > 0;
-  const hasNext = currentGroupIndex < groupCount - 1;
   const progressPercent = groupCount > 0
     ? ((currentGroupIndex + 1) / groupCount) * 100
     : 0;
@@ -184,36 +180,9 @@ export function TopNavBar({
       role="navigation"
       aria-label="分组导航"
     >
-      {/* 左区：分组导航 */}
-      <div className={cls.navSection}>
-        <button
-          className={`${cls.navBtn} ${!hasPrev ? cls.navBtnDisabled : ''}`}
-          onClick={prevGroup}
-          disabled={!hasPrev}
-          title="上一组 (←)"
-          aria-label="上一组"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
-        </button>
-
-        <span className={cls.groupName}>{group.name}</span>
-
-        <button
-          className={`${cls.navBtn} ${!hasNext ? cls.navBtnDisabled : ''}`}
-          onClick={nextGroup}
-          disabled={!hasNext}
-          title="下一组 (→)"
-          aria-label="下一组"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
-        </button>
-      </div>
-
-      {/* 路径显示 */}
+      {/* 左区：路径显示 */}
       {displayPath && (
-        <>
-          <span className={cls.toolSep} />
-          <button
+        <button
             className={`${cls.folderPath} ${copied ? cls.folderPathCopied : ''}`}
             onClick={handleCopyPath}
             title={copied ? '已复制' : folderPath!}
@@ -247,7 +216,6 @@ export function TopNavBar({
               )}
             </AnimatePresence>
           </button>
-        </>
       )}
 
       {/* 中区：进度条 */}

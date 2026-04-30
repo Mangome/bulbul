@@ -2,7 +2,7 @@
    TopNavBar - 顶部全宽导航栏
    
    44px 高度，三区布局：
-   左：分组导航箭头 + 名称 + 路径
+   左：路径
    中：进度条
    右：工具按钮 + 全选/导出
 ════════════════════════════════════════════════════════════════════════════ */
@@ -32,64 +32,6 @@
 }
 
 /* ────────────────────────────────────────────────────────────────
-   左区：分组导航
-──────────────────────────────────────────────────────────────── */
-
-.navSection {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  flex-shrink: 0;
-}
-
-.navBtn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
-  color: var(--color-text-muted);
-  background: transparent;
-  border: none;
-  padding: 0;
-  margin: 0;
-  
-  transition:
-    background-color var(--transition-fast),
-    color var(--transition-fast);
-}
-
-.navBtn:hover {
-  background-color: var(--color-bg-tertiary);
-  color: var(--color-text-primary);
-}
-
-.navBtn:active {
-  transform: scale(0.92);
-}
-
-.navBtnDisabled {
-  opacity: 0.25;
-  pointer-events: none;
-}
-
-.groupName {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-primary);
-  white-space: nowrap;
-  max-width: 160px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding: 0 4px;
-  user-select: none;
-}
-
-/* ────────────────────────────────────────────────────────────────
    路径显示
 ──────────────────────────────────────────────────────────────── */
 
@@ -102,7 +44,7 @@
   cursor: pointer;
   background: transparent;
   border: none;
-  max-width: 260px;
+  max-width: 480px;
   flex-shrink: 1;
   min-width: 0;
 
