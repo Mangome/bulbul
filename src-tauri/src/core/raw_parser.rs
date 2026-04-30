@@ -2088,6 +2088,94 @@ mod tests {
         assert!(result.is_err());
     }
 
+    /// 构建一个最小有效的 JPEG (SOI + SOF0 + SOS + EOI)
+    fn build_minimal_jpeg(width: u16, height: u16) -> Vec<u8> {
+        let mut jpeg = Vec::new();
+        // SOI
+        jpeg.extend_from_slice(&[0xFF, 0xD8]);
+        // SOF0: precision=8, height, width, components=1
+        jpeg.extend_from_slice(&[0xFF, 0xC0]);
+        jpeg.extend_from_slice(&11u16.to_be_bytes()); // length
+        jpeg.push(8); // precision
+        jpeg.extend_from_slice(&height.to_be_bytes());
+        jpeg.extend_from_slice(&width.to_be_bytes());
+        jpeg.push(1); // components
+        jpeg.extend_from_slice(&[1, 0x11, 0]); // component spec
+        // SOS
+        jpeg.extend_from_slice(&[0xFF, 0xDA]);
+        jpeg.extend_from_slice(&12u16.to_be_bytes()); // length
+        jpeg.push(1); // components
+        jpeg.extend_from_slice(&[1, 0x00]); // component selector
+        jpeg.extend_from_slice(&[0x00, 0x3F, 0x00]); // Ss, Se, Ah/Al
+        // Compressed data (minimal)
+        jpeg.extend_from_slice(&[0x7F, 0xA0]);
+        // EOI
+        jpeg.extend_from_slice(&[0xFF, 0xD9]);
+        jpeg
+    }
+
+    #[test]
+    fn test_extract_jpeg_from_mdat_finds_jpeg() {
+        // 构建含有 >200KB JPEG 的 mdat box
+        let mut jpeg = build_minimal_jpeg(3000, 2000);
+        // 填充到 >200KB
+        let padding = vec![0xFFu8; 210 * 1024];
+        // 实际上 JPEG 已经有 EOI，我们在 SOS 数据中加填充
+        // 移除 EOI，加入填充，再加回 EOI
+        jpeg.truncate(jpeg.len() - 2); // 去掉 EOI
+        jpeg.extend_from_slice(&padding);
+        jpeg.extend_from_slice(&[0xFF, 0xD9]); // EOI
+
+        let mut mdat_content = jpeg.clone();
+        let mdat_box = build_isobmff_box(b"mdat", &mdat_content);
+
+        let result = extract_jpeg_from_mdat(&mdat_box);
+        assert!(result.is_some(), "应该能从 mdat 中提取 JPEG");
+        let extracted = result.unwrap();
+        assert_eq!(&extracted[..2], &[0xFF, 0xD8], "提取的应是合法 JPEG");
+    }
+
+    #[test]
+    fn test_extract_jpeg_from_mdat_too_small_falls_through() {
+        // JPEG 小于 200KB 时应返回 None（视为缩略图，不使用）
+        let jpeg = build_minimal_jpeg(100, 80);
+        let mdat_box = build_isobmff_box(b"mdat", &jpeg);
+        let result = extract_jpeg_from_mdat(&mdat_box);
+        assert!(result.is_none(), "小于 200KB 的 mdat JPEG 应跳过");
+    }
+
+    #[test]
+    fn test_extract_jpeg_from_mdat_no_mdat_box() {
+        // 没有 mdat box 时应返回 None
+        let ftyp = build_isobmff_box(b"ftyp", b"crx ");
+        let result = extract_jpeg_from_mdat(&ftyp);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_cr3_mdat_preferred_over_prvw() {
+        // CR3 应优先使用 mdat 中的高分辨率 JPEG 而非 PRVW
+        let mut hq_jpeg = build_minimal_jpeg(6000, 4000);
+        hq_jpeg.truncate(hq_jpeg.len() - 2);
+        hq_jpeg.extend_from_slice(&vec![0x7Fu8; 210 * 1024]);
+        hq_jpeg.extend_from_slice(&[0xFF, 0xD9]);
+
+        let prvw_jpeg = [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10];
+        let prvw_content = build_prvw_box(&prvw_jpeg);
+        let prvw_uuid_box = build_uuid_box(&CR3_PREVIEW_UUID, &prvw_content);
+
+        let mdat_box = build_isobmff_box(b"mdat", &hq_jpeg);
+
+        let mut cr3_data = Vec::new();
+        cr3_data.extend_from_slice(&prvw_uuid_box);
+        cr3_data.extend_from_slice(&mdat_box);
+
+        let result = extract_cr3_jpeg(&cr3_data).unwrap();
+        // 应提取 mdat 中的高分辨率 JPEG（大于 200KB）
+        assert!(result.len() > 200 * 1024, "应提取 mdat 中的高分辨率 JPEG");
+        assert_eq!(&result[..2], &[0xFF, 0xD8]);
+    }
+
     #[test]
     fn test_cr3_extractor() {
         let ext = Cr3Extractor;
