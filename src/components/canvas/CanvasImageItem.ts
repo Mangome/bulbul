@@ -105,7 +105,7 @@ export class CanvasImageItem {
 
   // 悬停动画状态（rAF 驱动，与选中动画同构）
   private hoverAnimStartTime: number = 0;
-  private hoverAnimDirection: 'in' | 'out' = 'in';
+  private hoverAnimDirection: 'in' | 'out' = 'out';
   /** 最近一帧的 hover progress（0-1），用于避免动画完成后继续请求帧 */
   private hoverAnimValue: number = 0;
 
