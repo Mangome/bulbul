@@ -23,6 +23,7 @@ export interface SettingsPanelProps {
   open: boolean;
   onClose: () => void;
   onCacheCleared?: () => void;
+  onOpenAbout?: () => void;
   processingState: ProcessingState;
 }
 
@@ -47,7 +48,7 @@ function IconRefresh() {
 
 // ─── 组件 ─────────────────────────────────────────────
 
-export function SettingsPanel({ open, onClose, onCacheCleared, processingState }: SettingsPanelProps) {
+export function SettingsPanel({ open, onClose, onCacheCleared, onOpenAbout, processingState }: SettingsPanelProps) {
   // 分组参数
   const similarityThreshold = useGroupingStore((s) => s.similarityThreshold);
   const timeGapSeconds = useGroupingStore((s) => s.timeGapSeconds);
@@ -323,6 +324,17 @@ export function SettingsPanel({ open, onClose, onCacheCleared, processingState }
                         : '清理缓存'}
                 </button>
               </div>
+            </div>
+
+            {/* 关于 */}
+            <div className={cls.section}>
+              <button className={cls.aboutBtn} onClick={onOpenAbout}>
+                <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
+                  <circle cx="7.5" cy="7.5" r="6" stroke="currentColor" strokeWidth="1.2" />
+                  <path d="M7.5 10V7M7.5 5h.007" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                </svg>
+                <span>关于 Bulbul</span>
+              </button>
             </div>
           </motion.div>
         </motion.div>

@@ -12,6 +12,7 @@ import InfiniteCanvas, { type InfiniteCanvasHandle } from '../components/canvas/
 import { TopNavBar } from '../components/panels/TopNavBar';
 import { BottomFilmstrip } from '../components/panels/BottomFilmstrip';
 import { SettingsPanel } from '../components/panels/SettingsPanel';
+import { AboutDialog } from '../components/dialogs/AboutDialog';
 import { computeVerticalGridLayout, type LayoutResult, type ImageDimension } from '../utils/layout';
 import * as imageService from '../services/imageService';
 import { runExportFlow } from '../services/exportService';
@@ -40,6 +41,7 @@ function MainPage() {
 
   // ── 设置面板状态 ──
   const [showSettings, setShowSettings] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
 
   // ── 导出流程 ──
   const handleExport = useCallback(async () => {
@@ -355,7 +357,14 @@ function MainPage() {
               open={showSettings}
               onClose={() => setShowSettings(false)}
               onCacheCleared={handleCacheCleared}
+              onOpenAbout={() => { setShowSettings(false); setShowAbout(true); }}
               processingState={processingState}
+            />
+
+            {/* 关于对话框 */}
+            <AboutDialog
+              open={showAbout}
+              onClose={() => setShowAbout(false)}
             />
           </>
         ) : (
