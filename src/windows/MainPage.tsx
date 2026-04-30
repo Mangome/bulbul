@@ -85,7 +85,7 @@ function MainPage() {
       }
 
       const info = await invoke<{
-        path: string; name: string; fileCount: number; rawCount: number;
+        path: string; name: string; fileCount: number; imageCount: number;
       }>('get_folder_info', { path: folder });
       setFolder(folder, info);
       await startProcessing(folder);
@@ -169,7 +169,7 @@ function MainPage() {
           path: string;
           name: string;
           fileCount: number;
-          rawCount: number;
+          imageCount: number;
         }>('get_folder_info', { path: folder });
 
         setFolder(folder, info);
@@ -362,7 +362,7 @@ function MainPage() {
           <div className={cls.placeholder}>
             <p className={cls.placeholderText}>
               {processingState === 'completed' && groups.length === 0
-                ? '该目录下未找到 RAW 文件'
+                ? '该目录下未找到图片文件'
                 : processingState === 'completed'
                   ? '正在准备画布...'
                   : '等待处理完成...'}

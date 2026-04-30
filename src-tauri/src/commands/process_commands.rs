@@ -75,18 +75,18 @@ pub async fn process_folder(
     }
 
     // ═══════════════════════════════════════════════════════
-    // 阶段 1: Scanning — 扫描 NEF 文件
+    // 阶段 1: Scanning — 扫描图片文件
     // ═══════════════════════════════════════════════════════
     emit_progress(&app, ProcessingState::Scanning, 0, 0, None, &pipeline_start);
 
     let scan_start = Instant::now();
     log::info!("[process_folder] 开始扫描: folder_path={}", folder_path);
-    let nef_files = scan_raw_files_internal(Path::new(&folder_path)).map_err(|e| e.to_string())?;
+    let nef_files = scan_image_files_internal(Path::new(&folder_path)).map_err(|e| e.to_string())?;
     let total = nef_files.len();
     let scan_time_ms = scan_start.elapsed().as_secs_f64() * 1000.0;
 
 
-    println!("[process_folder] 扫描到 {} 个 NEF 文件", total);
+    println!("[process_folder] 扫描到 {} 个图片文件", total);
 
     if total == 0 {
         let empty_result = GroupResult {
@@ -307,7 +307,7 @@ pub async fn process_folder(
                 return (path.clone(), Err(format!("已取消: {}", path.display())));
             }
 
-            let result = raw_processor::process_single_raw(&path, &cache)
+            let result = raw_processor::process_single_image(&path, &cache)
                 .await
                 .map_err(|e| format!("{}: {}", path.display(), e));
 
@@ -1053,8 +1053,8 @@ fn handle_cancelled(
     Ok(cancelled_result)
 }
 
-/// 扫描文件夹中的 RAW 文件（非递归，大小写不敏感）
-fn scan_raw_files_internal(folder: &Path) -> Result<Vec<PathBuf>, std::io::Error> {
+/// 扫描文件夹中的图片文件（非递归，大小写不敏感）
+fn scan_image_files_internal(folder: &Path) -> Result<Vec<PathBuf>, std::io::Error> {
     let mut files = Vec::new();
     let mut total_entries = 0usize;
     let mut file_count = 0usize;
@@ -1066,14 +1066,14 @@ fn scan_raw_files_internal(folder: &Path) -> Result<Vec<PathBuf>, std::io::Error
             file_count += 1;
             if let Some(ext) = path.extension() {
                 let ext_str = ext.to_string_lossy();
-                if raw_parser::is_raw_extension(&ext_str) {
+                if raw_parser::is_supported_extension(&ext_str) {
                     files.push(path);
                 }
             }
         }
     }
     log::debug!(
-        "[scan_raw_files] folder={}, total_entries={}, file_count={}, raw_count={}",
+        "[scan_image_files] folder={}, total_entries={}, file_count={}, image_count={}",
         folder.display(), total_entries, file_count, files.len()
     );
     Ok(files)

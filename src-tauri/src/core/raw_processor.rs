@@ -1,11 +1,11 @@
-//! RAW 图像处理器
+//! 图像处理器
 //!
-//! 协调 NEF 解析与 Exif 提取，将嵌入 JPEG 解码并保存为 medium 图片，
+//! 协调图片解析与 Exif 提取，将图像数据解码并保存为 medium 图片，
 //! 生成 600px 长边缩略图。
 //!
 //! 性能关键路径：
-//! - 使用 seek 而非全量读取来提取嵌入 JPEG（避免 30-60MB 全量 IO）
-//! - Exif 解析仅读取文件头部
+//! - 使用 seek 而非全量读取来提取嵌入 JPEG（避免 30-60MB 全量 IO，仅 RAW 格式）
+//! - Exif 解析仅读取文件头部（仅 TIFF/EP 格式）
 //! - 图像处理使用 spawn_blocking 避免阻塞 tokio 异步运行时
 
 use std::io::Cursor;
@@ -45,15 +45,15 @@ pub struct ProcessResult {
     pub thumbnail_path: String,
 }
 
-/// 处理单个 RAW 文件
+/// 处理单个图片文件
 ///
-/// 流程：计算哈希 → 检查缓存 → 提取嵌入 JPEG → 解析 Exif → 保存 medium → 生成缩略图
+/// 流程：计算哈希 → 检查缓存 → 获取图像数据 → 解析 Exif → 保存 medium → 生成缩略图
 ///
 /// 性能优化：
 /// - 缓存命中：仅读取 64KB 头部解析 Exif，跳过全量读取
-/// - 缓存未命中：全量读取后，JPEG 提取和 Exif 解析共享同一份数据
+/// - 缓存未命中：全量读取后，图像数据获取和 Exif 解析共享同一份数据
 /// - 图像解码/缩放在 blocking 线程池中执行
-pub async fn process_single_raw(
+pub async fn process_single_image(
     file_path: &Path,
     cache_base_dir: &Path,
 ) -> Result<ProcessResult, AppError> {
@@ -112,19 +112,19 @@ pub async fn process_single_raw(
         AppError::FileNotFound(format!("{}: {}", file_path.display(), e))
     })?;
 
-    // 从同一份数据中提取 JPEG 和 Exif（使用格式特定的 Extractor）
-    let jpeg_data = extractor.extract_jpeg(&data)?;
+    // 从同一份数据中获取图像数据和 Exif（使用格式特定的 Extractor）
+    let image_data = extractor.get_image_data(&data)?;
     let metadata = extractor.extract_metadata(&data)?;
 
-    // 不再需要原始 RAW 数据，尽早释放
+    // 不再需要原始文件数据，尽早释放
     drop(data);
 
     // 生成 medium 和缩略图（CPU 密集型，在 blocking 线程池中执行）
-    let jpeg_clone = jpeg_data.clone();
+    let image_clone = image_data.clone();
     let (medium_data, thumbnail_data) = tokio::task::spawn_blocking(move || {
-        let medium = generate_medium(&jpeg_clone)
+        let medium = generate_medium(&image_clone)
             .map_err(|e| AppError::ImageProcessError(format!("Medium 生成失败: {}", e)))?;
-        let thumbnail = generate_thumbnail(&jpeg_clone)
+        let thumbnail = generate_thumbnail(&image_clone)
             .map_err(|e| AppError::ImageProcessError(format!("缩略图生成失败: {}", e)))?;
         Ok::<_, AppError>((medium, thumbnail))
     })
@@ -154,7 +154,7 @@ pub async fn process_single_raw(
 async fn read_exif_from_header(
     file_path: &Path,
     exif_header_size: usize,
-    extractor: &dyn raw_parser::RawExtractor,
+    extractor: &dyn raw_parser::ImageExtractor,
 ) -> Result<ImageMetadata, AppError> {
     use tokio::io::AsyncReadExt;
 
@@ -187,7 +187,7 @@ async fn read_exif_from_header(
 /// 600px 需要高质量缩放，使用 Lanczos3 保证清晰度
 pub fn generate_thumbnail(jpeg_data: &[u8]) -> Result<Vec<u8>, AppError> {
     let img = image::load_from_memory(jpeg_data)
-        .map_err(|e| AppError::ImageProcessError(format!("JPEG 解码失败: {}", e)))?;
+        .map_err(|e| AppError::ImageProcessError(format!("图像解码失败: {}", e)))?;
 
     let (orig_width, orig_height) = (img.width(), img.height());
 
@@ -217,7 +217,7 @@ pub fn generate_thumbnail(jpeg_data: &[u8]) -> Result<Vec<u8>, AppError> {
 /// 解码 JPEG → 按比例缩放到 1920px 宽（Lanczos3）→ 编码为 JPEG（质量 80%）
 pub fn generate_medium(jpeg_data: &[u8]) -> Result<Vec<u8>, AppError> {
     let img = image::load_from_memory(jpeg_data)
-        .map_err(|e| AppError::ImageProcessError(format!("Medium JPEG 解码失败: {}", e)))?;
+        .map_err(|e| AppError::ImageProcessError(format!("图像解码失败: {}", e)))?;
 
     let (orig_width, orig_height) = (img.width(), img.height());
 

@@ -75,7 +75,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::file_commands::select_folder,
             commands::file_commands::get_folder_info,
-            commands::file_commands::scan_raw_files,
+            commands::file_commands::scan_image_files,
             commands::file_commands::get_current_folder,
             commands::window_commands::open_main_window,
             commands::process_commands::process_folder,

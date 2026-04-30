@@ -14,7 +14,7 @@ pub struct FolderInfo {
     pub path: String,
     pub name: String,
     pub file_count: usize,
-    pub raw_count: usize,
+    pub image_count: usize,
 }
 
 /// 扫描结果
@@ -39,7 +39,7 @@ pub async fn select_folder(app: tauri::AppHandle) -> Result<Option<String>, Stri
     }
 }
 
-/// 获取文件夹信息（文件总数、RAW 文件数量）
+/// 获取文件夹信息（文件总数、图片文件数量）
 #[tauri::command]
 pub async fn get_folder_info(path: String) -> Result<FolderInfo, String> {
     let dir_path = Path::new(&path);
@@ -49,7 +49,7 @@ pub async fn get_folder_info(path: String) -> Result<FolderInfo, String> {
     }
 
     let mut file_count = 0usize;
-    let mut raw_count = 0usize;
+    let mut image_count = 0usize;
 
     let entries = std::fs::read_dir(dir_path)
         .map_err(|e| AppError::IoError(e).to_string())?;
@@ -60,8 +60,8 @@ pub async fn get_folder_info(path: String) -> Result<FolderInfo, String> {
         if path.is_file() {
             file_count += 1;
             if let Some(ext) = path.extension() {
-                if raw_parser::is_raw_extension(&ext.to_string_lossy()) {
-                    raw_count += 1;
+                if raw_parser::is_supported_extension(&ext.to_string_lossy()) {
+                    image_count += 1;
                 }
             }
         }
@@ -76,13 +76,13 @@ pub async fn get_folder_info(path: String) -> Result<FolderInfo, String> {
         path: path.clone(),
         name,
         file_count,
-        raw_count,
+        image_count,
     })
 }
 
-/// 扫描文件夹中的所有 RAW 文件（非递归，大小写不敏感）
+/// 扫描文件夹中的所有图片文件（非递归，大小写不敏感）
 #[tauri::command]
-pub async fn scan_raw_files(path: String) -> Result<ScanResult, String> {
+pub async fn scan_image_files(path: String) -> Result<ScanResult, String> {
     let dir_path = Path::new(&path);
 
     if !dir_path.exists() {
@@ -99,7 +99,7 @@ pub async fn scan_raw_files(path: String) -> Result<ScanResult, String> {
         let path = entry.path();
         if path.is_file() {
             if let Some(ext) = path.extension() {
-                if raw_parser::is_raw_extension(&ext.to_string_lossy()) {
+                if raw_parser::is_supported_extension(&ext.to_string_lossy()) {
                     files.push(path.to_string_lossy().to_string());
                 }
             }
@@ -127,9 +127,9 @@ mod tests {
     use tempfile::tempdir;
 
     // 注意：select_folder 需要 Tauri AppHandle，无法在纯单元测试中测试。
-    // get_folder_info 和 scan_raw_files 可以使用临时目录测试。
+    // get_folder_info 和 scan_image_files 可以使用临时目录测试。
 
-    // 由于 get_folder_info 和 scan_raw_files 是 async 函数，
+    // 由于 get_folder_info 和 scan_image_files 是 async 函数，
     // 我们使用 tokio::test 来测试
 
     #[tokio::test]
@@ -146,7 +146,7 @@ mod tests {
 
         let info = get_folder_info(dir_path.to_string_lossy().to_string()).await.unwrap();
         assert_eq!(info.file_count, 5);
-        assert_eq!(info.raw_count, 3); // img1.nef, img2.NEF, img4.nef
+        assert_eq!(info.image_count, 4); // img1.nef, img2.NEF, img3.jpg, img4.nef
     }
 
     #[tokio::test]
@@ -156,7 +156,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_scan_raw_files() {
+    async fn test_scan_image_files() {
         let dir = tempdir().unwrap();
         let dir_path = dir.path();
 
@@ -164,15 +164,15 @@ mod tests {
         File::create(dir_path.join("photo2.NEF")).unwrap().write_all(b"nef").unwrap();
         File::create(dir_path.join("photo3.jpg")).unwrap().write_all(b"jpg").unwrap();
 
-        let result = scan_raw_files(dir_path.to_string_lossy().to_string()).await.unwrap();
-        assert_eq!(result.count, 2);
-        assert_eq!(result.files.len(), 2);
+        let result = scan_image_files(dir_path.to_string_lossy().to_string()).await.unwrap();
+        assert_eq!(result.count, 3); // photo1.nef, photo2.NEF, photo3.jpg
+        assert_eq!(result.files.len(), 3);
     }
 
     #[tokio::test]
-    async fn test_scan_raw_files_empty_folder() {
+    async fn test_scan_image_files_empty_folder() {
         let dir = tempdir().unwrap();
-        let result = scan_raw_files(dir.path().to_string_lossy().to_string()).await.unwrap();
+        let result = scan_image_files(dir.path().to_string_lossy().to_string()).await.unwrap();
         assert_eq!(result.count, 0);
         assert!(result.files.is_empty());
     }

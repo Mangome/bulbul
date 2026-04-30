@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { selectFolder, getFolderInfo, scanRawFiles } from './fileService';
+import { selectFolder, getFolderInfo, scanImageFiles } from './fileService';
 
 // Mock @tauri-apps/api/core
 vi.mock('@tauri-apps/api/core', () => ({
@@ -18,7 +18,7 @@ describe('fileService', () => {
   });
 
   it('getFolderInfo should call invoke with correct params', async () => {
-    const folderInfo = { path: '/path', name: 'test', fileCount: 10, rawCount: 5 };
+    const folderInfo = { path: '/path', name: 'test', fileCount: 10, imageCount: 5 };
     mockInvoke.mockResolvedValueOnce(folderInfo);
 
     const result = await getFolderInfo('/path');
@@ -26,12 +26,12 @@ describe('fileService', () => {
     expect(result).toEqual(folderInfo);
   });
 
-  it('scanRawFiles should call invoke with correct params', async () => {
+  it('scanImageFiles should call invoke with correct params', async () => {
     const scanResult = { files: ['/a.nef', '/b.nef'], count: 2 };
     mockInvoke.mockResolvedValueOnce(scanResult);
 
-    const result = await scanRawFiles('/path');
-    expect(mockInvoke).toHaveBeenCalledWith('scan_raw_files', { path: '/path' });
+    const result = await scanImageFiles('/path');
+    expect(mockInvoke).toHaveBeenCalledWith('scan_image_files', { path: '/path' });
     expect(result).toEqual(scanResult);
   });
 });

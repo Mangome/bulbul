@@ -67,7 +67,7 @@ function WelcomePage() {
           onClick={handleSelectFolder}
           disabled={loading}
           aria-busy={loading}
-          aria-label="选择 RAW 文件夹以开始筛选"
+          aria-label="选择图片文件夹以开始筛选"
         >
           <span className={cls.buttonLabel}>
             {loading ? '正在打开…' : '选择文件夹'}

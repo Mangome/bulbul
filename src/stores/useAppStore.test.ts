@@ -23,7 +23,7 @@ describe('useAppStore', () => {
       path: '/path/to/folder',
       name: 'folder',
       fileCount: 10,
-      rawCount: 5,
+      imageCount: 5,
     };
 
     useAppStore.getState().setFolder('/path/to/folder', folderInfo);
@@ -79,7 +79,7 @@ describe('useAppStore', () => {
       path: '/path',
       name: 'test',
       fileCount: 5,
-      rawCount: 3,
+      imageCount: 3,
     };
 
     useAppStore.getState().setFolder('/path', folderInfo);

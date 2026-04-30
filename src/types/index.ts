@@ -19,7 +19,7 @@ export interface DetectionBox {
 /** 合焦评分方法 */
 export type FocusScoringMethod = "FullImage" | "BirdRegion" | "Undetected";
 
-/** RAW 图像元数据 */
+/** 图像元数据 */
 export interface ImageMetadata {
   // 时间信息
   captureTime: string | null;
@@ -136,7 +136,7 @@ export interface FolderInfo {
   path: string;
   name: string;
   fileCount: number;
-  rawCount: number;
+  imageCount: number;
 }
 
 /** 扫描结果 */

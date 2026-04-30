@@ -7,8 +7,8 @@ pub enum AppError {
     #[error("文件未找到: {0}")]
     FileNotFound(String),
 
-    #[error("RAW 解析错误: {0}")]
-    RawParseError(String),
+    #[error("图片解析错误: {0}")]
+    ImageParseError(String),
 
     #[error("EXIF 读取错误: {0}")]
     ExifError(String),
@@ -50,7 +50,7 @@ impl AppError {
     pub fn user_message(&self) -> String {
         match self {
             AppError::FileNotFound(path) => format!("找不到文件「{}」，请检查路径是否正确", path),
-            AppError::RawParseError(_) => "RAW 文件解析失败，该文件可能已损坏或格式不受支持".to_string(),
+            AppError::ImageParseError(_) => "图片解析失败，该文件可能已损坏或格式不受支持".to_string(),
             AppError::ExifError(_) => "无法读取照片的拍摄信息，该文件的 EXIF 数据可能缺失".to_string(),
             AppError::NoEmbeddedJpeg => "该 RAW 文件中未找到预览图像".to_string(),
             AppError::ImageProcessError(_) => "图像处理过程中出现错误，请重试".to_string(),
@@ -87,10 +87,10 @@ mod tests {
     }
 
     #[test]
-    fn test_raw_parse_error_serialization() {
-        let err = AppError::RawParseError("invalid header".to_string());
+    fn test_image_parse_error_serialization() {
+        let err = AppError::ImageParseError("invalid header".to_string());
         let json = serde_json::to_string(&err).unwrap();
-        assert_eq!(json, "\"RAW 解析错误: invalid header\"");
+        assert_eq!(json, "\"图片解析错误: invalid header\"");
     }
 
     #[test]
@@ -213,9 +213,9 @@ mod tests {
     }
 
     #[test]
-    fn test_raw_parse_error_user_message() {
-        let err = AppError::RawParseError("bad format".to_string());
-        assert!(err.user_message().contains("RAW 文件解析失败"));
+    fn test_image_parse_error_user_message() {
+        let err = AppError::ImageParseError("bad format".to_string());
+        assert!(err.user_message().contains("图片解析失败"));
     }
 
     #[test]

@@ -1,20 +1,38 @@
 //! RAW/TIFF IFD 链解析器
 //!
 //! 手动解析 TIFF 格式的 IFD 链，定位并提取 RAW 文件中嵌入的最大 JPEG 预览图。
-//! 定义 `RawExtractor` trait 用于多 RAW 格式扩展。
+//! 定义 `ImageExtractor` trait 用于多图片格式扩展。
 
 use crate::models::{AppError, ImageMetadata};
 
-// ─── 支持的 RAW 格式 ────────────────────────────────────
+// ─── 支持的图片格式 ────────────────────────────────────
 
 /// 所有支持的 RAW 文件扩展名（小写，不含点号，按字母序排列）
+#[allow(dead_code)]
 pub const SUPPORTED_RAW_EXTENSIONS: &[&str] = &[
     "arw", "cr2", "cr3", "dng", "nef", "orf", "pef", "raf", "rw2",
 ];
 
+/// 所有支持的非 RAW 图片文件扩展名（小写，不含点号）
+#[allow(dead_code)]
+pub const SUPPORTED_IMAGE_EXTENSIONS: &[&str] = &[
+    "jpg", "jpeg", "png", "tiff", "tif", "webp",
+];
+
+/// 所有支持的图片文件扩展名（RAW + 非RAW，小写，不含点号）
+pub const ALL_SUPPORTED_EXTENSIONS: &[&str] = &[
+    "arw", "cr2", "cr3", "dng", "jpg", "jpeg", "nef", "orf", "pef", "png", "raf", "rw2", "tif", "tiff", "webp",
+];
+
 /// 判断给定扩展名是否属于支持的 RAW 格式（大小写不敏感）
+#[allow(dead_code)]
 pub fn is_raw_extension(extension: &str) -> bool {
     SUPPORTED_RAW_EXTENSIONS.contains(&extension.to_lowercase().as_str())
+}
+
+/// 判断给定扩展名是否属于支持的图片格式（大小写不敏感）
+pub fn is_supported_extension(extension: &str) -> bool {
+    ALL_SUPPORTED_EXTENSIONS.contains(&extension.to_lowercase().as_str())
 }
 
 // ─── TIFF 常量 ─────────────────────────────────────────
@@ -35,6 +53,7 @@ const TAG_COMPRESSION: u16 = 0x0103; // Compression
 const TAG_STRIP_OFFSETS: u16 = 0x0111; // StripOffsets
 const TAG_STRIP_BYTE_COUNTS: u16 = 0x0117; // StripByteCounts
 const COMPRESSION_JPEG: u16 = 7; // JPEG 压缩（DNG 等格式使用）
+const COMPRESSION_OLD_JPEG: u16 = 6; // Old-style JPEG 压缩（CR2 等格式使用）
 const JPEG_SOI: [u8; 2] = [0xFF, 0xD8];
 
 // ─── 字节序 ─────────────────────────────────────────────
@@ -82,7 +101,7 @@ struct JpegCandidate {
 /// 解析 TIFF 头，返回 (字节序, IFD0 偏移量)
 fn parse_tiff_header(data: &[u8]) -> Result<(ByteOrder, usize), AppError> {
     if data.len() < 8 {
-        return Err(AppError::RawParseError(format!(
+        return Err(AppError::ImageParseError(format!(
             "文件过短: {} 字节，最少需要 8 字节",
             data.len()
         )));
@@ -92,7 +111,7 @@ fn parse_tiff_header(data: &[u8]) -> Result<(ByteOrder, usize), AppError> {
         (0x49, 0x49) => ByteOrder::LittleEndian,
         (0x4D, 0x4D) => ByteOrder::BigEndian,
         _ => {
-            return Err(AppError::RawParseError(format!(
+            return Err(AppError::ImageParseError(format!(
                 "无效的字节序标记: 0x{:02X} 0x{:02X}",
                 data[0], data[1]
             )))
@@ -101,7 +120,7 @@ fn parse_tiff_header(data: &[u8]) -> Result<(ByteOrder, usize), AppError> {
 
     let magic = byte_order
         .read_u16(data, 2)
-        .ok_or_else(|| AppError::RawParseError("无法读取 TIFF 魔数".into()))?;
+        .ok_or_else(|| AppError::ImageParseError("无法读取 TIFF 魔数".into()))?;
 
     if magic != TIFF_MAGIC
         && magic != ORF_MAGIC_LE_RO
@@ -109,7 +128,7 @@ fn parse_tiff_header(data: &[u8]) -> Result<(ByteOrder, usize), AppError> {
         && magic != ORF_MAGIC_BE_RO
         && magic != ORF_MAGIC_BE_RS
     {
-        return Err(AppError::RawParseError(format!(
+        return Err(AppError::ImageParseError(format!(
             "无效的 TIFF 魔数: {}，期望 42 或 ORF 变体",
             magic
         )));
@@ -117,7 +136,7 @@ fn parse_tiff_header(data: &[u8]) -> Result<(ByteOrder, usize), AppError> {
 
     let ifd0_offset = byte_order
         .read_u32(data, 4)
-        .ok_or_else(|| AppError::RawParseError("无法读取 IFD0 偏移量".into()))?
+        .ok_or_else(|| AppError::ImageParseError("无法读取 IFD0 偏移量".into()))?
         as usize;
 
     Ok((byte_order, ifd0_offset))
@@ -139,7 +158,7 @@ fn parse_ifd(
 
     let entry_count = bo
         .read_u16(data, ifd_offset)
-        .ok_or_else(|| AppError::RawParseError("无法读取 IFD entry 数量".into()))?
+        .ok_or_else(|| AppError::ImageParseError("无法读取 IFD entry 数量".into()))?
         as usize;
 
     let mut jpeg_offset: Option<u32> = None;
@@ -204,8 +223,9 @@ fn parse_ifd(
         });
     }
 
-    // 方式 2：DNG 等格式使用 StripOffsets + StripByteCounts + Compression=7 (JPEG)
-    if compression == Some(COMPRESSION_JPEG) {
+    // 方式 2：StripOffsets + StripByteCounts + JPEG 压缩
+    // Compression=7 (JPEG, DNG 等格式) 或 Compression=6 (Old-style JPEG, CR2 等格式)
+    if compression == Some(COMPRESSION_JPEG) || compression == Some(COMPRESSION_OLD_JPEG) {
         if let (Some(offsets), Some(counts)) = (&strip_offsets, &strip_byte_counts) {
             if offsets.len() == counts.len() {
                 // 多 strip 拼接为单个 JPEG
@@ -340,6 +360,58 @@ fn read_sub_ifd_offsets(data: &[u8], bo: ByteOrder, value_offset: usize, count: 
 
 // ─── 嵌入 JPEG 提取 ─────────────────────────────────────
 
+/// 检查 JPEG 数据是否为可浏览的图像（而非压缩 RAW 传感器数据）
+///
+/// CR2 等 RAW 格式在 IFD 中使用 Compression=6 存储压缩传感器数据，
+/// 这些数据以 SOI 开头但 SOF 标记的 components 字段为 0 或异常值（如 24），
+/// 标准 JPEG 解码器无法处理。真正的预览 JPEG 的 components 为 1（灰度）或 3（YCbCr）。
+///
+/// 返回值：
+/// - `Some(true)` — 发现 SOF 且 components 正常（1 或 3）
+/// - `Some(false)` — 发现 SOF 且 components 异常
+/// - `None` — 未发现 SOF，无法判断（不拒绝）
+fn check_jpeg_sof_components(data: &[u8], offset: usize, length: usize) -> Option<bool> {
+    let end = offset.saturating_add(length).min(data.len());
+    let mut i = offset + 2; // 跳过 SOI (0xFFD8)
+
+    while i + 1 < end {
+        if data[i] != 0xFF {
+            i += 1;
+            continue;
+        }
+        let marker = data[i + 1];
+        i += 2;
+
+        // SOF0 (0xC0), SOF1 (0xC1), SOF2 (0xC2) — 检查 components 字段
+        // SOF layout after marker: length(2) + precision(1) + height(2) + width(2) + num_components(1)
+        if marker == 0xC0 || marker == 0xC1 || marker == 0xC2 {
+            if i + 7 < end {
+                let num_components = data[i + 7];
+                return Some(num_components == 1 || num_components == 3);
+            }
+            return Some(false);
+        }
+
+        // RST0-RST7, SOI, EOI — 无载荷，继续扫描
+        if (0xD0..=0xD9).contains(&marker) || marker == 0x00 {
+            continue;
+        }
+
+        // 其他标记 — 跳过载荷
+        if i + 2 > end {
+            break;
+        }
+        let seg_len = ((data[i] as usize) << 8) | data[i + 1] as usize;
+        if seg_len < 2 {
+            break;
+        }
+        i += seg_len;
+    }
+
+    // 未找到 SOF 标记，无法判断，不拒绝
+    None
+}
+
 /// 遍历所有 IFD/SubIFD，提取最大的嵌入 JPEG
 pub fn extract_largest_jpeg(data: &[u8]) -> Result<Vec<u8>, AppError> {
     let (bo, ifd0_offset) = parse_tiff_header(data)?;
@@ -363,46 +435,62 @@ pub fn extract_largest_jpeg(data: &[u8]) -> Result<Vec<u8>, AppError> {
         }
     }
 
-    // 选择最大的有效 JPEG
-    let mut best: Option<(usize, usize)> = None; // (offset, length)
+    // 按大小降序排列，优先选择最大的有效 JPEG
+    all_candidates.sort_by(|a, b| b.length.cmp(&a.length));
 
-    for candidate in &all_candidates {
-        // 越界检查
-        if candidate.offset + candidate.length > data.len() {
-            continue;
-        }
-        // SOI 魔数验证
-        if candidate.offset + 1 >= data.len() {
-            continue;
-        }
-        if data[candidate.offset] != JPEG_SOI[0] || data[candidate.offset + 1] != JPEG_SOI[1] {
-            continue;
-        }
-        // 选最大的
-        match &best {
-            Some((_, best_len)) if candidate.length <= *best_len => {}
-            _ => {
-                best = Some((candidate.offset, candidate.length));
+    // 两轮筛选：
+    // 第一轮：优先选择 SOF 验证通过（components=1 或 3）的候选
+    // 第二轮：兜底选择 SOF 未知的候选（无 SOF 标记）
+    // 始终跳过 SOF 明确异常（components=0 或 >4）的候选
+    for pass in 0..2 {
+        for candidate in &all_candidates {
+            // 越界检查
+            if candidate.offset + candidate.length > data.len() {
+                continue;
+            }
+            // SOI 魔数验证
+            if candidate.offset + 1 >= data.len() {
+                continue;
+            }
+            if data[candidate.offset] != JPEG_SOI[0] || data[candidate.offset + 1] != JPEG_SOI[1] {
+                continue;
+            }
+            let sof_result = check_jpeg_sof_components(data, candidate.offset, candidate.length);
+            match sof_result {
+                Some(true) => {
+                    // SOF 验证通过，第一轮就返回
+                    return Ok(data[candidate.offset..candidate.offset + candidate.length].to_vec());
+                }
+                Some(false) => {
+                    // SOF 明确异常，始终跳过
+                    continue;
+                }
+                None => {
+                    // SOF 未知，第一轮跳过，第二轮兜底
+                    if pass == 1 {
+                        return Ok(data[candidate.offset..candidate.offset + candidate.length].to_vec());
+                    }
+                }
             }
         }
     }
 
-    match best {
-        Some((offset, length)) => Ok(data[offset..offset + length].to_vec()),
-        None => Err(AppError::NoEmbeddedJpeg),
-    }
+    Err(AppError::NoEmbeddedJpeg)
 }
 
-// ─── RawExtractor trait ──────────────────────────────────
+// ─── ImageExtractor trait ─────────────────────────────────
 
-/// RAW 格式提取器 trait，支持多 RAW 格式扩展
+/// 图片格式提取器 trait，支持 RAW 和非 RAW 格式扩展
 #[allow(dead_code)]
-pub trait RawExtractor: Send + Sync {
+pub trait ImageExtractor: Send + Sync {
     /// 支持的文件扩展名（小写，不含点）
     fn supported_extensions(&self) -> &[&str];
 
-    /// 提取嵌入 JPEG
-    fn extract_jpeg(&self, data: &[u8]) -> Result<Vec<u8>, AppError>;
+    /// 获取图像数据
+    ///
+    /// RAW 格式返回从容器中提取的嵌入 JPEG 数据；
+    /// 非 RAW 格式（JPEG/PNG/TIFF/WebP）返回原始文件字节。
+    fn get_image_data(&self, data: &[u8]) -> Result<Vec<u8>, AppError>;
 
     /// 解析 Exif 元数据
     fn extract_metadata(&self, data: &[u8]) -> Result<ImageMetadata, AppError>;
@@ -417,12 +505,12 @@ pub trait RawExtractor: Send + Sync {
 /// Nikon NEF 格式提取器
 pub struct NefExtractor;
 
-impl RawExtractor for NefExtractor {
+impl ImageExtractor for NefExtractor {
     fn supported_extensions(&self) -> &[&str] {
         &["nef"]
     }
 
-    fn extract_jpeg(&self, data: &[u8]) -> Result<Vec<u8>, AppError> {
+    fn get_image_data(&self, data: &[u8]) -> Result<Vec<u8>, AppError> {
         extract_largest_jpeg(data)
     }
 
@@ -442,12 +530,12 @@ impl RawExtractor for NefExtractor {
 /// Canon CR2 格式提取器
 pub struct Cr2Extractor;
 
-impl RawExtractor for Cr2Extractor {
+impl ImageExtractor for Cr2Extractor {
     fn supported_extensions(&self) -> &[&str] {
         &["cr2"]
     }
 
-    fn extract_jpeg(&self, data: &[u8]) -> Result<Vec<u8>, AppError> {
+    fn get_image_data(&self, data: &[u8]) -> Result<Vec<u8>, AppError> {
         extract_largest_jpeg(data)
     }
 
@@ -463,12 +551,12 @@ impl RawExtractor for Cr2Extractor {
 /// Sony ARW 格式提取器
 pub struct ArwExtractor;
 
-impl RawExtractor for ArwExtractor {
+impl ImageExtractor for ArwExtractor {
     fn supported_extensions(&self) -> &[&str] {
         &["arw"]
     }
 
-    fn extract_jpeg(&self, data: &[u8]) -> Result<Vec<u8>, AppError> {
+    fn get_image_data(&self, data: &[u8]) -> Result<Vec<u8>, AppError> {
         extract_largest_jpeg(data)
     }
 
@@ -484,12 +572,12 @@ impl RawExtractor for ArwExtractor {
 /// Adobe DNG 格式提取器
 pub struct DngExtractor;
 
-impl RawExtractor for DngExtractor {
+impl ImageExtractor for DngExtractor {
     fn supported_extensions(&self) -> &[&str] {
         &["dng"]
     }
 
-    fn extract_jpeg(&self, data: &[u8]) -> Result<Vec<u8>, AppError> {
+    fn get_image_data(&self, data: &[u8]) -> Result<Vec<u8>, AppError> {
         extract_largest_jpeg(data)
     }
 
@@ -625,12 +713,12 @@ fn find_jpeg_eoi(data: &[u8], start: usize) -> Option<usize> {
 /// Olympus ORF 格式提取器
 pub struct OrfExtractor;
 
-impl RawExtractor for OrfExtractor {
+impl ImageExtractor for OrfExtractor {
     fn supported_extensions(&self) -> &[&str] {
         &["orf"]
     }
 
-    fn extract_jpeg(&self, data: &[u8]) -> Result<Vec<u8>, AppError> {
+    fn get_image_data(&self, data: &[u8]) -> Result<Vec<u8>, AppError> {
         extract_orf_jpeg(data)
     }
 
@@ -665,12 +753,12 @@ impl RawExtractor for OrfExtractor {
 /// Panasonic RW2 格式提取器
 pub struct Rw2Extractor;
 
-impl RawExtractor for Rw2Extractor {
+impl ImageExtractor for Rw2Extractor {
     fn supported_extensions(&self) -> &[&str] {
         &["rw2"]
     }
 
-    fn extract_jpeg(&self, data: &[u8]) -> Result<Vec<u8>, AppError> {
+    fn get_image_data(&self, data: &[u8]) -> Result<Vec<u8>, AppError> {
         extract_largest_jpeg(data)
     }
 
@@ -686,12 +774,12 @@ impl RawExtractor for Rw2Extractor {
 /// Pentax PEF 格式提取器
 pub struct PefExtractor;
 
-impl RawExtractor for PefExtractor {
+impl ImageExtractor for PefExtractor {
     fn supported_extensions(&self) -> &[&str] {
         &["pef"]
     }
 
-    fn extract_jpeg(&self, data: &[u8]) -> Result<Vec<u8>, AppError> {
+    fn get_image_data(&self, data: &[u8]) -> Result<Vec<u8>, AppError> {
         extract_largest_jpeg(data)
     }
 
@@ -720,7 +808,7 @@ const RAF_HEADER_SIZE: usize = 148;
 /// - 88-91: JPEG 长度（big-endian u32）
 fn parse_raf_header(data: &[u8]) -> Result<(usize, usize), AppError> {
     if data.len() < RAF_HEADER_SIZE {
-        return Err(AppError::RawParseError(format!(
+        return Err(AppError::ImageParseError(format!(
             "RAF 文件过短: {} 字节，最少需要 {} 字节",
             data.len(),
             RAF_HEADER_SIZE
@@ -729,7 +817,7 @@ fn parse_raf_header(data: &[u8]) -> Result<(usize, usize), AppError> {
 
     // 验证魔数
     if &data[0..15] != RAF_MAGIC {
-        return Err(AppError::RawParseError(
+        return Err(AppError::ImageParseError(
             "无效的 RAF 文件魔数".into(),
         ));
     }
@@ -747,7 +835,7 @@ fn extract_raf_jpeg(data: &[u8]) -> Result<Vec<u8>, AppError> {
 
     // 越界检查
     if jpeg_offset + jpeg_length > data.len() {
-        return Err(AppError::RawParseError(format!(
+        return Err(AppError::ImageParseError(format!(
             "RAF JPEG 数据越界: 偏移 {} + 长度 {} > 文件大小 {}",
             jpeg_offset,
             jpeg_length,
@@ -766,12 +854,12 @@ fn extract_raf_jpeg(data: &[u8]) -> Result<Vec<u8>, AppError> {
 /// Fuji RAF 格式提取器
 pub struct RafExtractor;
 
-impl RawExtractor for RafExtractor {
+impl ImageExtractor for RafExtractor {
     fn supported_extensions(&self) -> &[&str] {
         &["raf"]
     }
 
-    fn extract_jpeg(&self, data: &[u8]) -> Result<Vec<u8>, AppError> {
+    fn get_image_data(&self, data: &[u8]) -> Result<Vec<u8>, AppError> {
         extract_raf_jpeg(data)
     }
 
@@ -788,8 +876,8 @@ impl RawExtractor for RafExtractor {
     }
 }
 
-/// 根据文件扩展名选择对应的 RawExtractor
-pub fn get_extractor(extension: &str) -> Result<Box<dyn RawExtractor>, AppError> {
+/// 根据文件扩展名选择对应的 ImageExtractor
+pub fn get_extractor(extension: &str) -> Result<Box<dyn ImageExtractor>, AppError> {
     match extension.to_lowercase().as_str() {
         "nef" => Ok(Box::new(NefExtractor)),
         "cr2" => Ok(Box::new(Cr2Extractor)),
@@ -800,10 +888,102 @@ pub fn get_extractor(extension: &str) -> Result<Box<dyn RawExtractor>, AppError>
         "pef" => Ok(Box::new(PefExtractor)),
         "raf" => Ok(Box::new(RafExtractor)),
         "cr3" => Ok(Box::new(Cr3Extractor)),
-        ext => Err(AppError::RawParseError(format!(
-            "不支持的 RAW 格式: .{}",
+        "jpg" | "jpeg" => Ok(Box::new(JpegExtractor)),
+        "png" => Ok(Box::new(PngExtractor)),
+        "tiff" | "tif" => Ok(Box::new(TiffExtractor)),
+        "webp" => Ok(Box::new(WebpExtractor)),
+        ext => Err(AppError::ImageParseError(format!(
+            "不支持的图片格式: .{}",
             ext
         ))),
+    }
+}
+
+// ─── 非 RAW 格式 Extractor ────────────────────────────────
+
+/// JPEG 格式提取器
+pub struct JpegExtractor;
+
+impl ImageExtractor for JpegExtractor {
+    fn supported_extensions(&self) -> &[&str] {
+        &["jpg", "jpeg"]
+    }
+
+    fn get_image_data(&self, data: &[u8]) -> Result<Vec<u8>, AppError> {
+        Ok(data.to_vec())
+    }
+
+    fn extract_metadata(&self, data: &[u8]) -> Result<ImageMetadata, AppError> {
+        crate::core::metadata::parse_exif(data)
+    }
+
+    fn exif_header_size(&self) -> usize {
+        0
+    }
+}
+
+/// PNG 格式提取器
+pub struct PngExtractor;
+
+impl ImageExtractor for PngExtractor {
+    fn supported_extensions(&self) -> &[&str] {
+        &["png"]
+    }
+
+    fn get_image_data(&self, data: &[u8]) -> Result<Vec<u8>, AppError> {
+        Ok(data.to_vec())
+    }
+
+    fn extract_metadata(&self, _data: &[u8]) -> Result<ImageMetadata, AppError> {
+        Ok(ImageMetadata::default())
+    }
+
+    fn exif_header_size(&self) -> usize {
+        0
+    }
+}
+
+/// TIFF 格式提取器
+pub struct TiffExtractor;
+
+impl ImageExtractor for TiffExtractor {
+    fn supported_extensions(&self) -> &[&str] {
+        &["tiff", "tif"]
+    }
+
+    fn get_image_data(&self, data: &[u8]) -> Result<Vec<u8>, AppError> {
+        Ok(data.to_vec())
+    }
+
+    fn extract_metadata(&self, data: &[u8]) -> Result<ImageMetadata, AppError> {
+        crate::core::metadata::parse_exif(data)
+    }
+
+    fn exif_header_size(&self) -> usize {
+        0
+    }
+}
+
+/// WebP 格式提取器
+pub struct WebpExtractor;
+
+impl ImageExtractor for WebpExtractor {
+    fn supported_extensions(&self) -> &[&str] {
+        &["webp"]
+    }
+
+    fn get_image_data(&self, data: &[u8]) -> Result<Vec<u8>, AppError> {
+        Ok(data.to_vec())
+    }
+
+    fn extract_metadata(&self, data: &[u8]) -> Result<ImageMetadata, AppError> {
+        // 尽力而为：解析失败返回空 metadata
+        crate::core::metadata::parse_exif(data)
+            .or_else(|_| Ok(ImageMetadata::default()))
+    }
+
+    fn exif_header_size(&self) -> usize {
+        0
     }
 }
 
@@ -930,7 +1110,7 @@ fn extract_jpeg_from_prvw(prvw_data: &[u8]) -> Result<Vec<u8>, AppError> {
         if box_type == b"PRVW" {
             // 读取 JPEG 大小（偏移 20-23）和 JPEG 数据（偏移 24+）
             if offset + 24 > prvw_data.len() {
-                return Err(AppError::RawParseError("PRVW box 数据过短".into()));
+                return Err(AppError::ImageParseError("PRVW box 数据过短".into()));
             }
             let jpeg_size = u32::from_be_bytes([
                 prvw_data[offset + 20],
@@ -941,7 +1121,7 @@ fn extract_jpeg_from_prvw(prvw_data: &[u8]) -> Result<Vec<u8>, AppError> {
 
             let jpeg_start = offset + 24;
             if jpeg_start + jpeg_size > prvw_data.len() {
-                return Err(AppError::RawParseError("PRVW JPEG 数据越界".into()));
+                return Err(AppError::ImageParseError("PRVW JPEG 数据越界".into()));
             }
 
             let jpeg_data = &prvw_data[jpeg_start..jpeg_start + jpeg_size];
@@ -1029,12 +1209,12 @@ fn extract_cr3_jpeg(data: &[u8]) -> Result<Vec<u8>, AppError> {
 /// Canon CR3 格式提取器
 pub struct Cr3Extractor;
 
-impl RawExtractor for Cr3Extractor {
+impl ImageExtractor for Cr3Extractor {
     fn supported_extensions(&self) -> &[&str] {
         &["cr3"]
     }
 
-    fn extract_jpeg(&self, data: &[u8]) -> Result<Vec<u8>, AppError> {
+    fn get_image_data(&self, data: &[u8]) -> Result<Vec<u8>, AppError> {
         extract_cr3_jpeg(data)
     }
 
@@ -1265,6 +1445,169 @@ mod tests {
         assert_eq!(ext.exif_header_size(), 65536);
         let via_factory = get_extractor("cr2").unwrap();
         assert_eq!(via_factory.supported_extensions(), &["cr2"]);
+    }
+
+    /// 构造带 SOF 标记的 JPEG 数据
+    /// SOF0 格式: marker(2) + length(2) + precision(1) + height(2) + width(2) + num_components(1) + ...
+    fn build_jpeg_with_sof(num_components: u8, extra_payload: &[u8]) -> Vec<u8> {
+        let mut jpeg = vec![0xFF, 0xD8]; // SOI
+        // SOF0 marker: length=8+3*num_components, precision=8, height=100, width=100
+        jpeg.extend_from_slice(&[0xFF, 0xC0]); // SOF0
+        let sof_len = (8 + 3 * num_components as u16).to_be_bytes();
+        jpeg.extend_from_slice(&sof_len); // length
+        jpeg.push(8); // precision
+        jpeg.extend_from_slice(&100u16.to_be_bytes()); // height
+        jpeg.extend_from_slice(&100u16.to_be_bytes()); // width
+        jpeg.push(num_components); // num_components
+        // component specs (3 bytes each, just fill zeros)
+        for _ in 0..num_components {
+            jpeg.extend_from_slice(&[0x01, 0x11, 0x00]);
+        }
+        // Extra payload
+        jpeg.extend_from_slice(extra_payload);
+        jpeg.extend_from_slice(&[0xFF, 0xD9]); // EOI
+        jpeg
+    }
+
+    /// CR2 使用 Compression=6 (Old-style JPEG) 的 StripOffsets 存储预览 JPEG
+    /// 修复前只处理 Compression=7，导致 CR2 只能提取到 IFD1 的小缩略图
+    ///
+    /// CR2 文件中有多种 JPEG：
+    /// - IFD0 StripOffsets: 全尺寸预览 (components=3, 可解码)
+    /// - IFD1 JPEGInterchangeFormat: 小缩略图 (components=3, 可解码)
+    /// - IFD3 StripOffsets: 压缩 RAW 传感器数据 (components=0, 不可解码)
+    ///
+    /// extract_largest_jpeg 应跳过 components=0 的 RAW 数据，选择最大的可解码 JPEG
+    #[test]
+    fn test_cr2_strip_jpeg_compression6() {
+        // 小缩略图 (JPEGInterchangeFormat)
+        let thumbnail_jpeg = build_jpeg_with_sof(3, &[0x01]);
+        // 全尺寸预览 (StripOffsets, components=3, 可解码)
+        let preview_jpeg = build_jpeg_with_sof(3, &[0x02; 20]);
+        // 压缩 RAW 数据 (StripOffsets, components=0, 不可解码) — 体积最大但应被跳过
+        let raw_jpeg = build_jpeg_with_sof(0, &[0x03; 50]);
+
+        let mut buf = Vec::new();
+
+        // TIFF Header (Little-endian)
+        buf.extend_from_slice(&[0x49, 0x49]);
+        buf.extend_from_slice(&42u16.to_le_bytes());
+        buf.extend_from_slice(&8u32.to_le_bytes()); // IFD0 at 8
+
+        // IFD0: JPEGInterchangeFormat (thumbnail) + Compression=6 + StripOffsets (preview)
+        let entry_count: u16 = 5;
+        buf.extend_from_slice(&entry_count.to_le_bytes());
+
+        let ifd_size = 2 + 5 * 12 + 4; // = 66
+        let thumbnail_offset: u32 = 8 + ifd_size as u32;
+        let preview_offset: u32 = thumbnail_offset + thumbnail_jpeg.len() as u32;
+        let raw_offset: u32 = preview_offset + preview_jpeg.len() as u32;
+
+        // Entry 1: JPEGInterchangeFormat (thumbnail)
+        buf.extend_from_slice(&TAG_JPEG_OFFSET.to_le_bytes());
+        buf.extend_from_slice(&4u16.to_le_bytes());
+        buf.extend_from_slice(&1u32.to_le_bytes());
+        buf.extend_from_slice(&thumbnail_offset.to_le_bytes());
+
+        // Entry 2: JPEGInterchangeFormatLength
+        buf.extend_from_slice(&TAG_JPEG_LENGTH.to_le_bytes());
+        buf.extend_from_slice(&4u16.to_le_bytes());
+        buf.extend_from_slice(&1u32.to_le_bytes());
+        buf.extend_from_slice(&(thumbnail_jpeg.len() as u32).to_le_bytes());
+
+        // Entry 3: Compression = 6 (Old-style JPEG, CR2 uses this)
+        buf.extend_from_slice(&TAG_COMPRESSION.to_le_bytes());
+        buf.extend_from_slice(&3u16.to_le_bytes());
+        buf.extend_from_slice(&1u32.to_le_bytes());
+        buf.extend_from_slice(&COMPRESSION_OLD_JPEG.to_le_bytes());
+        buf.extend_from_slice(&[0u8; 2]);
+
+        // Entry 4: StripOffsets (preview JPEG, components=3)
+        buf.extend_from_slice(&TAG_STRIP_OFFSETS.to_le_bytes());
+        buf.extend_from_slice(&4u16.to_le_bytes());
+        buf.extend_from_slice(&1u32.to_le_bytes());
+        buf.extend_from_slice(&preview_offset.to_le_bytes());
+
+        // Entry 5: StripByteCounts
+        buf.extend_from_slice(&TAG_STRIP_BYTE_COUNTS.to_le_bytes());
+        buf.extend_from_slice(&4u16.to_le_bytes());
+        buf.extend_from_slice(&1u32.to_le_bytes());
+        buf.extend_from_slice(&(preview_jpeg.len() as u32).to_le_bytes());
+
+        // next IFD → IFD1 (raw data)
+        let ifd1_offset: u32 = raw_offset + raw_jpeg.len() as u32;
+        buf.extend_from_slice(&ifd1_offset.to_le_bytes());
+
+        // Append JPEG data for IFD0
+        buf.extend_from_slice(&thumbnail_jpeg);
+        buf.extend_from_slice(&preview_jpeg);
+        buf.extend_from_slice(&raw_jpeg);
+
+        // IFD1: Compression=6 + StripOffsets (raw data, components=0) — 应被跳过
+        let entry_count1: u16 = 3;
+        buf.extend_from_slice(&entry_count1.to_le_bytes());
+        // Entry 1: Compression = 6
+        buf.extend_from_slice(&TAG_COMPRESSION.to_le_bytes());
+        buf.extend_from_slice(&3u16.to_le_bytes());
+        buf.extend_from_slice(&1u32.to_le_bytes());
+        buf.extend_from_slice(&COMPRESSION_OLD_JPEG.to_le_bytes());
+        buf.extend_from_slice(&[0u8; 2]);
+        // Entry 2: StripOffsets (raw data)
+        buf.extend_from_slice(&TAG_STRIP_OFFSETS.to_le_bytes());
+        buf.extend_from_slice(&4u16.to_le_bytes());
+        buf.extend_from_slice(&1u32.to_le_bytes());
+        buf.extend_from_slice(&raw_offset.to_le_bytes());
+        // Entry 3: StripByteCounts
+        buf.extend_from_slice(&TAG_STRIP_BYTE_COUNTS.to_le_bytes());
+        buf.extend_from_slice(&4u16.to_le_bytes());
+        buf.extend_from_slice(&1u32.to_le_bytes());
+        buf.extend_from_slice(&(raw_jpeg.len() as u32).to_le_bytes());
+
+        // next IFD = 0
+        buf.extend_from_slice(&0u32.to_le_bytes());
+
+        // raw data JPEG 已在前面 append 过，不需要再次 append
+
+        let result = extract_largest_jpeg(&buf).unwrap();
+        assert_eq!(result, preview_jpeg, "应该跳过 components=0 的 RAW 数据，选择最大的可解码预览 JPEG");
+    }
+
+    #[test]
+    fn test_check_jpeg_sof_components() {
+        // components=3 (YCbCr, 正常预览)
+        let rgb_jpeg = build_jpeg_with_sof(3, &[]);
+        assert_eq!(
+            check_jpeg_sof_components(&rgb_jpeg, 0, rgb_jpeg.len()),
+            Some(true)
+        );
+
+        // components=1 (灰度, 正常)
+        let gray_jpeg = build_jpeg_with_sof(1, &[]);
+        assert_eq!(
+            check_jpeg_sof_components(&gray_jpeg, 0, gray_jpeg.len()),
+            Some(true)
+        );
+
+        // components=0 (CR2 压缩 RAW 数据, 不可解码)
+        let raw_jpeg = build_jpeg_with_sof(0, &[]);
+        assert_eq!(
+            check_jpeg_sof_components(&raw_jpeg, 0, raw_jpeg.len()),
+            Some(false)
+        );
+
+        // components=24 (CR2 压缩 RAW 数据, 不可解码)
+        let raw24_jpeg = build_jpeg_with_sof(24, &[]);
+        assert_eq!(
+            check_jpeg_sof_components(&raw24_jpeg, 0, raw24_jpeg.len()),
+            Some(false)
+        );
+
+        // 无 SOF 标记的最小 JPEG (仅 SOI + APP0 + EOI)
+        let minimal_jpeg = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x02, 0xFF, 0xD9];
+        assert_eq!(
+            check_jpeg_sof_components(&minimal_jpeg, 0, minimal_jpeg.len()),
+            None
+        );
     }
 
     #[test]

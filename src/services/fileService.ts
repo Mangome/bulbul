@@ -11,7 +11,7 @@ export async function getFolderInfo(path: string): Promise<FolderInfo> {
   return await invoke<FolderInfo>('get_folder_info', { path });
 }
 
-/** 扫描文件夹中的 RAW 文件 */
-export async function scanRawFiles(path: string): Promise<ScanResult> {
-  return await invoke<ScanResult>('scan_raw_files', { path });
+/** 扫描文件夹中的图片文件 */
+export async function scanImageFiles(path: string): Promise<ScanResult> {
+  return await invoke<ScanResult>('scan_image_files', { path });
 }
