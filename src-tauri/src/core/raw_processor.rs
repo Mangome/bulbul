@@ -8,7 +8,7 @@
 //! - Exif 解析仅读取文件头部（仅 TIFF/EP 格式）
 //! - 图像处理使用 spawn_blocking 避免阻塞 tokio 异步运行时
 
-use std::io::Cursor;
+use std::io::{BufReader, Cursor};
 use std::path::Path;
 
 use image::imageops::FilterType;
@@ -76,7 +76,13 @@ pub async fn process_single_image(
         let header_size = extractor.exif_header_size();
         // 先尝试头部快速读取；若 header_size 为 0 则跳过直接全量读取
         // 若 EXIF 字段偏移超出头部范围则回退全量读取
-        let metadata = if header_size == 0 {
+        let medium_path =
+            crate::utils::paths::get_cache_file_path(cache_base_dir, &hash, "medium");
+        let thumbnail_path =
+            crate::utils::paths::get_cache_file_path(cache_base_dir, &hash, "thumbnail");
+
+        let mut metadata = if header_size == 0 {
+            // 非 TIFF/EP 格式（CR3/RAF 等）EXIF 不在文件头部，需全量读取
             let data = tokio::fs::read(file_path).await.map_err(|e| {
                 AppError::FileNotFound(format!("{}: {}", file_path.display(), e))
             })?;
@@ -92,10 +98,19 @@ pub async fn process_single_image(
                 }
             }
         };
-        let medium_path =
-            crate::utils::paths::get_cache_file_path(cache_base_dir, &hash, "medium");
-        let thumbnail_path =
-            crate::utils::paths::get_cache_file_path(cache_base_dir, &hash, "thumbnail");
+
+        // 用实际图片尺寸覆盖 EXIF 中的 PixelXDimension/PixelYDimension
+        // 缓存命中时从已缓存的缩略图文件读取尺寸（仅读头部，极快）
+        // 失败时回退到 EXIF 尺寸（不影响现有行为）
+        let thumb_path_clone = thumbnail_path.clone();
+        if let Ok((w, h)) = tokio::task::spawn_blocking(move || {
+            read_image_dimensions_from_file(&thumb_path_clone)
+        })
+        .await
+        .unwrap_or(Err(AppError::ImageProcessError(String::new())))
+        {
+            apply_actual_dimensions(&mut metadata, w, h);
+        }
 
         return Ok(ProcessResult {
             hash,
@@ -114,7 +129,14 @@ pub async fn process_single_image(
 
     // 从同一份数据中获取图像数据和 Exif（使用格式特定的 Extractor）
     let image_data = extractor.get_image_data(&data)?;
-    let metadata = extractor.extract_metadata(&data)?;
+    let mut metadata = extractor.extract_metadata(&data)?;
+
+    // 用实际解码的图片尺寸覆盖 EXIF 中的 PixelXDimension/PixelYDimension
+    // EXIF 尺寸可能与实际图片不一致（裁剪后未更新、PNG 无 EXIF 等）
+    // 实际尺寸确保布局宽高比与 ImageBitmap 一致，避免拉伸
+    if let Ok((w, h)) = read_image_dimensions_from_bytes(&image_data) {
+        apply_actual_dimensions(&mut metadata, w, h);
+    }
 
     // 不再需要原始文件数据，尽早释放
     drop(data);
@@ -178,6 +200,50 @@ async fn read_exif_from_header(
     })?;
 
     extractor.extract_metadata(&header)
+}
+
+/// 从图片字节数据中读取实际尺寸（仅读头部，不解码全图）
+///
+/// 用于覆盖 EXIF 中的 PixelXDimension/PixelYDimension，
+/// 确保布局宽高比与实际图片数据一致（解决裁剪后 EXIF 未更新、PNG 无 EXIF 等问题）
+fn read_image_dimensions_from_bytes(data: &[u8]) -> Result<(u32, u32), AppError> {
+    let reader = image::ImageReader::new(BufReader::new(Cursor::new(data)))
+        .with_guessed_format()
+        .map_err(|e| AppError::ImageProcessError(format!("检测图片格式失败: {}", e)))?;
+    reader
+        .into_dimensions()
+        .map_err(|e| AppError::ImageProcessError(format!("读取图片尺寸失败: {}", e)))
+}
+
+/// 从磁盘上的图片文件读取实际尺寸（仅读头部，不解码全图）
+fn read_image_dimensions_from_file(path: &Path) -> Result<(u32, u32), AppError> {
+    let reader = image::ImageReader::open(path)
+        .map_err(|e| AppError::FileNotFound(format!("{}: {}", path.display(), e)))?
+        .with_guessed_format()
+        .map_err(|e| AppError::ImageProcessError(format!("检测图片格式失败: {}", e)))?;
+    reader
+        .into_dimensions()
+        .map_err(|e| AppError::ImageProcessError(format!("读取图片尺寸失败: {}", e)))
+}
+
+/// 用实际图片尺寸覆盖元数据中的 image_width/image_height
+///
+/// EXIF PixelXDimension/PixelYDimension 可能与实际图片尺寸不一致
+/// （裁剪后 EXIF 未更新、PNG 无 EXIF 等），使用实际解码尺寸可确保布局宽高比正确。
+///
+/// 方向校正逻辑与 metadata.rs 一致：orientation 5/6/7/8 交换宽高
+fn apply_actual_dimensions(metadata: &mut ImageMetadata, stored_width: u32, stored_height: u32) {
+    let (display_w, display_h) = if let Some(orientation) = metadata.orientation {
+        if matches!(orientation, 5 | 6 | 7 | 8) {
+            (stored_height, stored_width)
+        } else {
+            (stored_width, stored_height)
+        }
+    } else {
+        (stored_width, stored_height)
+    };
+    metadata.image_width = Some(display_w);
+    metadata.image_height = Some(display_h);
 }
 
 /// 生成 200px 宽缩略图

@@ -41,19 +41,30 @@ Shoot in bursts, cull with ease!
 
 After launching the app, click the **Select Folder** button and choose a directory containing RAW files. The app will automatically scan, group, and display the results.
 
-> Supported RAW formats (subdirectories are not scanned):
+> Supported RAW formats and non-RAW image formats (subdirectories are not scanned):
+>
+> **RAW Formats**
 >
 > | Format | Vendor | Verified |
 > | ------ | ------ | -------- |
 > | NEF | Nikon | ✅ |
+> | CR2 | Canon | ✅ |
+> | CR3 | Canon | ✅ |
 > | ARW | Sony | ✅ |
 > | DNG | Adobe | ✅ |
 > | RAF | Fujifilm | ✅ |
 > | ORF | Olympus | ✅ |
-> | CR2 | Canon | - |
-> | CR3 | Canon | - |
 > | RW2 | Panasonic | - |
 > | PEF | Pentax | - |
+>
+> **Non-RAW Formats**
+>
+> | Format | Notes |
+> | ------ | ----- |
+> | JPG / JPEG | EXIF parsing supported |
+> | PNG | No EXIF support |
+> | TIFF / TIF | EXIF parsing supported |
+> | WebP | Best-effort EXIF parsing |
 
 ### Browsing & Selection
 

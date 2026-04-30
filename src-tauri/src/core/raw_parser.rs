@@ -1072,6 +1072,121 @@ fn find_uuid_box_recursive<'a>(data: &'a [u8], target_uuid: &[u8; 16]) -> Option
     None
 }
 
+/// 从 CR3 的 mdat box 提取全分辨率 JPEG
+///
+/// CR3 文件的 mdat box 开头直接存放全分辨率 JPEG 预览（通常 6000×4000+ 像素），
+/// 后跟 RAW 数据。通过定位 mdat box 并在其数据开头搜索 JPEG SOI (FF D8) 来提取。
+///
+/// 与 PRVW box（1620×1080）相比，mdat JPEG 分辨率高 ~15 倍，
+/// 可生成完整质量的 medium 和缩略图。
+fn extract_jpeg_from_mdat(data: &[u8]) -> Option<Vec<u8>> {
+    let mut offset = 0usize;
+
+    while offset + 8 <= data.len() {
+        let size32 = u32::from_be_bytes([
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+        ]);
+        let box_type = &data[offset + 4..offset + 8];
+
+        let (box_size, data_start) = if size32 == 0 {
+            // 延伸到文件末尾
+            (data.len() - offset, offset + 8)
+        } else if size32 == 1 {
+            // 64 位扩展大小
+            if offset + 16 > data.len() {
+                break;
+            }
+            let size64 = u64::from_be_bytes([
+                data[offset + 8],
+                data[offset + 9],
+                data[offset + 10],
+                data[offset + 11],
+                data[offset + 12],
+                data[offset + 13],
+                data[offset + 14],
+                data[offset + 15],
+            ]) as usize;
+            (size64, offset + 16)
+        } else {
+            (size32 as usize, offset + 8)
+        };
+
+        if box_size < 8 || offset + box_size > data.len() {
+            break;
+        }
+
+        if box_type == b"mdat" {
+            let mdat_data = &data[data_start..offset + box_size];
+            // mdat 开头是否是 JPEG SOI？
+            if mdat_data.len() >= 2 && mdat_data[0] == 0xFF && mdat_data[1] == 0xD8 {
+                // 找到 JPEG EOI (FF D9) 确定大小
+                if let Some(jpeg_len) = find_jpeg_end(mdat_data) {
+                    // 验证尺寸：全分辨率 JPEG 通常 > 200KB
+                    if jpeg_len > 200 * 1024 {
+                        return Some(mdat_data[..jpeg_len].to_vec());
+                    }
+                }
+            }
+        }
+
+        offset += box_size;
+    }
+
+    None
+}
+
+/// 在 JPEG 数据中定位 EOI 标记，返回包含 EOI 在内的 JPEG 总字节数
+///
+/// 通过解析 JPEG 段结构逐段跳过，直到 SOS 后扫描裸压缩数据中的 EOI。
+/// 返回 None 表示未找到有效 EOI。
+fn find_jpeg_end(data: &[u8]) -> Option<usize> {
+    let mut pos = 2usize; // 跳过 SOI (FF D8)
+    while pos + 2 <= data.len() {
+        if data[pos] != 0xFF {
+            return None;
+        }
+        let marker = data[pos + 1];
+        if marker == 0xD9 {
+            // EOI
+            return Some(pos + 2);
+        }
+        if marker == 0xDA {
+            // SOS：跳过 SOS 头部后直接扫描裸压缩数据
+            if pos + 4 > data.len() {
+                return None;
+            }
+            let sos_len =
+                u16::from_be_bytes([data[pos + 2], data[pos + 3]]) as usize;
+            pos += 2 + sos_len;
+            // 在压缩数据流中找 FF D9（不是 FF 00 填充）
+            while pos + 1 < data.len() {
+                if data[pos] == 0xFF && data[pos + 1] == 0xD9 {
+                    return Some(pos + 2);
+                }
+                pos += 1;
+            }
+            return None;
+        }
+        if marker == 0xD8 || (marker >= 0xD0 && marker <= 0xD7) {
+            // 无长度的标记（SOI/RSTn）
+            pos += 2;
+            continue;
+        }
+        if pos + 4 > data.len() {
+            return None;
+        }
+        let seg_len = u16::from_be_bytes([data[pos + 2], data[pos + 3]]) as usize;
+        if seg_len < 2 {
+            return None;
+        }
+        pos += 2 + seg_len;
+    }
+    None
+}
+
 /// 从 PRVW box 内容中提取 JPEG 数据
 ///
 /// PRVW box 结构：
@@ -1143,7 +1258,13 @@ fn extract_jpeg_from_prvw(prvw_data: &[u8]) -> Result<Vec<u8>, AppError> {
 ///
 /// 优先提取 PRVW（1620×1080 预览），若未找到则尝试 THMB（160×120 缩略图）
 fn extract_cr3_jpeg(data: &[u8]) -> Result<Vec<u8>, AppError> {
-    // 优先尝试 PRVW 预览
+    // 优先从 mdat box 提取全分辨率 JPEG（通常为 6000×4000+ 的完整画质预览）
+    // CR3 的 mdat box 开头直接存放全分辨率 JPEG，远优于 PRVW 的 1620×1080
+    if let Some(jpeg) = extract_jpeg_from_mdat(data) {
+        return Ok(jpeg);
+    }
+
+    // 回退到 PRVW 预览（1620×1080）
     if let Some(prvw_content) = find_uuid_box(data, &CR3_PREVIEW_UUID) {
         if let Ok(jpeg) = extract_jpeg_from_prvw(prvw_content) {
             return Ok(jpeg);
@@ -1206,6 +1327,86 @@ fn extract_cr3_jpeg(data: &[u8]) -> Result<Vec<u8>, AppError> {
     Err(AppError::NoEmbeddedJpeg)
 }
 
+// ─── CR3 ISOBMFF meta box EXIF 提取 ─────────────────────
+
+/// CR3 的 EXIF 数据存储在 ISOBMFF 容器的 moov/meta box 中，
+/// 而非嵌入的 JPEG 预览内。需要解析 iinf 找到 EXIF item ID，
+/// 再解析 iloc 获取其偏移和长度，最后从文件中提取 TIFF 格式的 EXIF 数据。
+
+/// 在 ISOBMFF 容器中递归查找指定类型的 box，提取其内部数据
+///
+/// 与 `find_uuid_box` 类似，但按 box type（而非 UUID）搜索。
+/// 递归遍历 `moov` 和 `uuid` container box 的子 box。
+fn find_box_recursive<'a>(data: &'a [u8], target_type: &[u8; 4]) -> Option<&'a [u8]> {
+    let mut offset = 0usize;
+
+    while offset + 8 <= data.len() {
+        let size = u32::from_be_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]]) as usize;
+        let box_type = &data[offset + 4..offset + 8];
+
+        let box_size = if size == 0 {
+            data.len() - offset
+        } else if size == 1 {
+            // 64 位扩展大小（暂不支持，跳过）
+            break;
+        } else {
+            size
+        };
+
+        if box_size < 8 || offset + box_size > data.len() {
+            break;
+        }
+
+        if box_type == target_type {
+            // 非uuid box：内容从 offset+8 开始
+            return Some(&data[offset + 8..offset + box_size]);
+        }
+
+        // 对 container box 递归搜索
+        if box_type == b"moov" || box_type == b"uuid" {
+            let content_start = if box_type == b"uuid" {
+                offset + 24 // uuid box 有 16 字节额外 UUID
+            } else {
+                offset + 8
+            };
+            if content_start < offset + box_size {
+                let sub_data = &data[content_start..offset + box_size];
+                if let result @ Some(_) = find_box_recursive(sub_data, target_type) {
+                    return result;
+                }
+            }
+        }
+
+        offset += box_size;
+    }
+
+    None
+}
+
+/// 从 CR3 文件的 Canon UUID box 中提取 CMT1 EXIF 数据
+///
+/// Canon CR3 使用专有 ISOBMFF 结构：
+/// - moov → uuid(Canon THMB UUID) → CMT1（TIFF 格式 EXIF）+ CMT2（Maker Note）
+/// - CMT1 内容直接是标准 TIFF 数据（II*\0 或 MM\0* 开头）
+fn extract_cr3_exif_from_cmt1(data: &[u8]) -> Result<Vec<u8>, AppError> {
+    let cmt1_content = find_box_recursive(data, b"CMT1").ok_or_else(|| {
+        AppError::ExifError("CR3: 未找到 CMT1 box".into())
+    })?;
+
+    // CMT1 内容直接是 TIFF 格式 EXIF 数据
+    if cmt1_content.len() < 4 {
+        return Err(AppError::ExifError("CR3: CMT1 数据过短".into()));
+    }
+
+    let is_valid_tiff = (cmt1_content[0] == 0x49 && cmt1_content[1] == 0x49 && cmt1_content[2] == 0x2A && cmt1_content[3] == 0x00)
+        || (cmt1_content[0] == 0x4D && cmt1_content[1] == 0x4D && cmt1_content[2] == 0x00 && cmt1_content[3] == 0x2A);
+    if !is_valid_tiff {
+        return Err(AppError::ExifError("CR3: CMT1 数据非有效 TIFF 格式".into()));
+    }
+
+    Ok(cmt1_content.to_vec())
+}
+
 /// Canon CR3 格式提取器
 pub struct Cr3Extractor;
 
@@ -1219,10 +1420,19 @@ impl ImageExtractor for Cr3Extractor {
     }
 
     fn extract_metadata(&self, data: &[u8]) -> Result<ImageMetadata, AppError> {
-        crate::core::metadata::parse_exif(data)
+        // CR3 EXIF 存储在 Canon 专有 UUID box 内的 CMT1 子 box 中（标准 TIFF 格式）
+        // 回退：从嵌入 JPEG 预览中解析 EXIF（部分 CR3 文件的 JPEG 预览包含 APP1 段）
+        match extract_cr3_exif_from_cmt1(data) {
+            Ok(exif_data) => crate::core::metadata::parse_exif(&exif_data),
+            Err(_) => {
+                let jpeg_data = extract_cr3_jpeg(data)?;
+                crate::core::metadata::parse_exif(&jpeg_data)
+            }
+        }
     }
 
     fn exif_header_size(&self) -> usize {
+        // CR3 的 EXIF 在 ISOBMFF meta box 中，无法仅读头部解析
         0
     }
 }
@@ -1885,6 +2095,75 @@ mod tests {
         assert_eq!(ext.exif_header_size(), 0);
         let via_factory = get_extractor("cr3").unwrap();
         assert_eq!(via_factory.supported_extensions(), &["cr3"]);
+    }
+
+    /// 构建最小的 TIFF 数据（小端，用于 EXIF 提取测试）
+    fn build_minimal_tiff_le() -> Vec<u8> {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"II"); // little-endian
+        buf.extend_from_slice(&42u16.to_le_bytes()); // TIFF magic
+        buf.extend_from_slice(&8u32.to_le_bytes()); // IFD0 offset
+        buf.extend_from_slice(&0u16.to_le_bytes()); // 0 entries
+        buf.extend_from_slice(&0u32.to_le_bytes()); // next IFD = 0
+        buf
+    }
+
+    #[test]
+    fn test_cr3_extract_exif_from_cmt1() {
+        let tiff_data = build_minimal_tiff_le();
+
+        // 构建模拟 Canon CR3 结构：ftyp + moov[uuid(CMT1)]
+        let cmt1 = build_isobmff_box(b"CMT1", &tiff_data);
+        let uuid_box = build_uuid_box(&CR3_THUMB_UUID, &cmt1);
+        let moov = build_isobmff_box(b"moov", &uuid_box);
+        let ftyp = build_isobmff_box(b"ftyp", b"crx ");
+
+        let mut cr3_data = Vec::new();
+        cr3_data.extend_from_slice(&ftyp);
+        cr3_data.extend_from_slice(&moov);
+
+        let result = extract_cr3_exif_from_cmt1(&cr3_data).unwrap();
+        assert_eq!(result, tiff_data);
+    }
+
+    #[test]
+    fn test_cr3_extract_exif_from_cmt1_not_found() {
+        let ftyp = build_isobmff_box(b"ftyp", b"crx ");
+        let result = extract_cr3_exif_from_cmt1(&ftyp);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_cr3_extract_exif_from_cmt1_invalid_tiff() {
+        // CMT1 box 内容不是 TIFF 格式
+        let bad_data = vec![0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x00, 0x00, 0x00];
+        let cmt1 = build_isobmff_box(b"CMT1", &bad_data);
+        let uuid_box = build_uuid_box(&CR3_THUMB_UUID, &cmt1);
+        let moov = build_isobmff_box(b"moov", &uuid_box);
+
+        let result = extract_cr3_exif_from_cmt1(&moov);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_find_box_recursive() {
+        // 构建嵌套结构：moov[uuid[CMT1 + THMB]]
+        let tiff = build_minimal_tiff_le();
+        let cmt1 = build_isobmff_box(b"CMT1", &tiff);
+        let thmb = build_isobmff_box(b"THMB", b"thumb");
+        let mut uuid_inner = Vec::new();
+        uuid_inner.extend_from_slice(&cmt1);
+        uuid_inner.extend_from_slice(&thmb);
+        let uuid_box = build_uuid_box(&CR3_THUMB_UUID, &uuid_inner);
+        let moov = build_isobmff_box(b"moov", &uuid_box);
+
+        let found = find_box_recursive(&moov, b"CMT1").unwrap();
+        assert_eq!(found, tiff);
+
+        let found_thmb = find_box_recursive(&moov, b"THMB").unwrap();
+        assert_eq!(found_thmb, b"thumb");
+
+        assert!(find_box_recursive(&moov, b"xxxx").is_none());
     }
 
     #[test]
