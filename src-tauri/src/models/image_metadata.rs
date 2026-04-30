@@ -172,7 +172,10 @@ mod tests {
         assert_eq!(meta.focus_score, Some(5));
         assert_eq!(meta.detection_bboxes.len(), 1);
         assert!((meta.detection_bboxes[0].confidence - 0.95).abs() < 0.001);
-        assert_eq!(meta.focus_score_method, Some(FocusScoringMethod::BirdRegion));
+        assert_eq!(
+            meta.focus_score_method,
+            Some(FocusScoringMethod::BirdRegion)
+        );
     }
 
     #[test]

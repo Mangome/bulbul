@@ -148,9 +148,14 @@ fn build_group_data_with_phash(
     members: &[usize],
 ) -> GroupData {
     let picture_hashes: Vec<String> = members.iter().map(|&i| images[i].hash.clone()).collect();
-    let picture_names: Vec<String> = members.iter().map(|&i| images[i].filename.clone()).collect();
-    let picture_paths: Vec<String> =
-        members.iter().map(|&i| images[i].file_path.clone()).collect();
+    let picture_names: Vec<String> = members
+        .iter()
+        .map(|&i| images[i].filename.clone())
+        .collect();
+    let picture_paths: Vec<String> = members
+        .iter()
+        .map(|&i| images[i].file_path.clone())
+        .collect();
 
     // 计算组内相邻图片对的平均相似度
     let avg_similarity = if members.len() <= 1 {
@@ -187,9 +192,8 @@ mod tests {
             phash,
             filename: filename.to_string(),
             file_path: format!("/photos/{}", filename),
-            capture_time: time.map(|t| {
-                NaiveDateTime::parse_from_str(t, "%Y-%m-%d %H:%M:%S").unwrap()
-            }),
+            capture_time: time
+                .map(|t| NaiveDateTime::parse_from_str(t, "%Y-%m-%d %H:%M:%S").unwrap()),
         }
     }
 
@@ -327,9 +331,11 @@ mod tests {
 
     #[test]
     fn test_avg_similarity_single_image() {
-        let images = vec![
-            make_image(0xAAAAAAAAAAAAAAAA, "a.nef", Some("2024-01-01 12:00:00")),
-        ];
+        let images = vec![make_image(
+            0xAAAAAAAAAAAAAAAA,
+            "a.nef",
+            Some("2024-01-01 12:00:00"),
+        )];
 
         let groups = group_images_with_phash(&images, Some(90.0), Some(10));
         assert_eq!(groups[0].avg_similarity, 100.0);

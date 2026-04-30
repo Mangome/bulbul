@@ -1,7 +1,7 @@
 /* ════════════════════════════════════════════════════════════════════════════
    SettingsPanel - 右侧滑出设置面板
 
-   320px 固定宽度，毛玻璃背景，三个区域：分组参数、外观、缓存管理
+   320px 固定宽度，毛玻璃背景，四个区域：分组参数、外观、版本更新、缓存管理
 ════════════════════════════════════════════════════════════════════════════ */
 
 .overlay {
@@ -172,6 +172,137 @@
   transform: translateX(18px);
 }
 
+/* ─── 版本更新 ──────────────────────────────────────── */
+
+.updateMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.updateRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.updateLabel {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.updateValue {
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.updateStatus {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-tertiary);
+}
+
+.updateStatusError {
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+}
+
+.updateProgress {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.updateNotes {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-bg-tertiary) 70%, transparent);
+}
+
+.updateNotesTitle {
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.updateNotesBody {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.updateActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.updateCheckBtn,
+.updateInstallBtn,
+.refreshBtn,
+.clearBtn,
+.reprocessBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  border: none;
+  user-select: none;
+
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast),
+    opacity var(--transition-fast);
+}
+
+.updateCheckBtn {
+  color: var(--color-text-primary);
+  background: var(--color-bg-tertiary);
+}
+
+.updateCheckBtn:hover {
+  background: var(--color-border);
+}
+
+.updateInstallBtn {
+  color: white;
+  background: var(--color-primary);
+}
+
+.updateInstallBtn:hover {
+  opacity: 0.92;
+}
+
+.updateCheckBtn:disabled,
+.updateInstallBtn:disabled,
+.refreshBtn:disabled,
+.clearBtn:disabled,
+.reprocessBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ─── 缓存管理 ──────────────────────────────────────── */
 
 .cacheInfo {
@@ -219,26 +350,6 @@
   gap: 8px;
 }
 
-.refreshBtn,
-.clearBtn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
-  border: none;
-  user-select: none;
-
-  transition:
-    background-color var(--transition-fast),
-    color var(--transition-fast),
-    opacity var(--transition-fast);
-}
-
 .refreshBtn {
   width: 32px;
   padding: 0;
@@ -249,11 +360,6 @@
 .refreshBtn:hover {
   color: var(--color-text-primary);
   background: var(--color-border);
-}
-
-.refreshBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .clearBtn {
@@ -274,38 +380,13 @@
   opacity: 0.9;
 }
 
-.clearBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .reprocessBtn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
-  border: none;
-  user-select: none;
   color: var(--color-primary);
   background: color-mix(in srgb, var(--color-primary) 8%, transparent);
-
-  transition:
-    background-color var(--transition-fast),
-    opacity var(--transition-fast);
 }
 
 .reprocessBtn:hover {
   background: color-mix(in srgb, var(--color-primary) 15%, transparent);
-}
-
-.reprocessBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 /* ─── 旋转动画 ──────────────────────────────────────── */

@@ -21,7 +21,10 @@ pub async fn get_image_url(
 ) -> Result<String, String> {
     let size = size.unwrap_or_else(|| "thumbnail".to_string());
     if size != "medium" && size != "thumbnail" {
-        return Err(format!("无效的 size 参数: {}, 期望 'medium' 或 'thumbnail'", size));
+        return Err(format!(
+            "无效的 size 参数: {}, 期望 'medium' 或 'thumbnail'",
+            size
+        ));
     }
 
     let cache_dir = {
@@ -30,14 +33,16 @@ pub async fn get_image_url(
     };
 
     let path = get_cache_file_path(&cache_dir, &hash, &size);
-    
+
     if !path.exists() {
-        log::warn!("缓存文件不存在: {} (cache_dir: {})", path.display(), cache_dir.display());
-        return Err(AppError::FileNotFound(format!(
-            "缓存文件不存在: {}",
-            path.display()
-        ))
-        .to_string());
+        log::warn!(
+            "缓存文件不存在: {} (cache_dir: {})",
+            path.display(),
+            cache_dir.display()
+        );
+        return Err(
+            AppError::FileNotFound(format!("缓存文件不存在: {}", path.display())).to_string(),
+        );
     }
 
     let result = path.to_string_lossy().to_string();

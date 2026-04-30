@@ -24,8 +24,8 @@ fn map_exif_to_metadata(exif: &Exif) -> ImageMetadata {
     let mut meta = ImageMetadata::default();
 
     // 时间信息
-    meta.capture_time = parse_datetime(exif, Tag::DateTimeOriginal)
-        .or_else(|| parse_datetime(exif, Tag::DateTime));
+    meta.capture_time =
+        parse_datetime(exif, Tag::DateTimeOriginal).or_else(|| parse_datetime(exif, Tag::DateTime));
     meta.modify_time = parse_datetime(exif, Tag::DateTime);
 
     // 相机信息
@@ -78,15 +78,17 @@ fn map_exif_to_metadata(exif: &Exif) -> ImageMetadata {
     meta.color_space = get_color_space(exif);
 
     // 图像尺寸
-    meta.image_width = get_u32(exif, Tag::PixelXDimension)
-        .or_else(|| get_u32(exif, Tag::ImageWidth));
-    meta.image_height = get_u32(exif, Tag::PixelYDimension)
-        .or_else(|| get_u32(exif, Tag::ImageLength));
+    meta.image_width =
+        get_u32(exif, Tag::PixelXDimension).or_else(|| get_u32(exif, Tag::ImageWidth));
+    meta.image_height =
+        get_u32(exif, Tag::PixelYDimension).or_else(|| get_u32(exif, Tag::ImageLength));
     meta.orientation = get_u16(exif, Tag::Orientation);
 
     // 根据 EXIF Orientation 调整显示尺寸（纵向图片识别）
     // Orientation 5, 6, 7, 8 表示需要旋转 ±90°，此时显示宽高应互换
-    if let (Some(width), Some(height), Some(orientation)) = (meta.image_width, meta.image_height, meta.orientation) {
+    if let (Some(width), Some(height), Some(orientation)) =
+        (meta.image_width, meta.image_height, meta.orientation)
+    {
         if matches!(orientation, 5 | 6 | 7 | 8) {
             // 交换宽高：从"原始存储宽高"转为"显示宽高"
             meta.image_width = Some(height);
@@ -199,7 +201,13 @@ fn get_exposure_time_string(exif: &Exif) -> Option<String> {
                 Some(format!("{}/{}", num, denom))
             }
         }
-        _ => Some(field.display_value().to_string().trim_matches('"').to_string()),
+        _ => Some(
+            field
+                .display_value()
+                .to_string()
+                .trim_matches('"')
+                .to_string(),
+        ),
     }
 }
 
@@ -330,22 +338,34 @@ pub fn get_crop_factor(camera_model: &str) -> Option<f64> {
 
     // ── Canon ──
     if model.contains("CANON") {
-        let is_ff = model.contains("5D") || model.contains("6D") || model.contains("1D")
-            || model.contains("EOS R") || model.contains(" R5") || model.contains(" R6")
-            || model.contains(" R3") || model.contains(" R1");
+        let is_ff = model.contains("5D")
+            || model.contains("6D")
+            || model.contains("1D")
+            || model.contains("EOS R")
+            || model.contains(" R5")
+            || model.contains(" R6")
+            || model.contains(" R3")
+            || model.contains(" R1");
         return if is_ff { Some(1.0) } else { Some(1.6) };
     }
 
     // ── Sony ──
     if model.contains("SONY") {
-        let is_ff = model.contains("A1 ") || model.contains("A7") || model.contains("A9")
-            || model.contains("FX") || model.contains("A99");
+        let is_ff = model.contains("A1 ")
+            || model.contains("A7")
+            || model.contains("A9")
+            || model.contains("FX")
+            || model.contains("A99");
         return if is_ff { Some(1.0) } else { Some(1.5) };
     }
 
     // ── Fujifilm ──
     if model.contains("FUJIFILM") || model.contains("FUJI") {
-        return if model.contains("GFX") { Some(0.79) } else { Some(1.5) };
+        return if model.contains("GFX") {
+            Some(0.79)
+        } else {
+            Some(1.5)
+        };
     }
 
     // ── OM System / Olympus (M4/3) ──
@@ -363,7 +383,10 @@ pub fn get_crop_factor(camera_model: &str) -> Option<f64> {
 }
 
 /// 计算 35mm 等效焦段（当 EXIF 中无 FocalLengthIn35mmFilm 时的回退方案）
-pub fn compute_focal_length_35mm(focal_length: Option<f64>, camera_model: Option<&str>) -> Option<f64> {
+pub fn compute_focal_length_35mm(
+    focal_length: Option<f64>,
+    camera_model: Option<&str>,
+) -> Option<f64> {
     let fl = focal_length?;
     let model = camera_model?;
     let crop = get_crop_factor(model)?;
@@ -488,7 +511,9 @@ mod tests {
         meta.orientation = Some(6);
 
         // 手动应用 orientation 处理逻辑
-        if let (Some(width), Some(height), Some(orientation)) = (meta.image_width, meta.image_height, meta.orientation) {
+        if let (Some(width), Some(height), Some(orientation)) =
+            (meta.image_width, meta.image_height, meta.orientation)
+        {
             if matches!(orientation, 5 | 6 | 7 | 8) {
                 meta.image_width = Some(height);
                 meta.image_height = Some(width);
@@ -496,7 +521,11 @@ mod tests {
         }
 
         assert_eq!(meta.image_width, Some(2880), "orientation=6: 宽度应为 2880");
-        assert_eq!(meta.image_height, Some(1920), "orientation=6: 高度应为 1920");
+        assert_eq!(
+            meta.image_height,
+            Some(1920),
+            "orientation=6: 高度应为 1920"
+        );
 
         // 测试case 2: orientation = 8（90° 逆时针旋转）
         let mut meta = ImageMetadata::default();
@@ -504,7 +533,9 @@ mod tests {
         meta.image_height = Some(2880);
         meta.orientation = Some(8);
 
-        if let (Some(width), Some(height), Some(orientation)) = (meta.image_width, meta.image_height, meta.orientation) {
+        if let (Some(width), Some(height), Some(orientation)) =
+            (meta.image_width, meta.image_height, meta.orientation)
+        {
             if matches!(orientation, 5 | 6 | 7 | 8) {
                 meta.image_width = Some(height);
                 meta.image_height = Some(width);
@@ -512,7 +543,11 @@ mod tests {
         }
 
         assert_eq!(meta.image_width, Some(2880), "orientation=8: 宽度应为 2880");
-        assert_eq!(meta.image_height, Some(1920), "orientation=8: 高度应为 1920");
+        assert_eq!(
+            meta.image_height,
+            Some(1920),
+            "orientation=8: 高度应为 1920"
+        );
 
         // 测试case 3: orientation = 1（正常）- 不应互换
         let mut meta = ImageMetadata::default();
@@ -520,15 +555,25 @@ mod tests {
         meta.image_height = Some(2880);
         meta.orientation = Some(1);
 
-        if let (Some(width), Some(height), Some(orientation)) = (meta.image_width, meta.image_height, meta.orientation) {
+        if let (Some(width), Some(height), Some(orientation)) =
+            (meta.image_width, meta.image_height, meta.orientation)
+        {
             if matches!(orientation, 5 | 6 | 7 | 8) {
                 meta.image_width = Some(height);
                 meta.image_height = Some(width);
             }
         }
 
-        assert_eq!(meta.image_width, Some(1920), "orientation=1: 宽度应保持 1920");
-        assert_eq!(meta.image_height, Some(2880), "orientation=1: 高度应保持 2880");
+        assert_eq!(
+            meta.image_width,
+            Some(1920),
+            "orientation=1: 宽度应保持 1920"
+        );
+        assert_eq!(
+            meta.image_height,
+            Some(2880),
+            "orientation=1: 高度应保持 2880"
+        );
 
         // 测试case 4: orientation = 3（180° 旋转）- 不应互换
         let mut meta = ImageMetadata::default();
@@ -536,14 +581,24 @@ mod tests {
         meta.image_height = Some(2880);
         meta.orientation = Some(3);
 
-        if let (Some(width), Some(height), Some(orientation)) = (meta.image_width, meta.image_height, meta.orientation) {
+        if let (Some(width), Some(height), Some(orientation)) =
+            (meta.image_width, meta.image_height, meta.orientation)
+        {
             if matches!(orientation, 5 | 6 | 7 | 8) {
                 meta.image_width = Some(height);
                 meta.image_height = Some(width);
             }
         }
 
-        assert_eq!(meta.image_width, Some(1920), "orientation=3: 宽度应保持 1920");
-        assert_eq!(meta.image_height, Some(2880), "orientation=3: 高度应保持 2880");
+        assert_eq!(
+            meta.image_width,
+            Some(1920),
+            "orientation=3: 宽度应保持 1920"
+        );
+        assert_eq!(
+            meta.image_height,
+            Some(2880),
+            "orientation=3: 高度应保持 2880"
+        );
     }
 }

@@ -38,9 +38,7 @@ pub async fn get_cache_size(
 /// 如果当前正在处理中（scanning/processing/analyzing/grouping/focus_scoring/cancelling），
 /// 拒绝清理并返回错误，避免与正在写入的缓存文件产生竞争。
 #[tauri::command]
-pub async fn clear_cache(
-    state: tauri::State<'_, Arc<Mutex<SessionState>>>,
-) -> Result<(), String> {
+pub async fn clear_cache(state: tauri::State<'_, Arc<Mutex<SessionState>>>) -> Result<(), String> {
     let cache_dir = {
         let session = state.lock().unwrap();
         match &session.processing_state {

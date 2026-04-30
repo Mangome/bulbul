@@ -80,7 +80,12 @@ impl ByteOrder {
         if offset + 4 > data.len() {
             return None;
         }
-        let bytes = [data[offset], data[offset + 1], data[offset + 2], data[offset + 3]];
+        let bytes = [
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+        ];
         Some(match self {
             ByteOrder::LittleEndian => u32::from_le_bytes(bytes),
             ByteOrder::BigEndian => u32::from_be_bytes(bytes),
@@ -199,10 +204,12 @@ fn parse_ifd(
                 compression = bo.read_u16(data, entry_offset + 8);
             }
             TAG_STRIP_OFFSETS => {
-                strip_offsets = read_entry_values(data, bo, entry_offset + 8, data_type, count as usize);
+                strip_offsets =
+                    read_entry_values(data, bo, entry_offset + 8, data_type, count as usize);
             }
             TAG_STRIP_BYTE_COUNTS => {
-                strip_byte_counts = read_entry_values(data, bo, entry_offset + 8, data_type, count as usize);
+                strip_byte_counts =
+                    read_entry_values(data, bo, entry_offset + 8, data_type, count as usize);
             }
             TAG_SUB_IFDS => {
                 // SubIFD 指针可能是单个或多个偏移
@@ -268,7 +275,13 @@ fn parse_ifd(
 }
 
 /// 读取 IFD entry 的值（LONG 或 SHORT 类型，单个）
-fn read_entry_value(data: &[u8], bo: ByteOrder, value_offset: usize, data_type: u16, count: u32) -> Option<u32> {
+fn read_entry_value(
+    data: &[u8],
+    bo: ByteOrder,
+    value_offset: usize,
+    data_type: u16,
+    count: u32,
+) -> Option<u32> {
     match data_type {
         // SHORT (type 3): 2 bytes
         3 if count == 1 => bo.read_u16(data, value_offset).map(|v| v as u32),
@@ -281,7 +294,13 @@ fn read_entry_value(data: &[u8], bo: ByteOrder, value_offset: usize, data_type: 
 /// 读取 IFD entry 的值数组（StripOffsets / StripByteCounts 等）
 ///
 /// 当 count=1 时值直接存储在 value 字段；count>1 时 value 字段存储指向数组的偏移
-fn read_entry_values(data: &[u8], bo: ByteOrder, value_offset: usize, data_type: u16, count: usize) -> Option<Vec<u32>> {
+fn read_entry_values(
+    data: &[u8],
+    bo: ByteOrder,
+    value_offset: usize,
+    data_type: u16,
+    count: usize,
+) -> Option<Vec<u32>> {
     if count == 0 {
         return None;
     }
@@ -325,11 +344,20 @@ fn read_entry_values(data: &[u8], bo: ByteOrder, value_offset: usize, data_type:
         }
     }
 
-    if values.is_empty() { None } else { Some(values) }
+    if values.is_empty() {
+        None
+    } else {
+        Some(values)
+    }
 }
 
 /// 读取 SubIFD 偏移数组
-fn read_sub_ifd_offsets(data: &[u8], bo: ByteOrder, value_offset: usize, count: usize) -> Vec<usize> {
+fn read_sub_ifd_offsets(
+    data: &[u8],
+    bo: ByteOrder,
+    value_offset: usize,
+    count: usize,
+) -> Vec<usize> {
     let mut offsets = Vec::with_capacity(count);
 
     if count == 1 {
@@ -992,15 +1020,13 @@ impl ImageExtractor for WebpExtractor {
 /// CR3 预览 JPEG 所在的 UUID box 标识符（PRVW box）
 /// `eaf42b5e-1c98-4b88-b9fb-b7dc406e4d16`
 const CR3_PREVIEW_UUID: [u8; 16] = [
-    0xea, 0xf4, 0x2b, 0x5e, 0x1c, 0x98, 0x4b, 0x88,
-    0xb9, 0xfb, 0xb7, 0xdc, 0x40, 0x6e, 0x4d, 0x16,
+    0xea, 0xf4, 0x2b, 0x5e, 0x1c, 0x98, 0x4b, 0x88, 0xb9, 0xfb, 0xb7, 0xdc, 0x40, 0x6e, 0x4d, 0x16,
 ];
 
 /// CR3 缩略图 JPEG 所在的 UUID box 标识符（THMB box，在 moov 内）
 /// `85c0b687-820f-11e0-8111-f4ce462b6a48`
 const CR3_THUMB_UUID: [u8; 16] = [
-    0x85, 0xc0, 0xb6, 0x87, 0x82, 0x0f, 0x11, 0xe0,
-    0x81, 0x11, 0xf4, 0xce, 0x46, 0x2b, 0x6a, 0x48,
+    0x85, 0xc0, 0xb6, 0x87, 0x82, 0x0f, 0x11, 0xe0, 0x81, 0x11, 0xf4, 0xce, 0x46, 0x2b, 0x6a, 0x48,
 ];
 
 /// 在 ISOBMFF 容器中递归查找指定 UUID 的 box，提取其内部数据
@@ -1022,7 +1048,12 @@ fn find_uuid_box_recursive<'a>(data: &'a [u8], target_uuid: &[u8; 16]) -> Option
 
     while offset + 8 <= data.len() {
         // 读取 box size 和 type
-        let size = u32::from_be_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]]) as usize;
+        let size = u32::from_be_bytes([
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+        ]) as usize;
         let box_type = &data[offset + 4..offset + 8];
 
         // 计算实际 box 大小
@@ -1309,7 +1340,11 @@ fn extract_cr3_jpeg(data: &[u8]) -> Result<Vec<u8>, AppError> {
                     thumb_content[offset + 19],
                 ]) as usize;
 
-                let jpeg_start = if version == 1 { offset + 20 } else { offset + 24 };
+                let jpeg_start = if version == 1 {
+                    offset + 20
+                } else {
+                    offset + 24
+                };
                 if jpeg_start + jpeg_size > thumb_content.len() {
                     break;
                 }
@@ -1867,9 +1902,18 @@ mod tests {
 
     #[test]
     fn test_get_extractor_case_insensitive() {
-        assert_eq!(get_extractor("CR2").unwrap().supported_extensions(), &["cr2"]);
-        assert_eq!(get_extractor("Arw").unwrap().supported_extensions(), &["arw"]);
-        assert_eq!(get_extractor("DNG").unwrap().supported_extensions(), &["dng"]);
+        assert_eq!(
+            get_extractor("CR2").unwrap().supported_extensions(),
+            &["cr2"]
+        );
+        assert_eq!(
+            get_extractor("Arw").unwrap().supported_extensions(),
+            &["arw"]
+        );
+        assert_eq!(
+            get_extractor("DNG").unwrap().supported_extensions(),
+            &["dng"]
+        );
     }
 
     // ─── is_raw_extension 和 SUPPORTED_RAW_EXTENSIONS 测试 ──
@@ -2368,7 +2412,9 @@ mod tests {
         // DNG with both standard JPEGInterchangeFormat and StripOffsets+Compression=7
         // StripOffsets should produce larger JPEG candidate
         let small_jpeg = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x02, 0xFF, 0xD9]; // 8 bytes
-        let large_jpeg = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x41, 0x42, 0x43, 0x44, 0xFF, 0xD9]; // 12 bytes
+        let large_jpeg = vec![
+            0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x41, 0x42, 0x43, 0x44, 0xFF, 0xD9,
+        ]; // 12 bytes
 
         let mut buf = Vec::new();
 
@@ -2440,7 +2486,11 @@ mod tests {
 
         // parse_tiff_header should now accept ORF magic
         let result = parse_tiff_header(&data);
-        assert!(result.is_ok(), "ORF header should be accepted: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "ORF header should be accepted: {:?}",
+            result
+        );
 
         // OrfExtractor.extract_metadata should normalize header
         let extractor = OrfExtractor;
@@ -2448,8 +2498,11 @@ mod tests {
         // 可能因数据不完整而失败，但不应是 "Unknown image format" 错误
         if let Err(e) = &meta_result {
             let err_str = e.to_string();
-            assert!(!err_str.contains("Unknown image format"),
-                "ORF should not fail with 'Unknown image format', got: {}", err_str);
+            assert!(
+                !err_str.contains("Unknown image format"),
+                "ORF should not fail with 'Unknown image format', got: {}",
+                err_str
+            );
         }
     }
 
@@ -2478,6 +2531,10 @@ mod tests {
 
         // parse_tiff_header should accept ORF magic
         let result = parse_tiff_header(&data);
-        assert!(result.is_ok(), "ORF BE header should be accepted: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "ORF BE header should be accepted: {:?}",
+            result
+        );
     }
 }

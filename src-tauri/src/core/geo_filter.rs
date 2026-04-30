@@ -22,8 +22,8 @@ pub fn load_grid_data(grid_path: &Path) -> Result<HashMap<String, Vec<u16>>, Str
         .read_to_string(&mut json_str)
         .map_err(|e| format!("解压网格数据失败: {}", e))?;
 
-    let grid: HashMap<String, Vec<u16>> = serde_json::from_str(&json_str)
-        .map_err(|e| format!("解析网格数据 JSON 失败: {}", e))?;
+    let grid: HashMap<String, Vec<u16>> =
+        serde_json::from_str(&json_str).map_err(|e| format!("解析网格数据 JSON 失败: {}", e))?;
 
     Ok(grid)
 }
@@ -62,11 +62,7 @@ fn ensure_grid_loaded(grid_path: &Path) -> Option<HashMap<String, Vec<u16>>> {
 /// # 返回
 /// - `Some(Vec<u16>)`: 该位置的物种 cls 索引列表
 /// - `None`: 该位置无网格数据或加载失败
-pub fn query_local_species(
-    lat: f64,
-    lng: f64,
-    grid_path: &Path,
-) -> Option<Vec<u16>> {
+pub fn query_local_species(lat: f64, lng: f64, grid_path: &Path) -> Option<Vec<u16>> {
     let grid = ensure_grid_loaded(grid_path)?;
 
     // 将经纬度转为网格 key（floor 取整度数）
@@ -105,9 +101,7 @@ pub fn apply_geo_filter(probs: &mut [f32], local_species: &[u16]) {
 
     // 所有保留物种的概率和为零，保留原结果
     if sum <= 0.0 {
-        debug!(
-            "地理过滤：所有非零概率对应的 cls 均不在当地物种列表中，保留原结果"
-        );
+        debug!("地理过滤：所有非零概率对应的 cls 均不在当地物种列表中，保留原结果");
         return;
     }
 

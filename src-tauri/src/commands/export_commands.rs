@@ -35,9 +35,7 @@ pub struct ExportProgress {
 // ─── select_export_dir ────────────────────────────────
 
 #[tauri::command]
-pub async fn select_export_dir(
-    app: tauri::AppHandle,
-) -> Result<Option<String>, String> {
+pub async fn select_export_dir(app: tauri::AppHandle) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
 
     let dir = app
@@ -67,12 +65,7 @@ pub async fn export_images(
             .map_err(|e| format!("无法获取会话状态锁: {}", e))?;
         hashes
             .iter()
-            .filter_map(|h| {
-                session
-                    .hash_path_map
-                    .get(h)
-                    .map(|p| (h.clone(), p.clone()))
-            })
+            .filter_map(|h| session.hash_path_map.get(h).map(|p| (h.clone(), p.clone())))
             .collect()
     };
 

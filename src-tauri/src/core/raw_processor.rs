@@ -123,9 +123,9 @@ pub async fn process_single_image(
     }
 
     // 缓存未命中：全量读取（JPEG 提取需要完整文件）
-    let data = tokio::fs::read(file_path).await.map_err(|e| {
-        AppError::FileNotFound(format!("{}: {}", file_path.display(), e))
-    })?;
+    let data = tokio::fs::read(file_path)
+        .await
+        .map_err(|e| AppError::FileNotFound(format!("{}: {}", file_path.display(), e)))?;
 
     // 从同一份数据中获取图像数据和 Exif（使用格式特定的 Extractor）
     let image_data = extractor.get_image_data(&data)?;
@@ -180,9 +180,9 @@ async fn read_exif_from_header(
 ) -> Result<ImageMetadata, AppError> {
     use tokio::io::AsyncReadExt;
 
-    let mut file = tokio::fs::File::open(file_path).await.map_err(|e| {
-        AppError::FileNotFound(format!("{}: {}", file_path.display(), e))
-    })?;
+    let mut file = tokio::fs::File::open(file_path)
+        .await
+        .map_err(|e| AppError::FileNotFound(format!("{}: {}", file_path.display(), e)))?;
 
     let file_size = file
         .metadata()
@@ -306,7 +306,6 @@ pub fn generate_medium(jpeg_data: &[u8]) -> Result<Vec<u8>, AppError> {
 
     Ok(buf.into_inner())
 }
-
 
 #[cfg(test)]
 mod tests {

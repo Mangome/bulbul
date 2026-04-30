@@ -24,7 +24,9 @@ use crate::core::phash;
 use crate::core::raw_parser;
 use crate::core::raw_processor::{self, ProcessResult};
 use crate::models::directory_cache::{DirectoryGroupCache, FileFingerprint, ImageResultCache};
-use crate::models::{DetectionCacheEntry, GroupResult, PerformanceMetrics, ProcessingProgress, ProcessingState};
+use crate::models::{
+    DetectionCacheEntry, GroupResult, PerformanceMetrics, ProcessingProgress, ProcessingState,
+};
 use crate::state::SessionState;
 use crate::utils::{cache, result_cache};
 
@@ -107,7 +109,14 @@ pub async fn process_folder(
         s.processing_state = ProcessingState::Completed;
         s.group_result = Some(empty_result.clone());
 
-        emit_progress(&app, ProcessingState::Completed, 0, 0, None, &pipeline_start);
+        emit_progress(
+            &app,
+            ProcessingState::Completed,
+            0,
+            0,
+            None,
+            &pipeline_start,
+        );
         let _ = app.emit("processing-completed", &empty_result);
 
         return Ok(empty_result);
@@ -184,23 +193,33 @@ pub async fn process_folder(
                 }
 
                 let group_result = group_cache.group_result.clone();
-                emit_progress(&app, ProcessingState::Completed, total, total, None, &pipeline_start);
+                emit_progress(
+                    &app,
+                    ProcessingState::Completed,
+                    total,
+                    total,
+                    None,
+                    &pipeline_start,
+                );
                 let _ = app.emit("processing-completed", &group_result);
 
                 // 检查是否需要后台 FocusScoring（focus_score_method 为 None 表示未运行过）
-                let needs_focus_scoring = valid_cached.iter().any(|r| {
-                    r.metadata.focus_score_method.is_none()
-                });
+                let needs_focus_scoring = valid_cached
+                    .iter()
+                    .any(|r| r.metadata.focus_score_method.is_none());
 
                 if needs_focus_scoring {
-                    let results: Vec<ProcessResult> = valid_cached.iter().map(|irc| ProcessResult {
-                        hash: irc.hash.clone(),
-                        filename: irc.filename.clone(),
-                        file_path: irc.file_path.clone(),
-                        metadata: irc.metadata.clone(),
-                        medium_path: irc.medium_path.clone(),
-                        thumbnail_path: irc.thumbnail_path.clone(),
-                    }).collect();
+                    let results: Vec<ProcessResult> = valid_cached
+                        .iter()
+                        .map(|irc| ProcessResult {
+                            hash: irc.hash.clone(),
+                            filename: irc.filename.clone(),
+                            file_path: irc.file_path.clone(),
+                            metadata: irc.metadata.clone(),
+                            medium_path: irc.medium_path.clone(),
+                            thumbnail_path: irc.thumbnail_path.clone(),
+                        })
+                        .collect();
 
                     let gps = match (lat, lng) {
                         (Some(la), Some(ln)) if la != 0.0 || ln != 0.0 => Some((la, ln)),
@@ -214,9 +233,16 @@ pub async fn process_folder(
 
                     tokio::spawn(async move {
                         if let Err(e) = compute_focus_scores_background(
-                            &app_clone, &results, results.len(), &focus_start,
-                            &group_result_clone, state_arc, gps,
-                        ).await {
+                            &app_clone,
+                            &results,
+                            results.len(),
+                            &focus_start,
+                            &group_result_clone,
+                            state_arc,
+                            gps,
+                        )
+                        .await
+                        {
                             log::error!("后台合焦评分失败: {}", e);
                         }
                     });
@@ -225,11 +251,11 @@ pub async fn process_folder(
                 return Ok(group_result);
             } else if !valid_cached.is_empty() {
                 // ── 部分命中：仅处理 missing 文件 ──
-                let cached_hashes: std::collections::HashSet<String> = valid_cached.iter()
-                    .map(|r| r.hash.clone())
-                    .collect();
+                let cached_hashes: std::collections::HashSet<String> =
+                    valid_cached.iter().map(|r| r.hash.clone()).collect();
 
-                let missing_files: Vec<PathBuf> = file_entries.iter()
+                let missing_files: Vec<PathBuf> = file_entries
+                    .iter()
                     .filter(|(_, hash, _)| !cached_hashes.contains(hash))
                     .map(|(path, _, _)| path.clone())
                     .collect();
@@ -273,9 +299,14 @@ pub async fn process_folder(
 
     // 如果有缓存命中，只处理 missing 的文件
     let files_to_process = if cached_image_results.is_some() {
-        let cached_hashes: std::collections::HashSet<String> = cached_image_results.as_ref().unwrap()
-            .iter().map(|r| r.hash.clone()).collect();
-        nef_files.iter()
+        let cached_hashes: std::collections::HashSet<String> = cached_image_results
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|r| r.hash.clone())
+            .collect();
+        nef_files
+            .iter()
             .filter(|f| {
                 crate::utils::paths::compute_path_hash(f)
                     .map(|h| !cached_hashes.contains(&h))
@@ -287,11 +318,19 @@ pub async fn process_folder(
         nef_files.clone()
     };
 
-    println!("[process_folder] 阶段2开始: files_to_process={}, total={}, cancel_flag={}", files_to_process.len(), total, cancel_flag.load(Ordering::Relaxed));
+    println!(
+        "[process_folder] 阶段2开始: files_to_process={}, total={}, cancel_flag={}",
+        files_to_process.len(),
+        total,
+        cancel_flag.load(Ordering::Relaxed)
+    );
 
     for file_path in &files_to_process {
         if cancel_flag.load(Ordering::Relaxed) {
-            println!("[process_folder] spawn 循环中检测到取消, 已 spawn {} 个任务", join_set.len());
+            println!(
+                "[process_folder] spawn 循环中检测到取消, 已 spawn {} 个任务",
+                join_set.len()
+            );
             break;
         }
 
@@ -336,7 +375,8 @@ pub async fn process_folder(
                         let cache = cache_dir.clone();
                         let hash_clone = hash.clone();
                         tokio::spawn(async move {
-                            let _ = result_cache::save_image_result(&cache, &hash_clone, &irc).await;
+                            let _ =
+                                result_cache::save_image_result(&cache, &hash_clone, &irc).await;
                         });
                     }
                 }
@@ -383,7 +423,13 @@ pub async fn process_folder(
     }
 
     let process_time_ms = process_start.elapsed().as_secs_f64() * 1000.0;
-    println!("[process_folder] 阶段2完成: results={}, failed={}, processed={}, cancel_flag={}", results.len(), failed_files.len(), processed, cancel_flag.load(Ordering::Relaxed));
+    println!(
+        "[process_folder] 阶段2完成: results={}, failed={}, processed={}, cancel_flag={}",
+        results.len(),
+        failed_files.len(),
+        processed,
+        cancel_flag.load(Ordering::Relaxed)
+    );
     if !failed_files.is_empty() {
         for (i, f) in failed_files.iter().enumerate().take(3) {
             println!("[process_folder] failed[{}]: {}", i, f);
@@ -404,12 +450,23 @@ pub async fn process_folder(
                 thumbnail_path: irc.thumbnail_path.clone(),
             });
         }
-        println!("[process_folder] 合并缓存结果后: total_results={}", results.len());
+        println!(
+            "[process_folder] 合并缓存结果后: total_results={}",
+            results.len()
+        );
     }
 
     // 检查取消
     if cancel_flag.load(Ordering::Relaxed) {
-        return handle_cancelled(&app, &state, &results, total, &pipeline_start, scan_time_ms, process_time_ms);
+        return handle_cancelled(
+            &app,
+            &state,
+            &results,
+            total,
+            &pipeline_start,
+            scan_time_ms,
+            process_time_ms,
+        );
     }
 
     // 更新 SessionState 映射
@@ -464,12 +521,10 @@ pub async fn process_folder(
 
             // pHash 计算是 CPU 密集型，在 blocking 线程中执行
             let path = thumbnail_path.clone();
-            let phash_result = tokio::task::spawn_blocking(move || {
-                phash::compute_phash(&path)
-            })
-            .await
-            .map_err(|e| format!("pHash 计算任务失败: {}", e))
-            .and_then(|r| r.map_err(|e| format!("pHash 计算失败: {}", e)));
+            let phash_result = tokio::task::spawn_blocking(move || phash::compute_phash(&path))
+                .await
+                .map_err(|e| format!("pHash 计算任务失败: {}", e))
+                .and_then(|r| r.map_err(|e| format!("pHash 计算失败: {}", e)));
 
             (idx, hash, phash_result)
         });
@@ -525,7 +580,15 @@ pub async fn process_folder(
 
     // 检查取消
     if cancel_flag.load(Ordering::Relaxed) {
-        return handle_cancelled(&app, &state, &results, total, &pipeline_start, scan_time_ms, process_time_ms);
+        return handle_cancelled(
+            &app,
+            &state,
+            &results,
+            total,
+            &pipeline_start,
+            scan_time_ms,
+            process_time_ms,
+        );
     }
 
     // 将 pHash 结果写入 SessionState
@@ -563,14 +626,7 @@ pub async fn process_folder(
         s.processing_state = ProcessingState::Grouping;
     }
 
-    emit_progress(
-        &app,
-        ProcessingState::Grouping,
-        0,
-        1,
-        None,
-        &pipeline_start,
-    );
+    emit_progress(&app, ProcessingState::Grouping, 0, 1, None, &pipeline_start);
 
     let grouping_start = Instant::now();
 
@@ -584,34 +640,30 @@ pub async fn process_folder(
                 phash: *phash_val,
                 filename: r.filename.clone(),
                 file_path: r.file_path.clone(),
-                capture_time: r.metadata.capture_time.as_ref().and_then(|t| {
-                    parse_capture_time(t)
-                }),
+                capture_time: r
+                    .metadata
+                    .capture_time
+                    .as_ref()
+                    .and_then(|t| parse_capture_time(t)),
             })
         })
         .collect();
 
-    println!("[process_folder] results.len()={}, phash_results.len()={}, image_infos.len()={}", results.len(), phash_results.len(), image_infos.len());
+    println!(
+        "[process_folder] results.len()={}, phash_results.len()={}, image_infos.len()={}",
+        results.len(),
+        phash_results.len(),
+        image_infos.len()
+    );
 
     let threshold = similarity_threshold.unwrap_or(90.0);
     let time_gap = time_gap_seconds.map(|t| t as i64).unwrap_or(10);
 
-    let groups = grouping::group_images_with_phash(
-        &image_infos,
-        Some(threshold),
-        Some(time_gap),
-    );
+    let groups = grouping::group_images_with_phash(&image_infos, Some(threshold), Some(time_gap));
 
     let grouping_time_ms = grouping_start.elapsed().as_secs_f64() * 1000.0;
 
-    emit_progress(
-        &app,
-        ProcessingState::Grouping,
-        1,
-        1,
-        None,
-        &pipeline_start,
-    );
+    emit_progress(&app, ProcessingState::Grouping, 1, 1, None, &pipeline_start);
 
     // ═══════════════════════════════════════════════════════
     // 阶段 5: Completed — 构建结果
@@ -679,7 +731,8 @@ pub async fn process_folder(
             Some((la, ln))
         }
         _ => {
-            log::info!("使用默认 GPS: ({:.1}, {:.1})",
+            log::info!(
+                "使用默认 GPS: ({:.1}, {:.1})",
                 bird_classification::DEFAULT_GPS.unwrap().0,
                 bird_classification::DEFAULT_GPS.unwrap().1,
             );
@@ -697,8 +750,16 @@ pub async fn process_folder(
         let state_arc = Arc::clone(&state);
 
         tokio::spawn(async move {
-            if let Err(e) = compute_focus_scores_background(&app, &results, total, &pipeline_start, &group_result_clone, state_arc, gps)
-                .await
+            if let Err(e) = compute_focus_scores_background(
+                &app,
+                &results,
+                total,
+                &pipeline_start,
+                &group_result_clone,
+                state_arc,
+                gps,
+            )
+            .await
             {
                 log::error!("后台合焦评分失败: {}", e);
             }
@@ -751,7 +812,8 @@ pub async fn regroup(
 
         // 更新目录分组缓存
         if let Some(ref current_folder) = s.current_folder {
-            let file_hashes: Vec<String> = s.process_results
+            let file_hashes: Vec<String> = s
+                .process_results
                 .as_ref()
                 .map(|prs| prs.iter().map(|p| p.hash.clone()).collect())
                 .unwrap_or_default();
@@ -801,7 +863,9 @@ pub async fn reclassify(
     let group_result = group_result.ok_or("没有可用的分组数据")?;
 
     // 解析分类器和地理过滤网格数据路径
-    let (classifier_model_path, species_db_path): (Option<PathBuf>, Option<PathBuf>) = app.path().resource_dir()
+    let (classifier_model_path, species_db_path): (Option<PathBuf>, Option<PathBuf>) = app
+        .path()
+        .resource_dir()
         .map(|dir| bird_classification::resolve_classifier_paths_from_resource_dir(&dir))
         .map(|(m, d)| {
             let m = if m.exists() { Some(m) } else { None };
@@ -810,7 +874,9 @@ pub async fn reclassify(
         })
         .unwrap_or((None, None));
 
-    let geo_grid_path: Option<PathBuf> = app.path().resource_dir()
+    let geo_grid_path: Option<PathBuf> = app
+        .path()
+        .resource_dir()
         .map(|dir| bird_classification::resolve_geo_grid_path_from_resource_dir(&dir))
         .ok()
         .filter(|p| p.exists());
@@ -874,7 +940,9 @@ pub async fn reclassify(
 
     // ─── 第二阶段：分组融合投票重跑 ───
     for group in &group_result.groups {
-        let group_member_hashes: Vec<&String> = group.picture_hashes.iter()
+        let group_member_hashes: Vec<&String> = group
+            .picture_hashes
+            .iter()
             .filter(|h| updated_cache.contains_key(*h))
             .collect();
 
@@ -883,8 +951,12 @@ pub async fn reclassify(
         }
 
         // 检查是否至少有一个成员有物种结果
-        let any_has_species = group_member_hashes.iter()
-            .any(|h| updated_cache[*h].bboxes.iter().any(|b| b.species_name.is_some()));
+        let any_has_species = group_member_hashes.iter().any(|h| {
+            updated_cache[*h]
+                .bboxes
+                .iter()
+                .any(|b| b.species_name.is_some())
+        });
 
         if !any_has_species {
             continue;
@@ -921,12 +993,15 @@ pub async fn reclassify(
             }
 
             let entry = &updated_cache[hash];
-            let _ = app.emit("focus-score-update", serde_json::json!({
-                "hash": hash,
-                "score": entry.score,
-                "method": entry.method,
-                "detectionBboxes": entry.bboxes,
-            }));
+            let _ = app.emit(
+                "focus-score-update",
+                serde_json::json!({
+                    "hash": hash,
+                    "score": entry.score,
+                    "method": entry.method,
+                    "detectionBboxes": entry.bboxes,
+                }),
+            );
         }
     }
 
@@ -937,7 +1012,11 @@ pub async fn reclassify(
 
         // 更新图片结果缓存（Task 4.2）
         for (hash, entry) in &updated_cache {
-            if let Some(pr) = s.process_results.as_ref().and_then(|prs| prs.iter().find(|p| p.hash == *hash)) {
+            if let Some(pr) = s
+                .process_results
+                .as_ref()
+                .and_then(|prs| prs.iter().find(|p| p.hash == *hash))
+            {
                 let mut updated_metadata = pr.metadata.clone();
                 updated_metadata.focus_score = entry.score;
                 updated_metadata.focus_score_method = Some(entry.method.clone());
@@ -945,7 +1024,9 @@ pub async fn reclassify(
                 let cache = s.cache_dir.clone();
                 let hash_clone = hash.clone();
                 tokio::spawn(async move {
-                    if let Some(mut irc) = result_cache::load_image_result(&cache, &hash_clone).await {
+                    if let Some(mut irc) =
+                        result_cache::load_image_result(&cache, &hash_clone).await
+                    {
                         irc.metadata = updated_metadata;
                         let _ = result_cache::save_image_result(&cache, &hash_clone, &irc).await;
                     }
@@ -956,7 +1037,8 @@ pub async fn reclassify(
         // 更新目录分组缓存（Task 4.3）
         if let Some(ref current_folder) = s.current_folder {
             if let Some(ref gr) = s.group_result {
-                let file_hashes: Vec<String> = s.process_results
+                let file_hashes: Vec<String> = s
+                    .process_results
                     .as_ref()
                     .map(|prs| prs.iter().map(|p| p.hash.clone()).collect())
                     .unwrap_or_default();
@@ -1001,9 +1083,7 @@ pub async fn cancel_processing(
     let mut s = state.lock().map_err(|e| e.to_string())?;
     s.cancel_flag.store(true, Ordering::Relaxed);
     let current_state = s.processing_state.clone();
-    if current_state == ProcessingState::Processing
-        || current_state == ProcessingState::Analyzing
-    {
+    if current_state == ProcessingState::Processing || current_state == ProcessingState::Analyzing {
         s.processing_state = ProcessingState::Cancelling;
     }
     Ok(())
@@ -1174,7 +1254,9 @@ async fn compute_focus_scores_background(
     }
 
     // 解析模型路径（macOS .app bundle 需要 resource_dir）
-    let model_path: Option<PathBuf> = app.path().resource_dir()
+    let model_path: Option<PathBuf> = app
+        .path()
+        .resource_dir()
         .map(|dir| bird_detection::resolve_model_path_from_resource_dir(&dir))
         .ok()
         .filter(|p: &PathBuf| p.exists());
@@ -1184,7 +1266,9 @@ async fn compute_focus_scores_background(
     let model_path = model_path; // 不可变
 
     // 解析分类器模型和物种数据库路径
-    let (classifier_model_path, species_db_path): (Option<PathBuf>, Option<PathBuf>) = app.path().resource_dir()
+    let (classifier_model_path, species_db_path): (Option<PathBuf>, Option<PathBuf>) = app
+        .path()
+        .resource_dir()
         .map(|dir| bird_classification::resolve_classifier_paths_from_resource_dir(&dir))
         .map(|(m, d)| {
             let m = if m.exists() { Some(m) } else { None };
@@ -1197,13 +1281,19 @@ async fn compute_focus_scores_background(
     }
 
     // 解析地理过滤网格数据路径
-    let geo_grid_path: Option<PathBuf> = app.path().resource_dir()
+    let geo_grid_path: Option<PathBuf> = app
+        .path()
+        .resource_dir()
         .map(|dir| bird_classification::resolve_geo_grid_path_from_resource_dir(&dir))
         .ok()
         .filter(|p| p.exists());
     if geo_grid_path.is_some() {
         if let Some((la, ln)) = gps {
-            log::info!("地理过滤网格数据已找到，将启用 GPS 物种过滤 ({:.1}°N, {:.1}°E)", la, ln);
+            log::info!(
+                "地理过滤网格数据已找到，将启用 GPS 物种过滤 ({:.1}°N, {:.1}°E)",
+                la,
+                ln
+            );
         }
     }
 
@@ -1247,12 +1337,19 @@ async fn compute_focus_scores_background(
             let gps_clone = gps_for_tasks;
             let result = tokio::task::spawn_blocking(move || {
                 // 1. 鸟类检测
-                let detection = bird_detection::detect_birds(&medium_path_clone, model_path_clone.as_deref());
+                let detection =
+                    bird_detection::detect_birds(&medium_path_clone, model_path_clone.as_deref());
                 let (best_bbox, mut all_bboxes) = match detection {
                     Ok(result) if !result.bboxes.is_empty() => {
                         // 取置信度最高的框用于评分
-                        let best = result.bboxes.iter()
-                            .max_by(|a, b| a.confidence.partial_cmp(&b.confidence).unwrap_or(std::cmp::Ordering::Equal))
+                        let best = result
+                            .bboxes
+                            .iter()
+                            .max_by(|a, b| {
+                                a.confidence
+                                    .partial_cmp(&b.confidence)
+                                    .unwrap_or(std::cmp::Ordering::Equal)
+                            })
                             .cloned();
                         (best, result.bboxes)
                     }
@@ -1279,7 +1376,8 @@ async fn compute_focus_scores_background(
                 let (score, method) = focus_score::calculate_focus_score_with_bbox(
                     &medium_path_clone,
                     best_bbox.as_ref(),
-                ).unwrap_or((None, FocusScoringMethod::Undetected));
+                )
+                .unwrap_or((None, FocusScoringMethod::Undetected));
 
                 (score, method, all_bboxes)
             })
@@ -1300,22 +1398,32 @@ async fn compute_focus_scores_background(
                 completed += 1;
 
                 // 立即 emit 初步结果，前端先显示单帧分类结果
-                let _ = app.emit("focus-score-update", serde_json::json!({
-                    "hash": &hash,
-                    "score": score,
-                    "method": method,
-                    "detectionBboxes": &bboxes,
-                }));
+                let _ = app.emit(
+                    "focus-score-update",
+                    serde_json::json!({
+                        "hash": &hash,
+                        "score": score,
+                        "method": method,
+                        "detectionBboxes": &bboxes,
+                    }),
+                );
 
                 // 写入 detection_cache
                 if let Ok(mut s) = state.lock() {
-                    s.detection_cache.insert(hash.clone(), DetectionCacheEntry {
-                        score,
-                        method: method.clone(),
-                        bboxes: bboxes.clone(),
-                    });
+                    s.detection_cache.insert(
+                        hash.clone(),
+                        DetectionCacheEntry {
+                            score,
+                            method: method.clone(),
+                            bboxes: bboxes.clone(),
+                        },
+                    );
                     // 更新图片结果缓存的 metadata（阶段 6）
-                    if let Some(pr) = s.process_results.as_ref().and_then(|prs| prs.iter().find(|p| p.hash == hash)) {
+                    if let Some(pr) = s
+                        .process_results
+                        .as_ref()
+                        .and_then(|prs| prs.iter().find(|p| p.hash == hash))
+                    {
                         let mut updated_metadata = pr.metadata.clone();
                         updated_metadata.focus_score = score;
                         updated_metadata.focus_score_method = Some(method.clone());
@@ -1323,15 +1431,24 @@ async fn compute_focus_scores_background(
                         let cache_dir = s.cache_dir.clone();
                         let hash_clone = hash.clone();
                         tokio::spawn(async move {
-                            if let Some(mut irc) = result_cache::load_image_result(&cache_dir, &hash_clone).await {
+                            if let Some(mut irc) =
+                                result_cache::load_image_result(&cache_dir, &hash_clone).await
+                            {
                                 irc.metadata = updated_metadata;
-                                let _ = result_cache::save_image_result(&cache_dir, &hash_clone, &irc).await;
+                                let _ =
+                                    result_cache::save_image_result(&cache_dir, &hash_clone, &irc)
+                                        .await;
                             }
                         });
                     }
                 }
 
-                frame_results.push(FrameDetectionResult { hash, score, method, bboxes });
+                frame_results.push(FrameDetectionResult {
+                    hash,
+                    score,
+                    method,
+                    bboxes,
+                });
 
                 emit_progress(
                     app,
@@ -1348,13 +1465,20 @@ async fn compute_focus_scores_background(
 
                 // 写入 detection_cache（空结果）
                 if let Ok(mut s) = state.lock() {
-                    s.detection_cache.insert(hash.clone(), DetectionCacheEntry {
-                        score: None,
-                        method: FocusScoringMethod::Undetected,
-                        bboxes: vec![],
-                    });
+                    s.detection_cache.insert(
+                        hash.clone(),
+                        DetectionCacheEntry {
+                            score: None,
+                            method: FocusScoringMethod::Undetected,
+                            bboxes: vec![],
+                        },
+                    );
                     // 更新图片结果缓存的 metadata（阶段 6 - 检测失败）
-                    if let Some(pr) = s.process_results.as_ref().and_then(|prs| prs.iter().find(|p| p.hash == hash)) {
+                    if let Some(pr) = s
+                        .process_results
+                        .as_ref()
+                        .and_then(|prs| prs.iter().find(|p| p.hash == hash))
+                    {
                         let mut updated_metadata = pr.metadata.clone();
                         updated_metadata.focus_score = None;
                         updated_metadata.focus_score_method = Some(FocusScoringMethod::Undetected);
@@ -1362,9 +1486,13 @@ async fn compute_focus_scores_background(
                         let cache_dir = s.cache_dir.clone();
                         let hash_clone = hash.clone();
                         tokio::spawn(async move {
-                            if let Some(mut irc) = result_cache::load_image_result(&cache_dir, &hash_clone).await {
+                            if let Some(mut irc) =
+                                result_cache::load_image_result(&cache_dir, &hash_clone).await
+                            {
                                 irc.metadata = updated_metadata;
-                                let _ = result_cache::save_image_result(&cache_dir, &hash_clone, &irc).await;
+                                let _ =
+                                    result_cache::save_image_result(&cache_dir, &hash_clone, &irc)
+                                        .await;
                             }
                         });
                     }
@@ -1377,12 +1505,15 @@ async fn compute_focus_scores_background(
                     bboxes: vec![],
                 });
 
-                let _ = app.emit("focus-score-update", serde_json::json!({
-                    "hash": &hash,
-                    "score": null,
-                    "method": "Undetected",
-                    "detectionBboxes": [],
-                }));
+                let _ = app.emit(
+                    "focus-score-update",
+                    serde_json::json!({
+                        "hash": &hash,
+                        "score": null,
+                        "method": "Undetected",
+                        "detectionBboxes": [],
+                    }),
+                );
 
                 emit_progress(
                     app,
@@ -1423,7 +1554,8 @@ async fn compute_focus_scores_background(
     // 仅处理多帧分组的融合投票
     for group in &group_result.groups {
         // 收集该分组内有检测结果的图片
-        let group_member_indices: Vec<usize> = group.picture_hashes
+        let group_member_indices: Vec<usize> = group
+            .picture_hashes
             .iter()
             .filter_map(|h| hash_to_result.get(h).copied())
             .collect();
@@ -1434,8 +1566,12 @@ async fn compute_focus_scores_background(
         }
 
         // 检查是否至少有一个成员有物种结果（投票才有意义）
-        let any_has_species = group_member_indices.iter()
-            .any(|&idx| frame_results[idx].bboxes.iter().any(|b| b.species_name.is_some()));
+        let any_has_species = group_member_indices.iter().any(|&idx| {
+            frame_results[idx]
+                .bboxes
+                .iter()
+                .any(|b| b.species_name.is_some())
+        });
 
         if !any_has_species {
             continue;
@@ -1444,7 +1580,9 @@ async fn compute_focus_scores_background(
         // 构建投票输入：每个成员的 (图片路径, bboxes)
         let mut vote_inputs: Vec<(PathBuf, Vec<DetectionBox>)> = Vec::new();
         for &idx in &group_member_indices {
-            let result_idx = results.iter().position(|r| r.hash == frame_results[idx].hash);
+            let result_idx = results
+                .iter()
+                .position(|r| r.hash == frame_results[idx].hash);
             let medium_path = result_idx.map(|i| PathBuf::from(&results[i].medium_path));
             if let Some(path) = medium_path {
                 vote_inputs.push((path, frame_results[idx].bboxes.clone()));
@@ -1474,12 +1612,15 @@ async fn compute_focus_scores_background(
                 frame_results[idx].bboxes = vote_inputs[i].1.clone();
             }
             let frame = &frame_results[idx];
-            let _ = app.emit("focus-score-update", serde_json::json!({
-                "hash": &frame.hash,
-                "score": frame.score,
-                "method": frame.method,
-                "detectionBboxes": frame.bboxes,
-            }));
+            let _ = app.emit(
+                "focus-score-update",
+                serde_json::json!({
+                    "hash": &frame.hash,
+                    "score": frame.score,
+                    "method": frame.method,
+                    "detectionBboxes": frame.bboxes,
+                }),
+            );
 
             // 更新 detection_cache 中的 bboxes（融合结果）
             if let Ok(mut s) = state.lock() {
@@ -1509,8 +1650,8 @@ async fn compute_focus_scores_background(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
 
     /// 测试 5.8：metadata_cache 并发写入不 panic（多线程同时更新不同 hash）
     #[test]
@@ -1545,9 +1686,9 @@ mod tests {
         let hash = "abc123def456789".to_string();
         let score = Some(5u32);
         let method = FocusScoringMethod::BirdRegion;
-        let bboxes = vec![
-            crate::core::bird_detection::DetectionBox::new(0.1, 0.2, 0.8, 0.9, 0.95),
-        ];
+        let bboxes = vec![crate::core::bird_detection::DetectionBox::new(
+            0.1, 0.2, 0.8, 0.9, 0.95,
+        )];
 
         let payload = serde_json::json!({
             "hash": &hash,
@@ -1575,7 +1716,10 @@ mod tests {
 
         assert_eq!(payload_undetected["score"], serde_json::Value::Null);
         assert_eq!(payload_undetected["method"], "Undetected");
-        assert!(payload_undetected["detectionBboxes"].as_array().unwrap().is_empty());
+        assert!(payload_undetected["detectionBboxes"]
+            .as_array()
+            .unwrap()
+            .is_empty());
     }
 
     /// 测试 5.7 辅助：Semaphore 并发限制的基本功能
@@ -1605,12 +1749,11 @@ mod tests {
                     // 更新最大并发数
                     loop {
                         let max = max_concurrent_clone.load(Ordering::SeqCst);
-                        if current <= max || max_concurrent_clone.compare_exchange(
-                            max,
-                            current,
-                            Ordering::SeqCst,
-                            Ordering::SeqCst,
-                        ).is_ok() {
+                        if current <= max
+                            || max_concurrent_clone
+                                .compare_exchange(max, current, Ordering::SeqCst, Ordering::SeqCst)
+                                .is_ok()
+                        {
                             break;
                         }
                     }
@@ -1678,7 +1821,9 @@ mod tests {
             method: FocusScoringMethod::BirdRegion,
             bboxes: vec![DetectionBox::new(0.1, 0.2, 0.8, 0.9, 0.95)],
         };
-        state.detection_cache.insert("hash_abc".to_string(), entry.clone());
+        state
+            .detection_cache
+            .insert("hash_abc".to_string(), entry.clone());
 
         // 读取
         let read_entry = state.detection_cache.get("hash_abc").unwrap();
@@ -1687,11 +1832,16 @@ mod tests {
         assert_eq!(read_entry.bboxes.len(), 1);
 
         // 更新
-        state.detection_cache.get_mut("hash_abc").unwrap().bboxes[0].species_name = Some("Silver Pheasant".to_string());
-        state.detection_cache.get_mut("hash_abc").unwrap().bboxes[0].species_confidence = Some(0.85);
+        state.detection_cache.get_mut("hash_abc").unwrap().bboxes[0].species_name =
+            Some("Silver Pheasant".to_string());
+        state.detection_cache.get_mut("hash_abc").unwrap().bboxes[0].species_confidence =
+            Some(0.85);
 
         let updated = state.detection_cache.get("hash_abc").unwrap();
-        assert_eq!(updated.bboxes[0].species_name, Some("Silver Pheasant".to_string()));
+        assert_eq!(
+            updated.bboxes[0].species_name,
+            Some("Silver Pheasant".to_string())
+        );
         assert_eq!(updated.bboxes[0].species_confidence, Some(0.85));
     }
 
@@ -1699,15 +1849,20 @@ mod tests {
     #[test]
     fn test_reset_clears_detection_cache() {
         let mut state = SessionState::new();
-        state.detection_cache.insert("hash_abc".to_string(), DetectionCacheEntry {
-            score: Some(4),
-            method: FocusScoringMethod::BirdRegion,
-            bboxes: vec![],
-        });
+        state.detection_cache.insert(
+            "hash_abc".to_string(),
+            DetectionCacheEntry {
+                score: Some(4),
+                method: FocusScoringMethod::BirdRegion,
+                bboxes: vec![],
+            },
+        );
         assert!(!state.detection_cache.is_empty());
 
         state.reset();
-        assert!(state.detection_cache.is_empty(), "reset() 应清空 detection_cache");
+        assert!(
+            state.detection_cache.is_empty(),
+            "reset() 应清空 detection_cache"
+        );
     }
 }
-

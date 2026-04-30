@@ -1,10 +1,10 @@
-pub mod raw_processor;
+pub mod bird_classification;
+pub mod bird_detection;
+pub mod focus_score;
+pub mod geo_filter;
+pub mod grouping;
 pub mod metadata;
 pub mod phash;
-pub mod similarity;
-pub mod grouping;
 pub mod raw_parser;
-pub mod focus_score;
-pub mod bird_detection;
-pub mod bird_classification;
-pub mod geo_filter;
+pub mod raw_processor;
+pub mod similarity;

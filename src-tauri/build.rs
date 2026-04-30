@@ -9,6 +9,6 @@ fn main() {
         // 指定监听 resources 目录的变化，触发重新编译
         println!("cargo:rerun-if-changed=resources/models");
     }
-    
+
     tauri_build::build()
 }

@@ -41,6 +41,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -65,6 +66,17 @@
         "installerIcon": "icons/icon.ico",
         "headerImage": null,
         "sidebarImage": null
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRCM0ZFNUZBQzgwNDkwQzEKUldUQmtBVEkrdVUvUzFEUHJvbmVCd2h5SlNrZmNkcnFDTkkyUVhBakpMdWhoUWhEaXlRK0sxTisK",
+      "endpoints": [
+        "https://github.com/Mangome/bulbul/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

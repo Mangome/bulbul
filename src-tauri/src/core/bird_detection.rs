@@ -111,9 +111,9 @@ lazy_static::lazy_static! {
 
 /// 加载 ONNX 模型到内存缓存
 fn load_model(model_path: &Path) -> Result<(), AppError> {
-    let mut session = MODEL_SESSION.lock().map_err(|_| {
-        AppError::DetectionFailed("模型缓存锁定失败".to_string())
-    })?;
+    let mut session = MODEL_SESSION
+        .lock()
+        .map_err(|_| AppError::DetectionFailed("模型缓存锁定失败".to_string()))?;
 
     if session.is_some() {
         return Ok(()); // 已加载
@@ -237,8 +237,8 @@ fn parse_yolov8_output(
         // 数据布局: data[feature_idx * num_detections + detection_idx]
         let cx = data[0 * num_detections + i];
         let cy = data[1 * num_detections + i];
-        let w  = data[2 * num_detections + i];
-        let h  = data[3 * num_detections + i];
+        let w = data[2 * num_detections + i];
+        let h = data[3 * num_detections + i];
 
         // 单类别模型: 置信度在 feature index 4
         let conf = data[4 * num_detections + i];
@@ -275,32 +275,33 @@ fn run_inference(
     let (shape, data) = canvas_to_input(canvas);
 
     // 创建 ort Tensor
-    let input_tensor = ort::value::Tensor::from_array((shape.clone(), data)).map_err(|e| {
-        AppError::DetectionFailed(format!("输入张量创建失败: {}", e))
-    })?;
+    let input_tensor = ort::value::Tensor::from_array((shape.clone(), data))
+        .map_err(|e| AppError::DetectionFailed(format!("输入张量创建失败: {}", e)))?;
 
-    let mut session_guard = MODEL_SESSION.lock().map_err(|_| {
-        AppError::DetectionFailed("模型锁定失败".to_string())
-    })?;
+    let mut session_guard = MODEL_SESSION
+        .lock()
+        .map_err(|_| AppError::DetectionFailed("模型锁定失败".to_string()))?;
 
-    let session = session_guard.as_mut().ok_or_else(|| {
-        AppError::DetectionFailed("模型未加载".to_string())
-    })?;
+    let session = session_guard
+        .as_mut()
+        .ok_or_else(|| AppError::DetectionFailed("模型未加载".to_string()))?;
 
-    let outputs = session.run(ort::inputs!["images" => input_tensor]).map_err(|e| {
-        AppError::DetectionFailed(format!("模型推理失败: {}", e))
-    })?;
+    let outputs = session
+        .run(ort::inputs!["images" => input_tensor])
+        .map_err(|e| AppError::DetectionFailed(format!("模型推理失败: {}", e)))?;
 
     // 专精鸟类检测模型输出名为 "output0"，形状 [1, 5, 8400]
-    let output = outputs.get("output0").ok_or_else(|| {
-        AppError::DetectionFailed("模型输出中未找到 output0".to_string())
-    })?;
+    let output = outputs
+        .get("output0")
+        .ok_or_else(|| AppError::DetectionFailed("模型输出中未找到 output0".to_string()))?;
 
-    let (out_shape, out_data) = output.try_extract_tensor::<f32>().map_err(|e| {
-        AppError::DetectionFailed(format!("输出张量提取失败: {}", e))
-    })?;
+    let (out_shape, out_data) = output
+        .try_extract_tensor::<f32>()
+        .map_err(|e| AppError::DetectionFailed(format!("输出张量提取失败: {}", e)))?;
 
-    Ok(parse_yolov8_output(&out_shape, out_data, letterbox, orig_w, orig_h))
+    Ok(parse_yolov8_output(
+        &out_shape, out_data, letterbox, orig_w, orig_h,
+    ))
 }
 
 // ─── NMS 非极大值抑制 ────────────────────────────────────
@@ -312,7 +313,11 @@ fn nms(detections: Vec<DetectionBox>, iou_threshold: f32) -> Vec<DetectionBox> {
     }
 
     let mut sorted = detections;
-    sorted.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+    sorted.sort_by(|a, b| {
+        b.confidence
+            .partial_cmp(&a.confidence)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     let mut keep = Vec::new();
 
@@ -339,7 +344,10 @@ fn nms(detections: Vec<DetectionBox>, iou_threshold: f32) -> Vec<DetectionBox> {
 
 /// 过滤低于阈值的框
 fn filter_by_confidence(bboxes: Vec<DetectionBox>, threshold: f32) -> Vec<DetectionBox> {
-    bboxes.into_iter().filter(|b| b.confidence >= threshold).collect()
+    bboxes
+        .into_iter()
+        .filter(|b| b.confidence >= threshold)
+        .collect()
 }
 
 // ─── 公开 API ────────────────────────────────────
@@ -383,7 +391,7 @@ fn get_model_path(explicit_path: Option<&Path>) -> Result<std::path::PathBuf, Ap
     }
 
     Err(AppError::DetectionFailed(
-        "模型文件 bird_detector.onnx 未找到".to_string()
+        "模型文件 bird_detector.onnx 未找到".to_string(),
     ))
 }
 
@@ -393,7 +401,10 @@ fn get_model_path(explicit_path: Option<&Path>) -> Result<std::path::PathBuf, Ap
 /// 而 current_exe() 返回 Contents/MacOS/bulbul，
 /// 因此需要使用 Tauri 的 resource_dir 来正确定位。
 pub fn resolve_model_path_from_resource_dir(resource_dir: &Path) -> PathBuf {
-    resource_dir.join("resources").join("models").join("bird_detector.onnx")
+    resource_dir
+        .join("resources")
+        .join("models")
+        .join("bird_detector.onnx")
 }
 
 /// 检测图片中的鸟
@@ -403,13 +414,15 @@ pub fn resolve_model_path_from_resource_dir(resource_dir: &Path) -> PathBuf {
 /// # 参数
 /// - `image_path`: 待检测的图片路径
 /// - `model_path`: 可选的模型文件路径（生产环境应传入 Tauri resource_dir 解析的路径）
-pub fn detect_birds(image_path: &Path, model_path: Option<&Path>) -> Result<DetectionResult, AppError> {
+pub fn detect_birds(
+    image_path: &Path,
+    model_path: Option<&Path>,
+) -> Result<DetectionResult, AppError> {
     let resolved = get_model_path(model_path)?;
     load_model(&resolved)?;
 
-    let img = image::open(image_path).map_err(|e| {
-        AppError::ImageProcessError(format!("无法加载图片: {}", e))
-    })?;
+    let img = image::open(image_path)
+        .map_err(|e| AppError::ImageProcessError(format!("无法加载图片: {}", e)))?;
 
     let (orig_w, orig_h) = (img.width() as f32, img.height() as f32);
 
@@ -611,7 +624,14 @@ mod tests {
     #[test]
     fn test_denormalize_clamp_out_of_bounds() {
         // DetectionBox::new clamps inputs to [0,1]
-        let bbox = DetectionBox { x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0, confidence: 0.9, ..Default::default() };
+        let bbox = DetectionBox {
+            x1: 0.0,
+            y1: 0.0,
+            x2: 1.0,
+            y2: 1.0,
+            confidence: 0.9,
+            ..Default::default()
+        };
         assert!(bbox.x1 >= 0.0 && bbox.x1 <= 1.0);
         assert!(bbox.x2 >= 0.0 && bbox.x2 <= 1.0);
     }
@@ -644,26 +664,23 @@ mod tests {
         let (_, data) = canvas_to_input(&canvas);
         let hw = (INPUT_SIZE * INPUT_SIZE) as usize;
 
-        assert!((data[0] - 1.0).abs() < 1e-5);          // R channel first pixel
-        assert!((data[hw] - 1.0).abs() < 1e-5);          // G channel first pixel
-        assert!((data[2 * hw] - 1.0).abs() < 1e-5);      // B channel first pixel
+        assert!((data[0] - 1.0).abs() < 1e-5); // R channel first pixel
+        assert!((data[hw] - 1.0).abs() < 1e-5); // G channel first pixel
+        assert!((data[2 * hw] - 1.0).abs() < 1e-5); // B channel first pixel
     }
 
     #[test]
     fn test_canvas_to_input_channel_order() {
         // 红色像素 (255, 0, 0) → R=1.0, G=0.0, B=0.0
-        let canvas = image::ImageBuffer::from_pixel(
-            INPUT_SIZE,
-            INPUT_SIZE,
-            image::Rgb([255u8, 0u8, 0u8]),
-        );
+        let canvas =
+            image::ImageBuffer::from_pixel(INPUT_SIZE, INPUT_SIZE, image::Rgb([255u8, 0u8, 0u8]));
 
         let (_, data) = canvas_to_input(&canvas);
         let hw = (INPUT_SIZE * INPUT_SIZE) as usize;
 
-        assert!((data[0] - 1.0).abs() < 1e-5);   // R
-        assert!(data[hw].abs() < 1e-5);            // G
-        assert!(data[2 * hw].abs() < 1e-5);        // B
+        assert!((data[0] - 1.0).abs() < 1e-5); // R
+        assert!(data[hw].abs() < 1e-5); // G
+        assert!(data[2 * hw].abs() < 1e-5); // B
     }
 
     // ── YOLOv8 输出解析测试 ──
@@ -671,7 +688,11 @@ mod tests {
     #[test]
     fn test_parse_yolov8_output_empty() {
         let letterbox = LetterboxInfo {
-            canvas: image::ImageBuffer::from_pixel(INPUT_SIZE, INPUT_SIZE, image::Rgb([114u8, 114u8, 114u8])),
+            canvas: image::ImageBuffer::from_pixel(
+                INPUT_SIZE,
+                INPUT_SIZE,
+                image::Rgb([114u8, 114u8, 114u8]),
+            ),
             pad_x: 0.0,
             pad_y: 0.0,
             scale: 1.0,
@@ -689,7 +710,11 @@ mod tests {
     #[test]
     fn test_parse_yolov8_output_with_bird() {
         let letterbox = LetterboxInfo {
-            canvas: image::ImageBuffer::from_pixel(INPUT_SIZE, INPUT_SIZE, image::Rgb([114u8, 114u8, 114u8])),
+            canvas: image::ImageBuffer::from_pixel(
+                INPUT_SIZE,
+                INPUT_SIZE,
+                image::Rgb([114u8, 114u8, 114u8]),
+            ),
             pad_x: 0.0,
             pad_y: 0.0,
             scale: 1.0,
@@ -701,11 +726,11 @@ mod tests {
         let nd = 8400usize;
 
         // 在第 0 个检测位置放入一只鸟: cx=320, cy=320, w=200, h=200
-        data[0 * nd + 0] = 320.0;  // cx
-        data[1 * nd + 0] = 320.0;  // cy
-        data[2 * nd + 0] = 200.0;  // w
-        data[3 * nd + 0] = 200.0;  // h
-        data[4 * nd + 0] = 0.9;    // bird confidence
+        data[0 * nd + 0] = 320.0; // cx
+        data[1 * nd + 0] = 320.0; // cy
+        data[2 * nd + 0] = 200.0; // w
+        data[3 * nd + 0] = 200.0; // h
+        data[4 * nd + 0] = 0.9; // bird confidence
 
         let bboxes = parse_yolov8_output(&shape, &data, &letterbox, 640.0, 640.0);
 
@@ -719,7 +744,11 @@ mod tests {
     #[test]
     fn test_parse_yolov8_output_below_threshold_ignored() {
         let letterbox = LetterboxInfo {
-            canvas: image::ImageBuffer::from_pixel(INPUT_SIZE, INPUT_SIZE, image::Rgb([114u8, 114u8, 114u8])),
+            canvas: image::ImageBuffer::from_pixel(
+                INPUT_SIZE,
+                INPUT_SIZE,
+                image::Rgb([114u8, 114u8, 114u8]),
+            ),
             pad_x: 0.0,
             pad_y: 0.0,
             scale: 1.0,
@@ -766,11 +795,15 @@ mod tests {
             Ok(path) => {
                 let metadata = std::fs::metadata(&path).expect("无法读取模型文件元数据");
                 let file_size = metadata.len();
-                let expected_min = 20 * 1024 * 1024;  // 20MB
-                let expected_max = 60 * 1024 * 1024;  // 60MB (新模型 ~43MB)
-                
-                println!("✓ 模型文件大小: {:.1}MB", file_size as f64 / (1024.0 * 1024.0));
-                assert!(file_size >= expected_min && file_size <= expected_max,
+                let expected_min = 20 * 1024 * 1024; // 20MB
+                let expected_max = 60 * 1024 * 1024; // 60MB (新模型 ~43MB)
+
+                println!(
+                    "✓ 模型文件大小: {:.1}MB",
+                    file_size as f64 / (1024.0 * 1024.0)
+                );
+                assert!(
+                    file_size >= expected_min && file_size <= expected_max,
                     "模型文件大小应在 20-50MB 范围内，实际: {:.1}MB",
                     file_size as f64 / (1024.0 * 1024.0)
                 );
@@ -784,7 +817,7 @@ mod tests {
     // ── 集成测试：真实 JPEG 图片与 YOLOv8s 模型 ──
 
     #[test]
-    #[ignore]  // 仅在有完整环境时运行
+    #[ignore] // 仅在有完整环境时运行
     fn test_real_model_detection_with_nef() {
         // 运行方式：cargo test test_real_model_detection_with_nef -- --ignored --nocapture
 
@@ -810,13 +843,20 @@ mod tests {
         let result = detect_birds(&tmp_jpeg, None).expect("检测失败");
         let elapsed = start.elapsed();
 
-        println!("✓ 检测完成: {} 只鸟, 耗时 {:.1}ms", result.bboxes.len(), elapsed.as_secs_f64() * 1000.0);
+        println!(
+            "✓ 检测完成: {} 只鸟, 耗时 {:.1}ms",
+            result.bboxes.len(),
+            elapsed.as_secs_f64() * 1000.0
+        );
         for (i, bbox) in result.bboxes.iter().enumerate() {
             println!(
                 "  框 {}: 置信度 {:.2}%, 坐标 ({:.3}, {:.3}) - ({:.3}, {:.3})",
                 i + 1,
                 bbox.confidence * 100.0,
-                bbox.x1, bbox.y1, bbox.x2, bbox.y2
+                bbox.x1,
+                bbox.y1,
+                bbox.x2,
+                bbox.y2
             );
         }
     }
