@@ -1,8 +1,8 @@
 // ============================================================
 // 设置面板 (SettingsPanel)
 //
-// 右侧滑出抽屉，包含四个区域：分组参数、外观设置、版本更新、缓存管理。
-// 使用 motion/react 滑入动画 + 半透明遮罩。
+// Apple 系统设置风格：圆角分组卡片 + 行式布局。
+// 每个分组用独立卡片包裹，行内左标签右控件。
 // ============================================================
 
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -37,8 +37,8 @@ export interface SettingsPanelProps {
 
 function IconClose() {
   return (
-    <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
-      <path d="M11.5 3.5l-8 8M3.5 3.5l8 8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    <svg width="12" height="12" viewBox="0 0 15 15" fill="none">
+      <path d="M11.5 3.5l-8 8M3.5 3.5l8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   );
 }
@@ -48,6 +48,62 @@ function IconRefresh() {
     <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
       <path d="M1.5 7.5a6 6 0 0 1 10.9-3.5M13.5 7.5a6 6 0 0 1-10.9 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M12.5 1v3h-3M2.5 14v-3h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** 分组参数图标：网格/聚类 */
+function IconGrouping() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
+      <rect x="1.5" y="1.5" width="4.5" height="4.5" rx="1" stroke="currentColor" strokeWidth="1.2" />
+      <rect x="9" y="1.5" width="4.5" height="4.5" rx="1" stroke="currentColor" strokeWidth="1.2" />
+      <rect x="1.5" y="9" width="4.5" height="4.5" rx="1" stroke="currentColor" strokeWidth="1.2" />
+      <rect x="9" y="9" width="4.5" height="4.5" rx="1" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+/** 外观图标：画笔/调色板 */
+function IconAppearance() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
+      <circle cx="7.5" cy="7.5" r="5.5" stroke="currentColor" strokeWidth="1.2" />
+      <circle cx="5.5" cy="5.5" r="1" fill="currentColor" />
+      <circle cx="9.5" cy="5.5" r="1" fill="currentColor" />
+      <circle cx="5.5" cy="9.5" r="1" fill="currentColor" />
+      <circle cx="9.5" cy="9" r="1" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** 缓存图标：硬盘/存储 */
+function IconCache() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
+      <rect x="1.5" y="3" width="12" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="1.5" y1="9" x2="13.5" y2="9" stroke="currentColor" strokeWidth="1.2" />
+      <circle cx="10.5" cy="11" r="0.7" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** 更新图标：下载箭头 */
+function IconUpdate() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
+      <path d="M7.5 2v7M4.5 6l3 3 3-3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2.5 10.5v1a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** 关于图标：信息圆 */
+function IconAbout() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 15 15" fill="none">
+      <circle cx="7.5" cy="7.5" r="6" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M7.5 10V7M7.5 5h.007" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
     </svg>
   );
 }
@@ -66,7 +122,7 @@ export function SettingsPanel({ open, onClose, onCacheCleared, onOpenAbout, proc
   const currentFolder = useAppStore((s) => s.currentFolder);
   const { startProcessing, cancelProcessing, regroupWith } = useProcessing();
 
-  // 处理是否处于活跃状态（需要先取消才能清理缓存）
+  // 处理是否处于活跃状态
   const isActive = processingState === 'scanning'
     || processingState === 'processing'
     || processingState === 'analyzing'
@@ -121,7 +177,7 @@ export function SettingsPanel({ open, onClose, onCacheCleared, onOpenAbout, proc
     }
   }, []);
 
-  // 打开时自动查询缓存大小并读取当前版本
+  // 打开时自动查询
   useEffect(() => {
     if (open) {
       void fetchCacheSize();
@@ -251,7 +307,6 @@ export function SettingsPanel({ open, onClose, onCacheCleared, onOpenAbout, proc
       return;
     }
 
-    // 正在处理中：先取消，取消完成后自动清理
     if (isActive) {
       cancelAndClearRef.current = true;
       cancelProcessing();
@@ -269,7 +324,7 @@ export function SettingsPanel({ open, onClose, onCacheCleared, onOpenAbout, proc
     void executeClearCache();
   }, [processingState, executeClearCache]);
 
-  // 点击确认按钮后 3 秒自动取消确认状态
+  // 确认按钮 3 秒后自动取消
   useEffect(() => {
     if (!confirmClear) return;
     const timer = setTimeout(() => setConfirmClear(false), 3000);
@@ -313,187 +368,212 @@ export function SettingsPanel({ open, onClose, onCacheCleared, onOpenAbout, proc
               </button>
             </div>
 
-            {/* 分组参数 */}
-            <div className={cls.section}>
-              <div className={cls.sectionTitle}>分组参数</div>
-              <div className={cls.sliderRow}>
-                <div className={cls.sliderLabel}>
-                  <span className={cls.sliderLabelText}>相似度</span>
-                  <span className={cls.sliderValue}>{Math.round(similarityThreshold)}%</span>
+            <div className={cls.content}>
+              {/* ── 分组参数 ── */}
+              <div className={cls.group}>
+                <div className={cls.groupHeader}>
+                  <span className={cls.groupIcon}>
+                    <IconGrouping />
+                  </span>
+                  <span className={cls.groupTitle}>分组参数</span>
                 </div>
-                <Slider
-                  min={50}
-                  max={100}
-                  value={Math.round(similarityThreshold)}
-                  step={1}
-                  onChange={handleSimilarityChange}
-                  aria-label="相似度阈值"
-                />
-              </div>
-              <div className={cls.sliderRow}>
-                <div className={cls.sliderLabel}>
-                  <span className={cls.sliderLabelText}>时间间隔</span>
-                  <span className={cls.sliderValue}>{timeGapSeconds}s</span>
+
+                {/* 相似度 */}
+                <div className={cls.row}>
+                  <span className={cls.rowLabel}>相似度</span>
+                  <span className={cls.rowValue}>{Math.round(similarityThreshold)}%</span>
                 </div>
-                <Slider
-                  min={1}
-                  max={120}
-                  value={timeGapSeconds}
-                  step={1}
-                  onChange={handleTimeGapChange}
-                  aria-label="时间间隔阈值"
-                />
-              </div>
-            </div>
-
-            {/* 外观设置 */}
-            <div className={cls.section}>
-              <div className={cls.sectionTitle}>外观</div>
-              <div className={cls.toggleRow}>
-                <span className={cls.toggleLabel}>检测框覆盖层</span>
-                <button
-                  className={`${cls.toggle} ${showDetectionOverlay ? cls.toggleActive : ''}`}
-                  onClick={toggleDetectionOverlay}
-                  role="switch"
-                  aria-checked={showDetectionOverlay}
-                  aria-label="检测框覆盖层开关"
-                >
-                  <span className={cls.toggleKnob} />
-                </button>
-              </div>
-            </div>
-
-            {/* 版本更新 */}
-            <div className={cls.section}>
-              <div className={cls.sectionTitle}>版本更新</div>
-
-              <div className={cls.updateMeta}>
-                <div className={cls.updateRow}>
-                  <span className={cls.updateLabel}>当前版本</span>
-                  <span className={cls.updateValue}>{currentVersion ? `v${currentVersion}` : '读取中...'}</span>
+                <div className={cls.sliderRow}>
+                  <Slider
+                    min={50}
+                    max={100}
+                    value={Math.round(similarityThreshold)}
+                    step={1}
+                    onChange={handleSimilarityChange}
+                    aria-label="相似度阈值"
+                  />
                 </div>
-                {updateInfo && (
-                  <div className={cls.updateRow}>
-                    <span className={cls.updateLabel}>最新版本</span>
-                    <span className={cls.updateValue}>v{updateInfo.version}</span>
+
+                <div className={cls.separator} />
+
+                {/* 时间间隔 */}
+                <div className={cls.row}>
+                  <span className={cls.rowLabel}>时间间隔</span>
+                  <span className={cls.rowValue}>{timeGapSeconds}s</span>
+                </div>
+                <div className={cls.sliderRow}>
+                  <Slider
+                    min={1}
+                    max={120}
+                    value={timeGapSeconds}
+                    step={1}
+                    onChange={handleTimeGapChange}
+                    aria-label="时间间隔阈值"
+                  />
+                </div>
+              </div>
+
+              {/* ── 外观 ── */}
+              <div className={cls.group}>
+                <div className={cls.groupHeader}>
+                  <span className={cls.groupIcon}>
+                    <IconAppearance />
+                  </span>
+                  <span className={cls.groupTitle}>外观</span>
+                </div>
+
+                <div className={cls.row}>
+                  <span className={cls.rowLabel}>检测框覆盖层</span>
+                  <button
+                    className={`${cls.toggle} ${showDetectionOverlay ? cls.toggleActive : ''}`}
+                    onClick={toggleDetectionOverlay}
+                    role="switch"
+                    aria-checked={showDetectionOverlay}
+                    aria-label="检测框覆盖层开关"
+                  >
+                    <span className={cls.toggleKnob} />
+                  </button>
+                </div>
+              </div>
+
+              {/* ── 缓存管理 ── */}
+              <div className={cls.group}>
+                <div className={cls.groupHeader}>
+                  <span className={cls.groupIcon}>
+                    <IconCache />
+                  </span>
+                  <span className={cls.groupTitle}>缓存管理</span>
+                  <button
+                    className={cls.iconBtn}
+                    onClick={() => void fetchCacheSize()}
+                    disabled={cacheLoading || clearingCache}
+                    title="刷新缓存信息"
+                    aria-label="刷新缓存信息"
+                  >
+                    <span className={cacheLoading ? cls.spinning : ''}>
+                      <IconRefresh />
+                    </span>
+                  </button>
+                </div>
+
+                {cacheError ? (
+                  <div className={cls.row}>
+                    <span className={cls.cacheError}>无法获取缓存信息</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className={cls.row}>
+                      <div className={cls.cacheValueRow}>
+                        <span className={cls.cacheSize}>
+                          {cacheInfo ? formatCacheSize(cacheInfo.totalSize) : '—'}
+                        </span>
+                        {cacheInfo && (
+                          <span className={cls.cacheFileCount}>
+                            {cacheInfo.fileCount} 个文件
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {cacheInfo && (
+                      <div className={cls.cachePath}>{cacheInfo.cacheDir}</div>
+                    )}
+                  </>
+                )}
+
+                <div className={cls.separator} />
+
+                <div className={cls.actionsRow}>
+                  <button
+                    className={`${cls.actionBtn} ${cls.actionBtnTinted}`}
+                    onClick={() => currentFolder && startProcessing(currentFolder, true)}
+                    disabled={!currentFolder || isActive || processingState === 'cancelling'}
+                    title="强制重新处理当前目录"
+                    aria-label="重新处理"
+                  >
+                    重新处理
+                  </button>
+                  <button
+                    className={`${cls.actionBtn} ${confirmClear ? cls.actionBtnConfirmDanger : cls.actionBtnDanger}`}
+                    onClick={handleClearClick}
+                    disabled={clearingCache || processingState === 'cancelling'}
+                  >
+                    {clearingCache
+                      ? '清理中...'
+                      : processingState === 'cancelling'
+                        ? '正在停止...'
+                        : confirmClear
+                          ? isActive
+                            ? '停止并清理'
+                            : '确认清理'
+                          : '清理缓存'}
+                  </button>
+                </div>
+              </div>
+
+              {/* ── 版本更新 ── */}
+              <div className={cls.group}>
+                <div className={cls.groupHeader}>
+                  <span className={cls.groupIcon}>
+                    <IconUpdate />
+                  </span>
+                  <span className={cls.groupTitle}>版本更新</span>
+                  <span className={cls.groupHeaderMeta}>
+                    {currentVersion ? `v${currentVersion}` : ''}
+                  </span>
+                </div>
+
+                {updateMessage && (
+                  <div
+                    className={`${cls.updateBanner} ${updateStatus === 'error' ? cls.updateBannerError : ''} ${updateStatus === 'upToDate' ? cls.updateBannerSuccess : ''}`}
+                    role={updateStatus === 'error' ? 'alert' : 'status'}
+                  >
+                    {updateMessage}
                   </div>
                 )}
-              </div>
 
-              {updateMessage && (
-                <div
-                  className={`${cls.updateStatus} ${updateStatus === 'error' ? cls.updateStatusError : ''}`}
-                  role={updateStatus === 'error' ? 'alert' : 'status'}
-                >
-                  {updateMessage}
-                </div>
-              )}
+                {updateProgressText && (
+                  <div className={cls.updateProgress}>{updateProgressText}</div>
+                )}
 
-              {updateProgressText && (
-                <div className={cls.updateProgress}>{updateProgressText}</div>
-              )}
+                {updateInfo?.notes && (
+                  <div className={cls.updateNotes}>
+                    <div className={cls.updateNotesTitle}>更新说明</div>
+                    <div className={cls.updateNotesBody}>{updateInfo.notes}</div>
+                  </div>
+                )}
 
-              {updateInfo?.notes && (
-                <div className={cls.updateNotes}>
-                  <div className={cls.updateNotesTitle}>更新说明</div>
-                  <div className={cls.updateNotesBody}>{updateInfo.notes}</div>
-                </div>
-              )}
-
-              <div className={cls.updateActions}>
-                <button
-                  className={cls.updateCheckBtn}
-                  onClick={() => void handleCheckUpdate()}
-                  disabled={isUpdateBusy}
-                >
-                  {updateStatus === 'checking' ? '检查中...' : '检查更新'}
-                </button>
-                {updateInfo && (
+                <div className={cls.actionsRow}>
                   <button
-                    className={cls.updateInstallBtn}
-                    onClick={() => void handleInstallUpdate()}
+                    className={`${cls.actionBtn} ${cls.actionBtnDefault}`}
+                    onClick={() => void handleCheckUpdate()}
                     disabled={isUpdateBusy}
                   >
-                    {updateStatus === 'downloading'
-                      ? '下载中...'
-                      : updateStatus === 'installing'
-                        ? '安装中...'
-                        : '下载并安装'}
+                    {updateStatus === 'checking' ? '检查中...' : '检查更新'}
                   </button>
-                )}
-              </div>
-            </div>
-
-            {/* 缓存管理 */}
-            <div className={cls.section}>
-              <div className={cls.sectionTitle}>缓存管理</div>
-
-              {cacheError ? (
-                <div className={cls.cacheError}>无法获取缓存信息</div>
-              ) : (
-                <div className={cls.cacheInfo}>
-                  {cacheInfo && (
-                    <>
-                      <div className={cls.cachePath}>{cacheInfo.cacheDir}</div>
-                      <div className={cls.cacheStats}>
-                        <span className={cls.cacheSize}>
-                          {formatCacheSize(cacheInfo.totalSize)}
-                        </span>
-                        <span className={cls.cacheFileCount}>
-                          {cacheInfo.fileCount} 个文件
-                        </span>
-                      </div>
-                    </>
+                  {updateInfo && (
+                    <button
+                      className={`${cls.actionBtn} ${cls.actionBtnPrimary}`}
+                      onClick={() => void handleInstallUpdate()}
+                      disabled={isUpdateBusy}
+                    >
+                      {updateStatus === 'downloading'
+                        ? '下载中...'
+                        : updateStatus === 'installing'
+                          ? '安装中...'
+                          : '下载并安装'}
+                    </button>
                   )}
                 </div>
-              )}
-
-              <div className={cls.cacheActions}>
-                <button
-                  className={cls.reprocessBtn}
-                  onClick={() => currentFolder && startProcessing(currentFolder, true)}
-                  disabled={!currentFolder || isActive || processingState === 'cancelling'}
-                  title="强制重新处理当前目录"
-                  aria-label="重新处理"
-                >
-                  重新处理
-                </button>
-                <button
-                  className={cls.refreshBtn}
-                  onClick={() => void fetchCacheSize()}
-                  disabled={cacheLoading || clearingCache}
-                  title="刷新缓存信息"
-                  aria-label="刷新缓存信息"
-                >
-                  <span className={cacheLoading ? cls.spinning : ''}>
-                    <IconRefresh />
-                  </span>
-                </button>
-                <button
-                  className={`${cls.clearBtn} ${confirmClear ? cls.confirmBtn : ''}`}
-                  onClick={handleClearClick}
-                  disabled={clearingCache || processingState === 'cancelling'}
-                >
-                  {clearingCache
-                    ? '清理中...'
-                    : processingState === 'cancelling'
-                      ? '正在停止处理...'
-                      : confirmClear
-                        ? isActive
-                          ? '停止并清理'
-                          : '确认清理'
-                        : '清理缓存'}
-                </button>
               </div>
             </div>
 
-            {/* 关于 */}
-            <div className={cls.section}>
-              <button className={cls.aboutBtn} onClick={onOpenAbout}>
-                <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
-                  <circle cx="7.5" cy="7.5" r="6" stroke="currentColor" strokeWidth="1.2" />
-                  <path d="M7.5 10V7M7.5 5h.007" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-                </svg>
+            {/* ── 底部 ── */}
+            <div className={cls.footer}>
+              {currentVersion && (
+                <span className={cls.footerVersion}>Bulbul v{currentVersion}</span>
+              )}
+              <button className={cls.footerAbout} onClick={onOpenAbout}>
+                <IconAbout />
                 <span>关于 Bulbul</span>
               </button>
             </div>

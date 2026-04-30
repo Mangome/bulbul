@@ -1,7 +1,9 @@
 /* ════════════════════════════════════════════════════════════════════════════
-   SettingsPanel - 右侧滑出设置面板
+   SettingsPanel - Apple 系统设置风格
 
-   320px 固定宽度，毛玻璃背景，四个区域：分组参数、外观、版本更新、缓存管理
+   320px 固定宽度，圆角分组卡片 + 行式布局。
+   每个分组用独立卡片包裹，卡片间留有间隔。
+   行内左标签右控件，行间细线分隔。
 ════════════════════════════════════════════════════════════════════════════ */
 
 .overlay {
@@ -23,9 +25,7 @@
   position: relative;
   width: 320px;
   height: 100%;
-  background: var(--panel-bg);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: var(--color-bg-secondary);
   border-left: 1px solid var(--panel-border);
   display: flex;
   flex-direction: column;
@@ -39,19 +39,296 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px 12px;
-  border-bottom: 1px solid var(--color-border-light);
+  padding: 20px 20px 16px;
   flex-shrink: 0;
 }
 
 .title {
-  font-size: 15px;
-  font-weight: var(--font-weight-semibold);
+  font-size: 20px;
+  font-weight: var(--font-weight-bold);
   color: var(--color-text-primary);
   user-select: none;
+  letter-spacing: -0.3px;
 }
 
 .closeBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  background: var(--color-bg-tertiary);
+  border: none;
+  padding: 0;
+
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.closeBtn:hover {
+  background: var(--color-border);
+  color: var(--color-text-primary);
+}
+
+/* ─── 内容区 ──────────────────────────────────────── */
+
+.content {
+  padding: 0 16px 16px;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ─── 分组卡片 ──────────────────────────────────────── */
+
+.group {
+  background: var(--color-bg-primary);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 16px;
+  box-shadow: 0 0.5px 0 0 var(--color-border-light);
+}
+
+/* ─── 分组标题行 ──────────────────────────────────── */
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px 6px;
+}
+
+.groupIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+.groupTitle {
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  user-select: none;
+  flex: 1;
+}
+
+.groupHeaderMeta {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+/* ─── 行 ──────────────────────────────────────────── */
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  min-height: 44px;
+  gap: 12px;
+}
+
+.rowCompact {
+  padding: 6px 16px;
+  min-height: auto;
+}
+
+.rowLabel {
+  font-size: 13px;
+  color: var(--color-text-primary);
+  user-select: none;
+  white-space: nowrap;
+}
+
+.rowValue {
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.rowMuted {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── 行分隔线 ────────────────────────────────────── */
+
+.separator {
+  height: 1px;
+  margin: 0 16px;
+  background: var(--color-border-light);
+}
+
+/* ─── 滑块行 ────────────────────────────────────────── */
+
+.sliderRow {
+  padding: 4px 16px 10px;
+}
+
+/* ─── 开关 ────────────────────────────────────────── */
+
+.toggle {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--color-border);
+  cursor: pointer;
+  border: none;
+  padding: 0;
+  flex-shrink: 0;
+
+  transition: background-color 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.toggleActive {
+  background: var(--color-success);
+}
+
+.toggleKnob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
+
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.toggleActive .toggleKnob {
+  transform: translateX(20px);
+}
+
+/* ─── 缓存数值 ────────────────────────────────────── */
+
+.cacheValueRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.cacheSize {
+  font-size: 22px;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+  line-height: 1;
+}
+
+.cacheFileCount {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.cachePath {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  word-break: break-all;
+  line-height: 1.4;
+  user-select: text;
+  padding: 2px 16px 8px;
+}
+
+.cacheError {
+  font-size: 12px;
+  color: var(--color-danger);
+  padding: 4px 0;
+}
+
+/* ─── 操作按钮 ────────────────────────────────────── */
+
+.actionBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  border: none;
+  user-select: none;
+  white-space: nowrap;
+
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast),
+    opacity var(--transition-fast);
+}
+
+.actionBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.actionBtnDefault {
+  color: var(--color-text-primary);
+  background: var(--color-bg-tertiary);
+}
+
+.actionBtnDefault:hover:not(:disabled) {
+  background: var(--color-border);
+}
+
+.actionBtnPrimary {
+  color: white;
+  background: var(--color-primary);
+}
+
+.actionBtnPrimary:hover:not(:disabled) {
+  opacity: 0.92;
+}
+
+.actionBtnDanger {
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+}
+
+.actionBtnDanger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-danger) 18%, transparent);
+}
+
+.actionBtnConfirmDanger {
+  color: white;
+  background: var(--color-danger);
+}
+
+.actionBtnConfirmDanger:hover:not(:disabled) {
+  opacity: 0.92;
+}
+
+.actionBtnTinted {
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+
+.actionBtnTinted:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+}
+
+.iconBtn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -63,145 +340,37 @@
   background: transparent;
   border: none;
   padding: 0;
+  flex-shrink: 0;
 
   transition:
     background-color var(--transition-fast),
     color var(--transition-fast);
 }
 
-.closeBtn:hover {
-  background-color: var(--color-bg-tertiary);
+.iconBtn:hover:not(:disabled) {
+  background: var(--color-bg-tertiary);
   color: var(--color-text-primary);
 }
 
-/* ─── 区域通用 ──────────────────────────────────────── */
-
-.section {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--color-border-light);
+.iconBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
-.sectionTitle {
-  font-size: 11px;
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 14px;
-  user-select: none;
-}
+/* ─── 按钮行 ────────────────────────────────────── */
 
-/* ─── 滑块行 ────────────────────────────────────────── */
-
-.sliderRow {
-  margin-bottom: 14px;
-}
-
-.sliderRow:last-child {
-  margin-bottom: 0;
-}
-
-.sliderLabel {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.sliderLabelText {
-  font-size: 13px;
-  color: var(--color-text-secondary);
-  user-select: none;
-}
-
-.sliderValue {
-  font-size: 13px;
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-  font-variant-numeric: tabular-nums;
-  min-width: 40px;
-  text-align: right;
-}
-
-/* ─── 开关行 ────────────────────────────────────────── */
-
-.toggleRow {
+.actionsRow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 16px;
+  min-height: 44px;
 }
 
-.toggleLabel {
-  font-size: 13px;
-  color: var(--color-text-secondary);
-  user-select: none;
-}
+/* ─── 版本更新 ────────────────────────────────────── */
 
-.toggle {
-  position: relative;
-  width: 40px;
-  height: 22px;
-  border-radius: 11px;
-  background: var(--color-border);
-  cursor: pointer;
-  border: none;
-  padding: 0;
-  flex-shrink: 0;
-
-  transition: background-color var(--transition-fast);
-}
-
-.toggleActive {
-  background: var(--color-primary);
-}
-
-.toggleKnob {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: white;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
-
-  transition: transform var(--transition-fast);
-}
-
-.toggleActive .toggleKnob {
-  transform: translateX(18px);
-}
-
-/* ─── 版本更新 ──────────────────────────────────────── */
-
-.updateMeta {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.updateRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.updateLabel {
-  font-size: 13px;
-  color: var(--color-text-secondary);
-}
-
-.updateValue {
-  font-size: 13px;
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-
-.updateStatus {
-  margin-top: 12px;
+.updateBanner {
+  margin: 0 16px 10px;
   padding: 10px 12px;
   border-radius: 8px;
   font-size: 12px;
@@ -210,186 +379,48 @@
   background: var(--color-bg-tertiary);
 }
 
-.updateStatusError {
+.updateBannerError {
   color: var(--color-danger);
   background: color-mix(in srgb, var(--color-danger) 8%, transparent);
 }
 
+.updateBannerSuccess {
+  color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 8%, transparent);
+}
+
 .updateProgress {
-  margin-top: 8px;
-  font-size: 12px;
+  margin: 4px 16px 8px;
+  font-size: 11px;
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }
 
 .updateNotes {
-  margin-top: 12px;
-  padding: 12px;
+  margin: 4px 16px 10px;
+  padding: 10px 12px;
   border-radius: 8px;
-  background: color-mix(in srgb, var(--color-bg-tertiary) 70%, transparent);
+  background: var(--color-bg-tertiary);
 }
 
 .updateNotesTitle {
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   font-size: 11px;
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.3px;
 }
 
 .updateNotesBody {
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 1.5;
   color: var(--color-text-secondary);
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.updateActions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 14px;
-}
-
-.updateCheckBtn,
-.updateInstallBtn,
-.refreshBtn,
-.clearBtn,
-.reprocessBtn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
-  border: none;
-  user-select: none;
-
-  transition:
-    background-color var(--transition-fast),
-    color var(--transition-fast),
-    opacity var(--transition-fast);
-}
-
-.updateCheckBtn {
-  color: var(--color-text-primary);
-  background: var(--color-bg-tertiary);
-}
-
-.updateCheckBtn:hover {
-  background: var(--color-border);
-}
-
-.updateInstallBtn {
-  color: white;
-  background: var(--color-primary);
-}
-
-.updateInstallBtn:hover {
-  opacity: 0.92;
-}
-
-.updateCheckBtn:disabled,
-.updateInstallBtn:disabled,
-.refreshBtn:disabled,
-.clearBtn:disabled,
-.reprocessBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* ─── 缓存管理 ──────────────────────────────────────── */
-
-.cacheInfo {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-
-.cachePath {
-  font-size: 11px;
-  color: var(--color-text-muted);
-  word-break: break-all;
-  line-height: 1.4;
-  user-select: text;
-}
-
-.cacheStats {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.cacheSize {
-  font-size: 20px;
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-.cacheFileCount {
-  font-size: 12px;
-  color: var(--color-text-muted);
-}
-
-.cacheError {
-  font-size: 12px;
-  color: var(--color-danger);
-  margin-bottom: 14px;
-}
-
-.cacheActions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.refreshBtn {
-  width: 32px;
-  padding: 0;
-  color: var(--color-text-muted);
-  background: var(--color-bg-tertiary);
-}
-
-.refreshBtn:hover {
-  color: var(--color-text-primary);
-  background: var(--color-border);
-}
-
-.clearBtn {
-  color: var(--color-danger);
-  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
-}
-
-.clearBtn:hover {
-  background: color-mix(in srgb, var(--color-danger) 15%, transparent);
-}
-
-.confirmBtn {
-  color: white;
-  background: var(--color-danger);
-}
-
-.confirmBtn:hover {
-  opacity: 0.9;
-}
-
-.reprocessBtn {
-  color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
-}
-
-.reprocessBtn:hover {
-  background: color-mix(in srgb, var(--color-primary) 15%, transparent);
-}
-
-/* ─── 旋转动画 ──────────────────────────────────────── */
+/* ─── 旋转动画 ──────────────────────────────────── */
 
 .spinning {
   animation: spin 1s linear infinite;
@@ -400,22 +431,35 @@
   to { transform: rotate(360deg); }
 }
 
-/* ─── 关于按钮 ──────────────────────────────────────── */
+/* ─── 底部 ────────────────────────────────────── */
 
-.aboutBtn {
+.footer {
+  padding: 8px 16px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.footerVersion {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.footerAbout {
   display: flex;
   align-items: center;
-  gap: 10px;
-  width: 100%;
-  height: 32px;
-  padding: 0 8px;
-  border-radius: 6px;
-  font-size: 13px;
+  gap: 6px;
+  font-size: 12px;
   font-weight: var(--font-weight-medium);
   color: var(--color-text-secondary);
-  background: transparent;
+  background: none;
   border: none;
   cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
   user-select: none;
 
   transition:
@@ -423,7 +467,46 @@
     color var(--transition-fast);
 }
 
-.aboutBtn:hover {
-  background-color: var(--color-bg-tertiary);
+.footerAbout:hover {
+  background: var(--color-bg-tertiary);
   color: var(--color-text-primary);
+}
+
+/* ─── 暗色主题微调 ────────────────────────────────── */
+
+[data-theme="dark"] .group {
+  background: var(--color-bg-tertiary);
+  box-shadow: none;
+}
+
+[data-theme="dark"] .separator {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+[data-theme="dark"] .closeBtn {
+  background: var(--color-bg-tertiary);
+}
+
+[data-theme="dark"] .closeBtn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+[data-theme="dark"] .toggle {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+[data-theme="dark"] .actionBtnDefault {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .actionBtnDefault:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+[data-theme="dark"] .updateBanner {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+[data-theme="dark"] .updateNotes {
+  background: rgba(255, 255, 255, 0.06);
 }
