@@ -482,7 +482,7 @@ checksum = "f4ad8f11f288f48ca24471bbd51ac257aaeaaa07adae295591266b792902ae64"
 
 [[package]]
 name = "bulbul"
-version = "0.7.4"
+version = "0.7.5"
 dependencies = [
  "anyhow",
  "chrono",
