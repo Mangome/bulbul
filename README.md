@@ -54,7 +54,7 @@
 > | DNG | Adobe | ✅ |
 > | RAF | Fujifilm | ✅ |
 > | ORF | Olympus | ✅ |
-> | RW2 | Panasonic | - |
+> | RW2 | Panasonic | ✅ |
 > | PEF | Pentax | - |
 >
 > **非 RAW 格式**

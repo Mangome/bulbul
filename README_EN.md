@@ -54,7 +54,7 @@ After launching the app, click the **Select Folder** button and choose a directo
 > | DNG | Adobe | ✅ |
 > | RAF | Fujifilm | ✅ |
 > | ORF | Olympus | ✅ |
-> | RW2 | Panasonic | - |
+> | RW2 | Panasonic | ✅ |
 > | PEF | Pentax | - |
 >
 > **Non-RAW Formats**
