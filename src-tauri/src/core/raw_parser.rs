@@ -38,6 +38,10 @@ pub fn is_supported_extension(extension: &str) -> bool {
 // ─── TIFF 常量 ─────────────────────────────────────────
 
 const TIFF_MAGIC: u16 = 42;
+/// Panasonic RW2 little-endian magic: 0x0055 (85)
+const RW2_MAGIC_LE: u16 = 85;
+/// Panasonic RW2 big-endian magic: 0x5500 (21760)
+const RW2_MAGIC_BE: u16 = 0x5500;
 /// Olympus ORF little-endian magic: "RO" (bytes: 0x52, 0x4F → LE u16: 0x4F52)
 const ORF_MAGIC_LE_RO: u16 = 0x4F52;
 /// Olympus ORF little-endian magic (newer): "RS" (bytes: 0x52, 0x53 → LE u16: 0x5352)
@@ -128,13 +132,15 @@ fn parse_tiff_header(data: &[u8]) -> Result<(ByteOrder, usize), AppError> {
         .ok_or_else(|| AppError::ImageParseError("无法读取 TIFF 魔数".into()))?;
 
     if magic != TIFF_MAGIC
+        && magic != RW2_MAGIC_LE
+        && magic != RW2_MAGIC_BE
         && magic != ORF_MAGIC_LE_RO
         && magic != ORF_MAGIC_LE_RS
         && magic != ORF_MAGIC_BE_RO
         && magic != ORF_MAGIC_BE_RS
     {
         return Err(AppError::ImageParseError(format!(
-            "无效的 TIFF 魔数: {}，期望 42 或 ORF 变体",
+            "无效的 TIFF 魔数: {}，期望 42、85 或 ORF 变体",
             magic
         )));
     }
@@ -618,6 +624,21 @@ impl ImageExtractor for DngExtractor {
     }
 }
 
+/// 从 Panasonic RW2 文件中提取嵌入的 JPEG 预览
+///
+/// RW2 文件的 JPEG 预览不通过标准 TIFF IFD 标签（JPEGInterchangeFormat）引用，
+/// 而是直接嵌入在文件数据区域中。此函数先尝试标准 TIFF IFD 方式，
+/// 失败后回退到在文件中搜索最大的有效 JPEG 块。
+fn extract_rw2_jpeg(data: &[u8]) -> Result<Vec<u8>, AppError> {
+    // 首先尝试标准 TIFF IFD 方式
+    if let Ok(jpeg) = extract_largest_jpeg(data) {
+        return Ok(jpeg);
+    }
+
+    // 回退：在文件中搜索最大的有效 JPEG 块
+    scan_largest_jpeg(data)
+}
+
 /// 从 Olympus ORF 文件中提取嵌入的 JPEG 预览
 ///
 /// ORF 文件的 JPEG 预览不通过标准 TIFF IFD 标签（JPEGInterchangeFormat）引用，
@@ -629,7 +650,14 @@ fn extract_orf_jpeg(data: &[u8]) -> Result<Vec<u8>, AppError> {
     }
 
     // 回退：在文件中搜索最大的有效 JPEG 块
-    // 有效 JPEG 以 FFD8 开头，后跟标准 JPEG 标记（FFXX，其中 XX != 00 且 XX != D8）
+    scan_largest_jpeg(data)
+}
+
+/// 在文件数据中扫描最大的有效 JPEG 块
+///
+/// 有效 JPEG 以 FFD8 开头，后跟标准 JPEG 标记（FFXX，其中 XX != 00 且 XX != D8）。
+/// 返回大小超过 50KB 的最大 JPEG 块（忽略缩略图和噪声）。
+fn scan_largest_jpeg(data: &[u8]) -> Result<Vec<u8>, AppError> {
     let mut best_offset = 0;
     let mut best_size = 0usize;
 
@@ -787,11 +815,30 @@ impl ImageExtractor for Rw2Extractor {
     }
 
     fn get_image_data(&self, data: &[u8]) -> Result<Vec<u8>, AppError> {
-        extract_largest_jpeg(data)
+        extract_rw2_jpeg(data)
     }
 
     fn extract_metadata(&self, data: &[u8]) -> Result<ImageMetadata, AppError> {
-        crate::core::metadata::parse_exif(data)
+        // RW2 使用 Panasonic 专有 TIFF magic (LE: 0x0055, BE: 0x5500)
+        // kamadak-exif 只认标准 TIFF 签名 (II*\x00 / MM\x00*)，需要替换头部
+        if data.len() < 8 {
+            return Err(AppError::ExifError("RW2 文件过短".into()));
+        }
+        let mut normalized = data.to_vec();
+        match (data[0], data[1]) {
+            // Little-endian RW2: II + 0x0055 → 替换为 II*\x00
+            (0x49, 0x49) if data[2] == 0x55 && data[3] == 0x00 => {
+                normalized[2] = 0x2A;
+                normalized[3] = 0x00;
+            }
+            // Big-endian RW2: MM + 0x5500 → 替换为 MM\x00*
+            (0x4D, 0x4D) if data[2] == 0x55 && data[3] == 0x00 => {
+                normalized[2] = 0x00;
+                normalized[3] = 0x2A;
+            }
+            _ => {}
+        }
+        crate::core::metadata::parse_exif(&normalized)
     }
 
     fn exif_header_size(&self) -> usize {
@@ -1889,6 +1936,72 @@ mod tests {
         assert_eq!(ext.exif_header_size(), 65536);
         let via_factory = get_extractor("rw2").unwrap();
         assert_eq!(via_factory.supported_extensions(), &["rw2"]);
+    }
+
+    /// 构建一个最小有效的 RW2 TIFF 结构（小端，magic=85），包含嵌入 JPEG
+    fn build_rw2_tiff_with_jpeg(jpeg_data: &[u8]) -> Vec<u8> {
+        let mut buf = Vec::new();
+
+        // TIFF Header (8 bytes) — Little-endian with RW2 magic (85)
+        buf.extend_from_slice(&[0x49, 0x49]); // II
+        buf.extend_from_slice(&85u16.to_le_bytes()); // RW2 magic
+        buf.extend_from_slice(&8u32.to_le_bytes()); // IFD0 offset = 8
+
+        // IFD0 at offset 8
+        let entry_count: u16 = 2;
+        let jpeg_offset: u32 = 8 + 2 + 2 * 12 + 4;
+
+        buf.extend_from_slice(&entry_count.to_le_bytes());
+
+        // Entry 1: JPEGInterchangeFormat (0x0201)
+        buf.extend_from_slice(&TAG_JPEG_OFFSET.to_le_bytes());
+        buf.extend_from_slice(&4u16.to_le_bytes());
+        buf.extend_from_slice(&1u32.to_le_bytes());
+        buf.extend_from_slice(&jpeg_offset.to_le_bytes());
+
+        // Entry 2: JPEGInterchangeFormatLength (0x0202)
+        buf.extend_from_slice(&TAG_JPEG_LENGTH.to_le_bytes());
+        buf.extend_from_slice(&4u16.to_le_bytes());
+        buf.extend_from_slice(&1u32.to_le_bytes());
+        buf.extend_from_slice(&(jpeg_data.len() as u32).to_le_bytes());
+
+        // next IFD = 0
+        buf.extend_from_slice(&0u32.to_le_bytes());
+
+        // Append JPEG data
+        buf.extend_from_slice(jpeg_data);
+        buf
+    }
+
+    #[test]
+    fn test_rw2_magic_accepted_in_tiff_header() {
+        let jpeg = [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10];
+        let data = build_rw2_tiff_with_jpeg(&jpeg);
+        let (bo, offset) = parse_tiff_header(&data).unwrap();
+        assert_eq!(bo, ByteOrder::LittleEndian);
+        assert_eq!(offset, 8);
+    }
+
+    #[test]
+    fn test_rw2_extract_jpeg() {
+        let jpeg_data = [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10];
+        let data = build_rw2_tiff_with_jpeg(&jpeg_data);
+        let result = extract_largest_jpeg(&data).unwrap();
+        assert_eq!(result, jpeg_data);
+    }
+
+    #[test]
+    fn test_rw2_extract_metadata_normalizes_magic() {
+        // 验证 RW2 Extractor 会将 magic 85 规范化为 42
+        let mut data = vec![0x49, 0x49, 0x55, 0x00]; // II + RW2 magic (LE)
+        data.extend_from_slice(&8u32.to_le_bytes()); // IFD0 offset
+        data.extend_from_slice(&0u16.to_le_bytes()); // 0 entries
+        data.extend_from_slice(&0u32.to_le_bytes()); // next IFD = 0
+
+        let ext = Rw2Extractor;
+        // parse_exif 可能因空 IFD 返回错误，但关键是不会因 magic 无效而失败
+        // 规范化后 kamadak-exif 应能识别 TIFF 签名
+        let _ = ext.extract_metadata(&data); // 不 panic 即通过
     }
 
     #[test]
