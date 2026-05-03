@@ -12,6 +12,8 @@ function collectSettings(): PersistedSettings {
   return {
     theme: useThemeStore.getState().theme,
     showDetectionOverlay: useCanvasStore.getState().showDetectionOverlay,
+    showImageInfo: useCanvasStore.getState().showImageInfo,
+    showHistogram: useCanvasStore.getState().showHistogram,
     similarityThreshold: useGroupingStore.getState().similarityThreshold,
     timeGapSeconds: useGroupingStore.getState().timeGapSeconds,
     province: useGeoStore.getState().selectedProvince,
@@ -49,6 +51,12 @@ export async function initSettings(): Promise<void> {
     if (saved.showDetectionOverlay) {
       useCanvasStore.getState().toggleDetectionOverlay();
     }
+    if (!saved.showImageInfo) {
+      useCanvasStore.getState().toggleImageInfo();
+    }
+    if (saved.showHistogram) {
+      useCanvasStore.getState().toggleHistogram();
+    }
     useGroupingStore.getState().setSimilarityThreshold(saved.similarityThreshold);
     useGroupingStore.getState().setTimeGapSeconds(saved.timeGapSeconds);
     if (saved.province) {
@@ -66,7 +74,9 @@ export async function initSettings(): Promise<void> {
 
     useCanvasStore.subscribe(
       (state, prev) => {
-        if (state.showDetectionOverlay !== prev.showDetectionOverlay) {
+        if (state.showDetectionOverlay !== prev.showDetectionOverlay
+          || state.showImageInfo !== prev.showImageInfo
+          || state.showHistogram !== prev.showHistogram) {
           scheduleSave();
         }
       },

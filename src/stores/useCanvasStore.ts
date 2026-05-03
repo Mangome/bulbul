@@ -9,6 +9,10 @@ interface CanvasStoreState {
 
   /** 是否显示检测框覆盖层 */
   showDetectionOverlay: boolean;
+  /** 是否显示图片信息覆盖层 */
+  showImageInfo: boolean;
+  /** 是否显示直方图 */
+  showHistogram: boolean;
 
   // 纵向滚动分组状态
   /** 当前分组索引 (0-based，由 InfiniteCanvas 根据 scrollY 自动更新) */
@@ -21,6 +25,8 @@ interface CanvasStoreState {
   setViewportRect: (rect: ViewportRect) => void;
 
   toggleDetectionOverlay: () => void;
+  toggleImageInfo: () => void;
+  toggleHistogram: () => void;
 
   // 分组导航 Actions
   setGroupCount: (count: number) => void;
@@ -37,6 +43,8 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
   currentGroupIndex: 0,
   groupCount: 0,
   showDetectionOverlay: false,
+  showImageInfo: true,
+  showHistogram: false,
 
   setViewport: (x, y) =>
     set({ viewportX: x, viewportY: y }),
@@ -46,6 +54,12 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
 
   toggleDetectionOverlay: () =>
     set((state) => ({ showDetectionOverlay: !state.showDetectionOverlay })),
+
+  toggleImageInfo: () =>
+    set((state) => ({ showImageInfo: !state.showImageInfo })),
+
+  toggleHistogram: () =>
+    set((state) => ({ showHistogram: !state.showHistogram })),
 
   // ── 分组导航 ──
 

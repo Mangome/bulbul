@@ -196,7 +196,7 @@
 }
 
 .toggleActive {
-  background: var(--color-success);
+  background: var(--color-primary);
 }
 
 .toggleKnob {
@@ -493,6 +493,10 @@
 
 [data-theme="dark"] .toggle {
   background: rgba(255, 255, 255, 0.15);
+}
+
+[data-theme="dark"] .toggleActive {
+  background: var(--color-primary);
 }
 
 [data-theme="dark"] .actionBtnDefault {

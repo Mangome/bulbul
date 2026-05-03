@@ -74,6 +74,11 @@ export interface ImageMetadata {
 
   // 合焦评分方法标记
   focusScoreMethod: FocusScoringMethod | null;
+
+  // RGB 直方图（每通道 256 bins，旧缓存无此字段时为空数组）
+  histogramR: number[];
+  histogramG: number[];
+  histogramB: number[];
 }
 
 /** 单个分组的数据 */

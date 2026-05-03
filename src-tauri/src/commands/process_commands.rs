@@ -186,6 +186,52 @@ pub async fn process_folder(
                     irc.metadata.backfill_focal_length_35mm();
                 }
 
+                // 补算旧缓存中缺失的直方图（从已缓存的 medium JPEG 读取）
+                let needs_histogram: Vec<(String, String)> = valid_cached
+                    .iter()
+                    .filter(|irc| irc.metadata.histogram_r.is_empty())
+                    .map(|irc| (irc.hash.clone(), irc.medium_path.clone()))
+                    .collect();
+
+                if !needs_histogram.is_empty() {
+                    let histogram_results: Vec<(String, Vec<u32>, Vec<u32>, Vec<u32>)> =
+                        needs_histogram
+                            .into_iter()
+                            .filter_map(|(hash, medium_path)| {
+                                let data = std::fs::read(&medium_path).ok()?;
+                                let histogram = crate::core::raw_processor::compute_histogram(&data);
+                                Some((hash, histogram.r, histogram.g, histogram.b))
+                            })
+                            .collect();
+
+                    // 更新 metadata_cache
+                    {
+                        let mut s = state.lock().map_err(|e| e.to_string())?;
+                        for (hash, r, g, b) in &histogram_results {
+                            if let Some(mut meta) = s.metadata_cache.get(hash).map(|m| m.clone()) {
+                                meta.histogram_r = r.clone();
+                                meta.histogram_g = g.clone();
+                                meta.histogram_b = b.clone();
+                                s.metadata_cache.insert(hash.clone(), meta);
+                            }
+                        }
+                    }
+
+                    // 同步到 valid_cached（用于后续 result_cache 写入）
+                    let hist_map: std::collections::HashMap<String, (&Vec<u32>, &Vec<u32>, &Vec<u32>)> =
+                        histogram_results
+                            .iter()
+                            .map(|(h, r, g, b)| (h.clone(), (r, g, b)))
+                            .collect();
+                    for irc in &mut valid_cached {
+                        if let Some((r, g, b)) = hist_map.get(&irc.hash) {
+                            irc.metadata.histogram_r = (*r).clone();
+                            irc.metadata.histogram_g = (*g).clone();
+                            irc.metadata.histogram_b = (*b).clone();
+                        }
+                    }
+                }
+
                 {
                     let mut s = state.lock().map_err(|e| e.to_string())?;
                     s.restore_from_cache(&group_cache, &valid_cached);
@@ -441,6 +487,17 @@ pub async fn process_folder(
         for mut irc in cached {
             // 补算旧缓存中缺失的 focal_length_35mm
             irc.metadata.backfill_focal_length_35mm();
+
+            // 补算旧缓存中缺失的直方图
+            if irc.metadata.histogram_r.is_empty() {
+                if let Ok(data) = std::fs::read(&irc.medium_path) {
+                    let histogram = crate::core::raw_processor::compute_histogram(&data);
+                    irc.metadata.histogram_r = histogram.r;
+                    irc.metadata.histogram_g = histogram.g;
+                    irc.metadata.histogram_b = histogram.b;
+                }
+            }
+
             results.push(ProcessResult {
                 hash: irc.hash.clone(),
                 filename: irc.filename.clone(),

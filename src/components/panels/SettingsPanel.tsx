@@ -133,6 +133,12 @@ export function SettingsPanel({ open, onClose, onCacheCleared, onOpenAbout, proc
   const showDetectionOverlay = useCanvasStore((s) => s.showDetectionOverlay);
   const toggleDetectionOverlay = useCanvasStore((s) => s.toggleDetectionOverlay);
 
+  // 图片信息 & 直方图
+  const showImageInfo = useCanvasStore((s) => s.showImageInfo);
+  const toggleImageInfo = useCanvasStore((s) => s.toggleImageInfo);
+  const showHistogram = useCanvasStore((s) => s.showHistogram);
+  const toggleHistogram = useCanvasStore((s) => s.toggleHistogram);
+
   // 缓存
   const [cacheInfo, setCacheInfo] = useState<CacheSizeInfo | null>(null);
   const [cacheLoading, setCacheLoading] = useState(false);
@@ -430,6 +436,36 @@ export function SettingsPanel({ open, onClose, onCacheCleared, onOpenAbout, proc
                     role="switch"
                     aria-checked={showDetectionOverlay}
                     aria-label="检测框覆盖层开关"
+                  >
+                    <span className={cls.toggleKnob} />
+                  </button>
+                </div>
+
+                <div className={cls.separator} />
+
+                <div className={cls.row}>
+                  <span className={cls.rowLabel}>图片信息</span>
+                  <button
+                    className={`${cls.toggle} ${showImageInfo ? cls.toggleActive : ''}`}
+                    onClick={toggleImageInfo}
+                    role="switch"
+                    aria-checked={showImageInfo}
+                    aria-label="图片信息开关"
+                  >
+                    <span className={cls.toggleKnob} />
+                  </button>
+                </div>
+
+                <div className={cls.separator} />
+
+                <div className={cls.row}>
+                  <span className={cls.rowLabel}>直方图</span>
+                  <button
+                    className={`${cls.toggle} ${showHistogram ? cls.toggleActive : ''}`}
+                    onClick={toggleHistogram}
+                    role="switch"
+                    aria-checked={showHistogram}
+                    aria-label="直方图开关"
                   >
                     <span className={cls.toggleKnob} />
                   </button>

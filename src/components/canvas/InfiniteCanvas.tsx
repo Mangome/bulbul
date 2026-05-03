@@ -181,6 +181,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
 
   // Store sync
   const showDetectionOverlay = useCanvasStore((s) => s.showDetectionOverlay);
+  const showImageInfo = useCanvasStore((s) => s.showImageInfo);
+  const showHistogram = useCanvasStore((s) => s.showHistogram);
   const currentGroupIndex = useCanvasStore((s) => s.currentGroupIndex);
   const setViewport = useCanvasStore((s) => s.setViewport);
   const setViewportRect = useCanvasStore((s) => s.setViewportRect);
@@ -300,6 +302,11 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         const bboxes = meta?.detectionBboxes ?? [];
         canvasItem.setDetectionBoxes(bboxes);
         canvasItem.setDetectionVisible(bboxes.length > 0);
+      }
+
+      // 同步直方图数据
+      if (meta?.histogramR && meta.histogramR.length > 0) {
+        canvasItem.setHistogram(meta.histogramR, meta.histogramG, meta.histogramB);
       }
 
       canvasItem.setSelected(selectedHashes.has(item.hash));
@@ -467,7 +474,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     let needsNextFrame = false;
     const itemsToReload: CanvasImageItem[] = [];
     for (const item of canvasItemsRef.current.values()) {
-      const itemNeedsFrame = item.draw(ctx, 1, now);
+      const { showImageInfo: curShowInfo, showHistogram: curShowHist } = useCanvasStore.getState();
+      const itemNeedsFrame = item.draw(ctx, 1, now, curShowInfo, curShowHist);
       needsNextFrame = needsNextFrame || itemNeedsFrame;
       if (item.needsReload) {
         itemsToReload.push(item);
@@ -1045,6 +1053,10 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       canvasItem.setDetectionBoxes(bboxes);
       const { showDetectionOverlay } = useCanvasStore.getState();
       canvasItem.setDetectionVisible(showDetectionOverlay && bboxes.length > 0);
+      // 同步直方图数据
+      if (meta?.histogramR && meta.histogramR.length > 0) {
+        canvasItem.setHistogram(meta.histogramR, meta.histogramG, meta.histogramB);
+      }
       markDirty();
     },
     clearMemoryCache: () => {
@@ -1073,6 +1085,11 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     }
     markDirty();
   }, [showDetectionOverlay, markDirty]);
+
+  // ── 图片信息/直方图可见性切换 ──
+  useEffect(() => {
+    markDirty();
+  }, [showImageInfo, showHistogram, markDirty]);
 
   // ── 选中数量播报 ──
   const selectedCount = useSelectionStore((s) => s.selectedCount);

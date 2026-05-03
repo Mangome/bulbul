@@ -12,12 +12,14 @@ use std::io::{BufReader, Cursor};
 use std::path::Path;
 
 use image::imageops::FilterType;
+use image::GenericImageView;
 use serde::{Deserialize, Serialize};
 
 use crate::core::raw_parser;
 use crate::models::{AppError, ImageMetadata};
 use crate::utils::cache;
 use crate::utils::paths::compute_path_hash;
+use crate::utils::result_cache;
 
 /// 缩略图最大宽度（像素）
 /// 600px 长边适合画布默认展示，兼顾清晰度与内存
@@ -71,30 +73,33 @@ pub async fn process_single_image(
     // 校验支持的格式并获取 Extractor（快速失败）
     let extractor = raw_parser::get_extractor(&extension)?;
 
-    // 缓存命中时走快速路径：仅读取头部解析 Exif
+    // 缓存命中时走快速路径：优先从 result_cache 恢复完整 metadata（含直方图）
     if cache::is_cached(cache_base_dir, &hash) {
         let header_size = extractor.exif_header_size();
-        // 先尝试头部快速读取；若 header_size 为 0 则跳过直接全量读取
-        // 若 EXIF 字段偏移超出头部范围则回退全量读取
         let medium_path =
             crate::utils::paths::get_cache_file_path(cache_base_dir, &hash, "medium");
         let thumbnail_path =
             crate::utils::paths::get_cache_file_path(cache_base_dir, &hash, "thumbnail");
 
-        let mut metadata = if header_size == 0 {
-            // 非 TIFF/EP 格式（CR3/RAF 等）EXIF 不在文件头部，需全量读取
-            let data = tokio::fs::read(file_path).await.map_err(|e| {
-                AppError::FileNotFound(format!("{}: {}", file_path.display(), e))
-            })?;
-            extractor.extract_metadata(&data)?
+        // 优先从 result_cache 恢复 metadata（含直方图等计算字段）
+        let mut metadata = if let Some(cached) = result_cache::load_image_result(cache_base_dir, &hash).await {
+            cached.metadata
         } else {
-            match read_exif_from_header(file_path, header_size, &*extractor).await {
-                Ok(m) => m,
-                Err(_) => {
-                    let data = tokio::fs::read(file_path).await.map_err(|e| {
-                        AppError::FileNotFound(format!("{}: {}", file_path.display(), e))
-                    })?;
-                    extractor.extract_metadata(&data)?
+            // result_cache 不存在，回退到 EXIF 解析（直方图为空，需重新处理才能获得）
+            if header_size == 0 {
+                let data = tokio::fs::read(file_path).await.map_err(|e| {
+                    AppError::FileNotFound(format!("{}: {}", file_path.display(), e))
+                })?;
+                extractor.extract_metadata(&data)?
+            } else {
+                match read_exif_from_header(file_path, header_size, &*extractor).await {
+                    Ok(m) => m,
+                    Err(_) => {
+                        let data = tokio::fs::read(file_path).await.map_err(|e| {
+                            AppError::FileNotFound(format!("{}: {}", file_path.display(), e))
+                        })?;
+                        extractor.extract_metadata(&data)?
+                    }
                 }
             }
         };
@@ -110,6 +115,22 @@ pub async fn process_single_image(
         .unwrap_or(Err(AppError::ImageProcessError(String::new())))
         {
             apply_actual_dimensions(&mut metadata, w, h);
+        }
+
+        // 补算直方图：旧缓存无直方图数据时，从已缓存的 medium JPEG 计算
+        if metadata.histogram_r.is_empty() {
+            let medium_path_clone = medium_path.clone();
+            if let Ok(histogram) = tokio::task::spawn_blocking(move || {
+                let data = std::fs::read(&medium_path_clone)?;
+                Ok::<_, std::io::Error>(compute_histogram(&data))
+            })
+            .await
+            .unwrap_or(Err(std::io::Error::new(std::io::ErrorKind::Other, "spawn failed")))
+            {
+                metadata.histogram_r = histogram.r;
+                metadata.histogram_g = histogram.g;
+                metadata.histogram_b = histogram.b;
+            }
         }
 
         return Ok(ProcessResult {
@@ -141,6 +162,10 @@ pub async fn process_single_image(
     // 不再需要原始文件数据，尽早释放
     drop(data);
 
+    // 计算 RGB 直方图（在 generate_medium 之前，使用已解码的 image_data）
+    // 零额外 IO，仅遍历像素按通道计数，约 1-2ms/张
+    let histogram = compute_histogram(&image_data);
+
     // 生成 medium 和缩略图（CPU 密集型，在 blocking 线程池中执行）
     let image_clone = image_data.clone();
     let (medium_data, thumbnail_data) = tokio::task::spawn_blocking(move || {
@@ -156,6 +181,11 @@ pub async fn process_single_image(
     // 异步写入磁盘
     let medium_path = cache::write_medium(cache_base_dir, &hash, &medium_data).await?;
     let thumbnail_path = cache::write_thumbnail(cache_base_dir, &hash, &thumbnail_data).await?;
+
+    // 写入直方图到 metadata
+    metadata.histogram_r = histogram.r;
+    metadata.histogram_g = histogram.g;
+    metadata.histogram_b = histogram.b;
 
     Ok(ProcessResult {
         hash,
@@ -305,6 +335,42 @@ pub fn generate_medium(jpeg_data: &[u8]) -> Result<Vec<u8>, AppError> {
         .map_err(|e| AppError::ImageProcessError(format!("Medium JPEG 编码失败: {}", e)))?;
 
     Ok(buf.into_inner())
+}
+
+/// RGB 直方图数据
+pub struct HistogramData {
+    pub r: Vec<u32>,
+    pub g: Vec<u32>,
+    pub b: Vec<u32>,
+}
+
+/// 计算 JPEG 数据的 RGB 三通道直方图
+///
+/// 解码图片 → 遍历像素按通道计数 → 返回三个长度 256 的 Vec<u32>
+pub fn compute_histogram(jpeg_data: &[u8]) -> HistogramData {
+    let img = match image::load_from_memory(jpeg_data) {
+        Ok(img) => img,
+        Err(_) => {
+            return HistogramData {
+                r: vec![0u32; 256],
+                g: vec![0u32; 256],
+                b: vec![0u32; 256],
+            };
+        }
+    };
+
+    let mut r = vec![0u32; 256];
+    let mut g = vec![0u32; 256];
+    let mut b = vec![0u32; 256];
+
+    for pixel in img.pixels() {
+        let (_, _, rgba) = pixel;
+        r[rgba[0] as usize] += 1;
+        g[rgba[1] as usize] += 1;
+        b[rgba[2] as usize] += 1;
+    }
+
+    HistogramData { r, g, b }
 }
 
 #[cfg(test)]

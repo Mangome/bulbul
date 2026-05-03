@@ -106,6 +106,9 @@ describe('CanvasImageItem', () => {
         focusScore: 5,
         detectionBboxes: [],
         focusScoreMethod: null,
+        histogramR: [],
+        histogramG: [],
+        histogramB: [],
       });
       expect(canvasItem.hash).toBe('test-hash');
     });

@@ -13,6 +13,8 @@ import type { Province } from '../data/provinces';
 export interface PersistedSettings {
   theme: Theme;
   showDetectionOverlay: boolean;
+  showImageInfo: boolean;
+  showHistogram: boolean;
   similarityThreshold: number;
   timeGapSeconds: number;
   province: Province | null;
@@ -21,6 +23,8 @@ export interface PersistedSettings {
 const DEFAULTS: PersistedSettings = {
   theme: 'light',
   showDetectionOverlay: false,
+  showImageInfo: true,
+  showHistogram: false,
   similarityThreshold: 90.0,
   timeGapSeconds: 10,
   province: null,
@@ -57,6 +61,8 @@ export async function loadSettings(): Promise<PersistedSettings> {
     const result = {
       theme: parsed.theme === 'light' || parsed.theme === 'dark' ? parsed.theme : DEFAULTS.theme,
       showDetectionOverlay: typeof parsed.showDetectionOverlay === 'boolean' ? parsed.showDetectionOverlay : DEFAULTS.showDetectionOverlay,
+      showImageInfo: typeof parsed.showImageInfo === 'boolean' ? parsed.showImageInfo : DEFAULTS.showImageInfo,
+      showHistogram: typeof parsed.showHistogram === 'boolean' ? parsed.showHistogram : DEFAULTS.showHistogram,
       similarityThreshold: typeof parsed.similarityThreshold === 'number' ? parsed.similarityThreshold : DEFAULTS.similarityThreshold,
       timeGapSeconds: typeof parsed.timeGapSeconds === 'number' ? parsed.timeGapSeconds : DEFAULTS.timeGapSeconds,
       province: isValidProvince(parsed.province) ? parsed.province : DEFAULTS.province,

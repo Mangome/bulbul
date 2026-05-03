@@ -64,6 +64,14 @@ pub struct ImageMetadata {
     // 合焦评分方法标记
     #[serde(default)]
     pub focus_score_method: Option<FocusScoringMethod>,
+
+    // RGB 直方图（每通道 256 bins，旧缓存无此字段时默认为空 Vec）
+    #[serde(default)]
+    pub histogram_r: Vec<u32>,
+    #[serde(default)]
+    pub histogram_g: Vec<u32>,
+    #[serde(default)]
+    pub histogram_b: Vec<u32>,
 }
 
 impl ImageMetadata {

@@ -78,6 +78,17 @@ const GROUP_BADGE_PADDING_Y = 4;
 const GROUP_BADGE_OFFSET = 6;
 const GROUP_BADGE_RADIUS = 3;
 
+// ─── 直方图常量 ─────────────────────────────────────────
+
+/** 直方图高度（屏幕像素，不随缩放变化） */
+const HISTOGRAM_HEIGHT = 40;
+/** 直方图宽度占图片宽度的比例（与信息文字并排时） */
+const HISTOGRAM_WIDTH_RATIO = 0.45;
+/** 直方图颜色（加法混合，三色重叠趋近白色） */
+const HISTOGRAM_COLOR_R = 'rgba(255, 80, 80, 0.7)';
+const HISTOGRAM_COLOR_G = 'rgba(80, 255, 80, 0.7)';
+const HISTOGRAM_COLOR_B = 'rgba(80, 120, 255, 0.7)';
+
 // ─── CanvasImageItem ─────────────────────────────────
 
 export class CanvasImageItem {
@@ -112,6 +123,11 @@ export class CanvasImageItem {
   // 检测框
   private detectionBoxes: DetectionBox[] = [];
   private detectionVisible: boolean = false;
+
+  // 直方图数据
+  private histogramR: number[] | null = null;
+  private histogramG: number[] | null = null;
+  private histogramB: number[] | null = null;
 
   // 信息覆盖层数据（预计算字符串，避免每帧格式化）
   private infoFileName: string = '';
@@ -192,9 +208,11 @@ export class CanvasImageItem {
    * @param ctx Canvas 2D 上下文
    * @param zoom 缩放级别
    * @param now 当前时间戳（performance.now()）
+   * @param showImageInfo 是否显示图片信息覆盖层
+   * @param showHistogram 是否显示直方图
    * @returns 是否需要继续渲染下一帧（动画进行中）
    */
-  draw(ctx: CanvasRenderingContext2D, zoom: number, now: number): boolean {
+  draw(ctx: CanvasRenderingContext2D, zoom: number, now: number, showImageInfo: boolean = true, showHistogram: boolean = false): boolean {
     // alpha <= 0 时跳过绘制
     if (this.alpha <= 0) {
       return false;
@@ -225,8 +243,8 @@ export class CanvasImageItem {
     // 绘制分组角标（首图左上角）
     this._drawGroupBadge(ctx, zoom);
 
-    // 绘制信息覆盖层（文件名 + 拍摄参数）
-    this._drawInfoOverlay(ctx, zoom);
+    // 绘制信息覆盖层（渐变背景 + 直方图 + 信息文字）
+    this._drawInfoOverlay(ctx, zoom, showImageInfo, showHistogram);
 
     // 绘制检测框覆盖层
     if (this.detectionVisible && this.detectionBoxes.length > 0) {
@@ -294,6 +312,15 @@ export class CanvasImageItem {
     this.detectionVisible = visible;
   }
 
+  /**
+   * 设置直方图数据
+   */
+  setHistogram(r: number[], g: number[], b: number[]): void {
+    this.histogramR = r.length > 0 ? r : null;
+    this.histogramG = g.length > 0 ? g : null;
+    this.histogramB = b.length > 0 ? b : null;
+  }
+
   get isSelected(): boolean {
     return this._isSelected;
   }
@@ -310,6 +337,9 @@ export class CanvasImageItem {
     this._isHovered = false;
     this.detectionBoxes = [];
     this.detectionVisible = false;
+    this.histogramR = null;
+    this.histogramG = null;
+    this.histogramB = null;
   }
 
   /**
@@ -377,23 +407,32 @@ export class CanvasImageItem {
   }
 
   /**
-   * 绘制信息覆盖层（文件名 + 拍摄参数）
+   * 绘制信息覆盖层（渐变背景 + 直方图 + 信息文字）
    * 使用反向缩放补偿保持文字恒定大小
+   * @param showImageInfo 是否显示信息文字
+   * @param showHistogram 是否显示直方图（需同时有直方图数据）
    */
-  private _drawInfoOverlay(ctx: CanvasRenderingContext2D, zoom: number): void {
-    if (!this.infoVisible) return;
-    if (!this.infoFileName && !this.infoParams) return;
+  private _drawInfoOverlay(ctx: CanvasRenderingContext2D, zoom: number, showImageInfo: boolean, showHistogram: boolean): void {
+    const hasInfo = showImageInfo && this.infoVisible && (this.infoFileName || this.infoParams);
+    const hasHistogram = showHistogram && this.histogramR !== null;
+
+    // 两者均不可见时不绘制
+    if (!hasInfo && !hasHistogram) return;
 
     const w = this.width;
     const h = this.height;
     const invZoom = 1 / zoom;
 
-    const hasParams = this.infoParams.length > 0;
-    const lineCount = hasParams ? 2 : 1;
+    // 计算各区域高度（屏幕像素）
+    const infoTextH = hasInfo
+      ? (this.infoParams.length > 0 ? 2 : 1) * INFO_FONT_SIZE + (this.infoParams.length > 0 ? INFO_LINE_GAP : 0)
+      : 0;
+    const histH = hasHistogram ? HISTOGRAM_HEIGHT : 0;
 
-    // 覆盖层高度（屏幕像素 → 内容坐标）
-    const overlayLogicalH = lineCount * INFO_FONT_SIZE + (lineCount - 1) * INFO_LINE_GAP + INFO_PADDING_BOTTOM * 2;
-    const overlayContentH = overlayLogicalH * invZoom;
+    // 内容行高取两者最大值，加上底部内边距
+    const contentLogicalH = Math.max(infoTextH, histH) + INFO_PADDING_BOTTOM;
+
+    const overlayContentH = contentLogicalH * invZoom;
     const gradientContentH = Math.max(overlayContentH, h * INFO_GRADIENT_RATIO);
 
     ctx.save();
@@ -411,10 +450,38 @@ export class CanvasImageItem {
     ctx.translate(0, h);
     ctx.scale(invZoom, invZoom);
 
-    const textX = INFO_PADDING_X;
-    const maxTextWidth = w * zoom - INFO_PADDING_X * 2;
+    const imageScreenWidth = w * zoom;
 
-    // 文件名 + 拍摄时间拼接为一行
+    if (hasInfo && hasHistogram) {
+      // 左右分栏：信息文字左侧，直方图右侧
+      const infoMaxWidth = imageScreenWidth * (1 - HISTOGRAM_WIDTH_RATIO) - INFO_PADDING_X * 2;
+      const histWidth = imageScreenWidth * HISTOGRAM_WIDTH_RATIO - INFO_PADDING_X;
+
+      // 信息文字（左下角）
+      this._drawInfoText(ctx, INFO_PADDING_X, infoMaxWidth);
+      // 直方图（右下角）
+      const histLeft = imageScreenWidth - histWidth - INFO_PADDING_X;
+      const histBottom = -INFO_PADDING_BOTTOM;
+      this._drawHistogramArea(ctx, histLeft, histLeft + histWidth, histBottom - histH, histBottom);
+    } else if (hasInfo) {
+      // 仅信息文字，占满宽度
+      const infoMaxWidth = imageScreenWidth - INFO_PADDING_X * 2;
+      this._drawInfoText(ctx, INFO_PADDING_X, infoMaxWidth);
+    } else {
+      // 仅直方图，占满宽度
+      const histWidth = imageScreenWidth - INFO_PADDING_X * 2;
+      const histBottom = -INFO_PADDING_BOTTOM;
+      this._drawHistogramArea(ctx, INFO_PADDING_X, INFO_PADDING_X + histWidth, histBottom - histH, histBottom);
+    }
+
+    ctx.restore();
+  }
+
+  /** 绘制信息文字（文件名 + 拍摄参数） */
+  private _drawInfoText(ctx: CanvasRenderingContext2D, textX: number, maxWidth: number): void {
+    if (!this.infoVisible) return;
+    const hasParams = this.infoParams.length > 0;
+
     const nameWithTime = this.infoCaptureTime
       ? `${this.infoFileName}  ${this.infoCaptureTime}`
       : this.infoFileName;
@@ -425,25 +492,70 @@ export class CanvasImageItem {
       ctx.font = INFO_FONT_PARAMS;
       ctx.fillStyle = INFO_TEXT_SECONDARY;
       ctx.textBaseline = 'bottom';
-      ctx.fillText(this.infoParams, textX, paramsY, maxTextWidth);
+      ctx.fillText(this.infoParams, textX, paramsY, maxWidth);
 
       // 文件名 + 时间行（参数行上方）
       const nameY = paramsY - INFO_FONT_SIZE - INFO_LINE_GAP;
       ctx.font = INFO_FONT_NAME;
       ctx.fillStyle = INFO_TEXT_COLOR;
-      const truncatedName = CanvasImageItem._truncateText(nameWithTime, maxTextWidth);
-      ctx.fillText(truncatedName, textX, nameY, maxTextWidth);
+      const truncatedName = CanvasImageItem._truncateText(nameWithTime, maxWidth);
+      ctx.fillText(truncatedName, textX, nameY, maxWidth);
     } else {
       // 仅文件名 + 时间
       const nameY = -INFO_PADDING_BOTTOM;
       ctx.font = INFO_FONT_NAME;
       ctx.fillStyle = INFO_TEXT_COLOR;
       ctx.textBaseline = 'bottom';
-      const truncatedName = CanvasImageItem._truncateText(nameWithTime, maxTextWidth);
-      ctx.fillText(truncatedName, textX, nameY, maxTextWidth);
+      const truncatedName = CanvasImageItem._truncateText(nameWithTime, maxWidth);
+      ctx.fillText(truncatedName, textX, nameY, maxWidth);
+    }
+  }
+
+  /** 绘制直方图区域 */
+  private _drawHistogramArea(ctx: CanvasRenderingContext2D, left: number, right: number, top: number, bottom: number): void {
+    if (this.histogramR === null || this.histogramG === null || this.histogramB === null) return;
+
+    const histHeight = bottom - top;
+    const histWidth = right - left;
+    const binWidth = histWidth / 256;
+
+    // 找到最大值用于归一化
+    let maxVal = 0;
+    for (let i = 0; i < 256; i++) {
+      const r = this.histogramR[i] ?? 0;
+      const g = this.histogramG[i] ?? 0;
+      const b = this.histogramB[i] ?? 0;
+      maxVal = Math.max(maxVal, r, g, b);
+    }
+    if (maxVal === 0) return;
+
+    const channels = [
+      { data: this.histogramR, color: HISTOGRAM_COLOR_R },
+      { data: this.histogramG, color: HISTOGRAM_COLOR_G },
+      { data: this.histogramB, color: HISTOGRAM_COLOR_B },
+    ];
+
+    // 加法混合：三色重叠区域趋近白色
+    const prevComposite = ctx.globalCompositeOperation;
+    ctx.globalCompositeOperation = 'lighter';
+
+    for (const channel of channels) {
+      ctx.fillStyle = channel.color;
+      ctx.beginPath();
+      ctx.moveTo(left, bottom);
+      for (let i = 0; i < 256; i++) {
+        const val = channel.data[i] ?? 0;
+        const barHeight = (val / maxVal) * histHeight;
+        const x = left + i * binWidth;
+        ctx.lineTo(x, bottom - barHeight);
+      }
+      ctx.lineTo(right, bottom);
+      ctx.closePath();
+      ctx.fill();
     }
 
-    ctx.restore();
+    ctx.globalCompositeOperation = prevComposite;
+
   }
 
   /**
