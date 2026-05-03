@@ -4,6 +4,7 @@ pub mod focus_score;
 pub mod geo_filter;
 pub mod grouping;
 pub mod metadata;
+pub mod onnx_runtime;
 pub mod phash;
 pub mod raw_parser;
 pub mod raw_processor;

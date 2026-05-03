@@ -111,6 +111,12 @@ lazy_static::lazy_static! {
 
 /// 加载 ONNX 模型到内存缓存
 fn load_model(model_path: &Path) -> Result<(), AppError> {
+    if !crate::core::onnx_runtime::is_available() {
+        return Err(AppError::DetectionFailed(
+            "ONNX Runtime 未初始化，鸟类检测不可用".to_string(),
+        ));
+    }
+
     let mut session = MODEL_SESSION
         .lock()
         .map_err(|_| AppError::DetectionFailed("模型缓存锁定失败".to_string()))?;

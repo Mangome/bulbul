@@ -35,7 +35,7 @@ env_logger = "0.11"
 thiserror = "2"
 anyhow = "1"
 num_cpus = "1.17.0"
-ort = { version = "2.0.0-rc.12", features = ["download-binaries"] }
+ort = { version = "2.0.0-rc.12", features = ["load-dynamic"] }
 ndarray = "0.17"
 lazy_static = "1.4"
 flate2 = "1"

@@ -44,6 +44,18 @@ pub fn run() {
         .setup(move |app| {
             log::info!("[启动计时] setup() 开始: {:?}", app_start.elapsed());
 
+            // 初始化 ONNX Runtime（必须在所有 ort API 使用之前）
+            // load-dynamic 模式：根据 CPU 支持选择 AVX 或 no-AVX 版本的 DLL
+            let resource_dir = app.path().resource_dir().ok();
+            let ort_available = core::onnx_runtime::init_onnx_runtime(resource_dir.as_deref());
+            if !ort_available {
+                log::warn!("ONNX Runtime 不可用，鸟类检测和分类功能将跳过");
+            }
+            log::info!(
+                "[启动计时] ONNX Runtime 初始化完成: {:?}",
+                app_start.elapsed()
+            );
+
             app.handle().plugin(tauri_plugin_process::init())?;
             app.handle()
                 .plugin(tauri_plugin_updater::Builder::new().build())?;

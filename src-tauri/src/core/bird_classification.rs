@@ -93,6 +93,12 @@ lazy_static::lazy_static! {
 
 /// 加载分类器 ONNX 模型到内存缓存
 fn load_classifier_model(model_path: &Path) -> Result<(), AppError> {
+    if !crate::core::onnx_runtime::is_available() {
+        return Err(AppError::ClassificationFailed(
+            "ONNX Runtime 未初始化，鸟种分类不可用".to_string(),
+        ));
+    }
+
     let mut session = CLASSIFIER_SESSION
         .lock()
         .map_err(|_| AppError::ClassificationFailed("分类器模型缓存锁定失败".to_string()))?;
@@ -1077,6 +1083,12 @@ mod tests {
 
     #[test]
     fn test_load_qdq_quantized_model() {
+        // load-dynamic 模式下需要 ONNX Runtime DLL 已加载
+        if !crate::core::onnx_runtime::is_available() {
+            eprintln!("跳过: ONNX Runtime 不可用");
+            return;
+        }
+
         // 验证 QDQ 格式（DynamicQuantizeLinear + ConvInteger）的 INT8 量化模型
         // 能否被 Rust ort crate 正常加载和推理
         let model_path = Path::new("resources/models/bird_classifier.onnx");
