@@ -121,7 +121,7 @@ function createTestLayout(numGroups = 1, itemsPerGroup = 2): LayoutResult {
         width: columnWidth,
         height: 100,
         isFirstInGroup: i === 0,
-        groupLabel: i === 0 ? `G${gi + 1} · ${itemsPerGroup}张` : '',
+        groupLabel: i === 0 ? `分组${gi + 1} · ${itemsPerGroup}张` : '',
       });
     }
 

@@ -287,17 +287,17 @@ describe('computeVerticalGridLayout', () => {
 
     // a=first, b=not
     expect(result.items[0].isFirstInGroup).toBe(true);
-    expect(result.items[0].groupLabel).toContain('G1');
+    expect(result.items[0].groupLabel).toContain('分组1');
     expect(result.items[1].isFirstInGroup).toBe(false);
     expect(result.items[1].groupLabel).toBe('');
 
     // c=first
     expect(result.items[2].isFirstInGroup).toBe(true);
-    expect(result.items[2].groupLabel).toContain('G2');
+    expect(result.items[2].groupLabel).toContain('分组2');
 
     // d=first, e=not, f=not
     expect(result.items[3].isFirstInGroup).toBe(true);
-    expect(result.items[3].groupLabel).toContain('G3');
+    expect(result.items[3].groupLabel).toContain('分组3');
     expect(result.items[4].isFirstInGroup).toBe(false);
     expect(result.items[5].isFirstInGroup).toBe(false);
   });
@@ -314,8 +314,8 @@ describe('computeVerticalGridLayout', () => {
 
     const result = computeVerticalGridLayout(groups, dims, viewportWidth);
 
-    expect(result.items[0].groupLabel).toBe('G1 · 1张');
-    expect(result.items[1].groupLabel).toBe('G2 · 3张');
+    expect(result.items[0].groupLabel).toBe('分组1 · 1张');
+    expect(result.items[1].groupLabel).toBe('分组2 · 3张');
   });
 
   // ─── 跨分组连续排列 ─────────────────────────────────

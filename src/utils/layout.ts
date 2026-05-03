@@ -188,7 +188,7 @@ export function computeVerticalGridLayout(
 
   for (let gi = 0; gi < groups.length; gi++) {
     const group = groups[gi];
-    const groupLabel = `G${gi + 1} · ${group.imageCount}张`;
+    const groupLabel = `分组${gi + 1} · ${group.imageCount}张`;
 
     // 跳过空分组
     if (group.pictureHashes.length === 0) {
