@@ -39,7 +39,7 @@ function WelcomePage() {
 
   return (
     <div className={cls.window}>
-      {/* 全出血 Logo 底图 */}
+      {/* Logo 居中完整显示 */}
       <img
         src={appIcon}
         alt=""
