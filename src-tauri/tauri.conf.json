@@ -14,11 +14,12 @@
       {
         "label": "welcome",
         "title": "Bulbul",
-        "width": 600,
+        "width": 450,
         "height": 450,
         "resizable": false,
         "center": true,
-        "decorations": true,
+        "decorations": false,
+        "transparent": true,
         "visible": false
       }
     ],

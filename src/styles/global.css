@@ -25,12 +25,10 @@ body {
   font-family: var(--font-family);
   font-weight: var(--font-weight-normal);
   color: var(--color-text-primary);
-  background-color: var(--color-bg-primary);
+  background-color: transparent;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow: hidden;
-  transition: background-color var(--transition-normal),
-              color var(--transition-normal);
 }
 
 /* ────────────────────────────────────────────────────────────────

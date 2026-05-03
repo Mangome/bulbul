@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { selectFolder } from '../services/fileService';
 import appIcon from '../assets/app-icon.png';
 import cls from './WelcomePage.module.css';
@@ -14,6 +15,10 @@ function WelcomePage() {
     getVersion().then(setVersion);
   }, []);
 
+  const handleClose = () => {
+    getCurrentWindow().close();
+  };
+
   const handleSelectFolder = async () => {
     try {
       setLoading(true);
@@ -21,12 +26,10 @@ function WelcomePage() {
 
       const folderPath = await selectFolder();
       if (!folderPath) {
-        // 用户取消了选择
         setLoading(false);
         return;
       }
 
-      // 打开主窗口，传入文件夹路径
       await invoke('open_main_window', { folderPath });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -35,46 +38,49 @@ function WelcomePage() {
   };
 
   return (
-    <div className={cls.container}>
-      {/* 背景装饰层 */}
-      <div className={cls.backdrop} aria-hidden="true">
-        <div className={cls.glow} />
-        <div className={cls.dots} />
-        <div className={cls.beam} />
-      </div>
+    <div className={cls.window}>
+      {/* 全出血 Logo 底图 */}
+      <img
+        src={appIcon}
+        alt=""
+        className={cls.logo}
+        draggable={false}
+      />
 
-      <main className={cls.content}>
-        <div className={cls.iconWrap}>
-          <div className={cls.iconHalo} aria-hidden="true" />
-          <img src={appIcon} alt="" className={cls.icon} draggable={false} />
-        </div>
+      {/* 拖拽区域 - 覆盖上半部分 */}
+      <div className={cls.dragRegion} data-tauri-drag-region />
 
-        <h1 className={cls.title}>Bulbul</h1>
+      {/* 关闭按钮 */}
+      <button
+        className={cls.closeBtn}
+        onClick={handleClose}
+        aria-label="关闭"
+      >
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <path
+            d="M1 1L9 9M9 1L1 9"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+        </svg>
+      </button>
 
-        <p className={cls.tagline}>
-          <span className={cls.taglineZh}>连拍一时爽，选片一直爽！</span>
-          <span className={cls.taglineEn}>Burst freely, pick easily.</span>
-        </p>
-
-        <div className={cls.meta} aria-hidden="true">
-          <span className={cls.metaDot} />
-          <span className={cls.metaText}>智能分组 · 极速预览 · 专注选片</span>
-          <span className={cls.metaDot} />
-        </div>
-
+      {/* 主交互区 */}
+      <div className={cls.actions}>
         <button
-          className={`${cls.button} ${loading ? cls.buttonDisabled : ''}`}
+          className={`${cls.openBtn} ${loading ? cls.openBtnDisabled : ''}`}
           onClick={handleSelectFolder}
           disabled={loading}
           aria-busy={loading}
           aria-label="选择图片文件夹以开始筛选"
         >
-          <span className={cls.buttonLabel}>
+          <span className={cls.openBtnLabel}>
             {loading ? '正在打开…' : '选择文件夹'}
           </span>
           {!loading && (
             <svg
-              className={cls.buttonArrow}
+              className={cls.openBtnArrow}
               width="14"
               height="14"
               viewBox="0 0 14 14"
@@ -91,18 +97,20 @@ function WelcomePage() {
             </svg>
           )}
         </button>
+      </div>
 
-        {error && (
-          <p className={cls.error} role="alert">
-            {error}
-          </p>
-        )}
-      </main>
+      {/* 错误提示 */}
+      {error && (
+        <p className={cls.error} role="alert">
+          {error}
+        </p>
+      )}
 
+      {/* 版本号水印 */}
       {version && (
-        <footer className={cls.footer} aria-hidden="true">
-          <span className={cls.footerVersion}>v{version}</span>
-        </footer>
+        <span className={cls.version} aria-hidden="true">
+          v{version}
+        </span>
       )}
     </div>
   );

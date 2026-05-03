@@ -1,496 +1,246 @@
 /* ════════════════════════════════════════════════════════════════════════════
-   WelcomePage - 专业摄影工作室的入口
-   
+   WelcomePage - 全出血 Logo 窗口
+
    设计理念：
-   - 黑暗中的一束光 —— 径向光晕聚焦品牌图标
-   - 细节承载品牌 —— 波点纹理呼应画布背景，保持视觉一致性
-   - 字体即姿态 —— 中英双语 tagline，传达专业感与温度
-   - 光线呼吸 —— 缓慢扫过的光带，赋予静态页面生命力
+   - 窗口即 Logo —— 无边框、圆角、全出血品牌图
+   - 沉浸式入口 —— 极致减法，只有关闭按钮和操作按钮
+   - 毛玻璃胶囊 —— 操作按钮悬浮于 Logo 之上，融入而非侵入
 ════════════════════════════════════════════════════════════════════════════ */
 
-.container {
+.window {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  padding: var(--spacing-2xl);
-  background: var(--color-bg-primary);
+  width: 100vw;
+  height: 100vh;
+  border-radius: 12px;
   overflow: hidden;
-  isolation: isolate;
+  animation: windowEnter 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes windowEnter {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* ────────────────────────────────────────────────────────────────
-   背景装饰层 - 三层叠加构建氛围
+   全出血 Logo 底图
 ──────────────────────────────────────────────────────────────── */
 
-.backdrop {
+.logo {
   position: absolute;
   inset: 0;
-  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
   pointer-events: none;
 }
 
-/* 径向光晕 - 品牌蓝色聚光 */
-.glow {
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(
-      ellipse 60% 50% at 50% 45%,
-      rgba(var(--color-primary-rgb), 0.12) 0%,
-      rgba(var(--color-primary-rgb), 0.04) 35%,
-      transparent 70%
-    );
-  animation: glowPulse 8s ease-in-out infinite;
-}
+/* ────────────────────────────────────────────────────────────────
+   拖拽区域 - 覆盖上半部分，留出按钮空间
+──────────────────────────────────────────────────────────────── */
 
-[data-theme="light"] .glow,
-:root:not([data-theme="dark"]) .glow {
-  background:
-    radial-gradient(
-      ellipse 60% 50% at 50% 45%,
-      rgba(var(--color-primary-rgb), 0.06) 0%,
-      rgba(var(--color-primary-rgb), 0.02) 35%,
-      transparent 70%
-    );
-}
-
-@keyframes glowPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
-}
-
-/* 波点纹理 - 呼应主画布的品牌语言 */
-.dots {
-  position: absolute;
-  inset: 0;
-  background-image:
-    radial-gradient(
-      circle,
-      rgba(255, 255, 255, 0.04) 1px,
-      transparent 1.5px
-    );
-  background-size: 32px 32px;
-  background-position: 0 0;
-  mask-image: radial-gradient(
-    ellipse 80% 70% at 50% 50%,
-    black 20%,
-    transparent 80%
-  );
-  -webkit-mask-image: radial-gradient(
-    ellipse 80% 70% at 50% 50%,
-    black 20%,
-    transparent 80%
-  );
-}
-
-[data-theme="light"] .dots,
-:root:not([data-theme="dark"]) .dots {
-  background-image:
-    radial-gradient(
-      circle,
-      rgba(var(--color-primary-rgb), 0.06) 1px,
-      transparent 1.5px
-    );
-}
-
-/* 光带 - 缓慢横扫的高光，带来生命感 */
-.beam {
+.dragRegion {
   position: absolute;
   top: 0;
-  left: -30%;
-  width: 60%;
-  height: 100%;
-  background: linear-gradient(
-    105deg,
-    transparent 0%,
-    transparent 40%,
-    rgba(255, 255, 255, 0.015) 50%,
-    transparent 60%,
-    transparent 100%
-  );
-  animation: beamSweep 16s ease-in-out infinite;
-}
-
-[data-theme="light"] .beam,
-:root:not([data-theme="dark"]) .beam {
-  background: linear-gradient(
-    105deg,
-    transparent 0%,
-    transparent 40%,
-    rgba(var(--color-primary-rgb), 0.025) 50%,
-    transparent 60%,
-    transparent 100%
-  );
-}
-
-@keyframes beamSweep {
-  0% { transform: translateX(-30%); opacity: 0; }
-  15% { opacity: 1; }
-  85% { opacity: 1; }
-  100% { transform: translateX(220%); opacity: 0; }
-}
-
-/* ────────────────────────────────────────────────────────────────
-   内容区 - 主舞台
-──────────────────────────────────────────────────────────────── */
-
-.content {
-  position: relative;
+  left: 0;
+  right: 0;
+  height: 55%;
   z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  max-width: 520px;
-  animation: fadeInUp 600ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 /* ────────────────────────────────────────────────────────────────
-   应用图标 - 放大 + 多层光晕
+   关闭按钮 - 右上角，极简圆形
 ──────────────────────────────────────────────────────────────── */
 
-.iconWrap {
-  position: relative;
-  width: 128px;
-  height: 128px;
-  margin-bottom: var(--spacing-xl);
-  animation: fadeInScale 800ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@keyframes fadeInScale {
-  from {
-    opacity: 0;
-    transform: scale(0.85);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.iconHalo {
+.closeBtn {
   position: absolute;
-  inset: -24px;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    rgba(var(--color-primary-rgb), 0.22) 0%,
-    rgba(var(--color-primary-rgb), 0.08) 40%,
-    transparent 70%
-  );
-  filter: blur(12px);
-  animation: haloBreath 4s ease-in-out infinite;
-  z-index: -1;
-}
-
-[data-theme="light"] .iconHalo,
-:root:not([data-theme="dark"]) .iconHalo {
-  background: radial-gradient(
-    circle,
-    rgba(var(--color-primary-rgb), 0.14) 0%,
-    rgba(var(--color-primary-rgb), 0.06) 40%,
-    transparent 70%
-  );
-}
-
-@keyframes haloBreath {
-  0%, 100% {
-    opacity: 0.9;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.05);
-  }
-}
-
-.icon {
-  width: 100%;
-  height: 100%;
-  border-radius: 28px;
-  user-select: none;
-  filter:
-    drop-shadow(0 8px 24px rgba(0, 0, 0, 0.4))
-    drop-shadow(0 2px 8px rgba(var(--color-primary-rgb), 0.15));
-}
-
-[data-theme="light"] .icon,
-:root:not([data-theme="dark"]) .icon {
-  filter:
-    drop-shadow(0 8px 24px rgba(var(--color-primary-rgb), 0.18))
-    drop-shadow(0 2px 8px rgba(var(--color-primary-rgb), 0.08));
-}
-
-/* ────────────────────────────────────────────────────────────────
-   标题 - 白色纯净，品牌蓝留给按钮
-──────────────────────────────────────────────────────────────── */
-
-.title {
-  font-size: 40px;
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-primary);
-  margin: 0 0 var(--spacing-lg) 0;
-  letter-spacing: -1.2px;
-  line-height: 1;
-}
-
-/* ────────────────────────────────────────────────────────────────
-   Tagline - 中英双语，主副层次
-──────────────────────────────────────────────────────────────── */
-
-.tagline {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--spacing-xs);
-  margin: 0 0 var(--spacing-xl) 0;
-}
-
-.taglineZh {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-primary);
-  letter-spacing: 0.5px;
-  line-height: 1.4;
-  opacity: 0.92;
-}
-
-.taglineEn {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-normal);
-  color: var(--color-text-secondary);
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  font-style: italic;
-  opacity: 0.85;
-}
-
-/* ────────────────────────────────────────────────────────────────
-   Meta 特性标签 - 用装饰点连接，打破文字块
-──────────────────────────────────────────────────────────────── */
-
-.meta {
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
-  gap: var(--spacing-md);
-  margin-bottom: var(--spacing-2xl);
-  color: var(--color-text-muted);
-}
-
-.metaDot {
-  width: 3px;
-  height: 3px;
+  justify-content: center;
   border-radius: 50%;
-  background: var(--color-text-muted);
-  opacity: 0.5;
+  background: rgba(0, 0, 0, 0.25);
+  color: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0;
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    transform var(--transition-fast);
 }
 
-.metaText {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  letter-spacing: 2px;
-  color: var(--color-text-secondary);
-  opacity: 0.75;
+.closeBtn:hover {
+  background: rgba(0, 0, 0, 0.4);
+  color: rgba(255, 255, 255, 0.95);
+  transform: scale(1.08);
+}
+
+.closeBtn:active {
+  transform: scale(0.95);
+}
+
+.closeBtn:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 2px;
 }
 
 /* ────────────────────────────────────────────────────────────────
-   主按钮 - 唯一的品牌蓝色锚点
+   主交互区 - 底部居中
 ──────────────────────────────────────────────────────────────── */
 
-.button {
+.actions {
+  position: absolute;
+  bottom: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   选择文件夹按钮 - 毛玻璃胶囊
+──────────────────────────────────────────────────────────────── */
+
+.openBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--spacing-sm);
-  padding: 14px 36px;
+  padding: 11px 28px;
   font-size: var(--font-size-md);
   font-weight: var(--font-weight-semibold);
+  font-family: inherit;
   color: #FFFFFF;
-  background: linear-gradient(
-    180deg,
-    var(--color-primary-hover) 0%,
-    var(--color-primary) 100%
-  );
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 24px;
   cursor: pointer;
+  letter-spacing: 0.3px;
   box-shadow:
-    0 4px 16px rgba(var(--color-primary-rgb), 0.24),
-    0 1px 2px rgba(0, 0, 0, 0.2),
+    0 2px 12px rgba(0, 0, 0, 0.15),
     inset 0 1px 0 rgba(255, 255, 255, 0.15);
   transition:
-    transform var(--transition-normal),
+    background var(--transition-normal),
+    border-color var(--transition-normal),
     box-shadow var(--transition-normal),
-    background var(--transition-normal);
-  letter-spacing: 0.3px;
-  font-family: inherit;
+    transform var(--transition-normal);
+  white-space: nowrap;
 }
 
-.button:hover {
+.openBtn:hover {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.35);
   box-shadow:
-    0 8px 24px rgba(var(--color-primary-rgb), 0.36),
-    0 2px 4px rgba(0, 0, 0, 0.2),
+    0 4px 20px rgba(0, 0, 0, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 
-.button:hover .buttonArrow {
+.openBtn:hover .openBtnArrow {
   transform: translateX(3px);
 }
 
-.button:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 4px;
+.openBtn:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 3px;
 }
 
-.button:active {
+.openBtn:active {
   transform: translateY(0) scale(0.98);
-  box-shadow:
-    0 2px 8px rgba(var(--color-primary-rgb), 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.12);
 }
 
-.buttonLabel {
+.openBtnLabel {
   display: inline-block;
 }
 
-.buttonArrow {
+.openBtnArrow {
   transition: transform var(--transition-normal);
   flex-shrink: 0;
 }
 
-/* ────────────────────────────────────────────────────────────────
-   按钮禁用
-──────────────────────────────────────────────────────────────── */
-
-.buttonDisabled {
-  opacity: 0.65;
+.openBtnDisabled {
+  opacity: 0.55;
   cursor: not-allowed;
   pointer-events: none;
   transform: none !important;
 }
 
 /* ────────────────────────────────────────────────────────────────
-   错误消息
+   错误提示 - 毛玻璃条
 ──────────────────────────────────────────────────────────────── */
 
 .error {
-  margin-top: var(--spacing-lg);
+  position: absolute;
+  bottom: 88px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  margin: 0;
   padding: var(--spacing-sm) var(--spacing-md);
   font-size: var(--font-size-sm);
-  color: var(--color-danger);
-  background: var(--color-danger-light);
-  border: 1px solid var(--color-danger);
-  border-radius: 6px;
   font-weight: var(--font-weight-medium);
-  animation: shake 300ms cubic-bezier(0.36, 0, 0.66, -0.56);
+  color: #FFFFFF;
+  background: rgba(180, 50, 50, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  animation: fadeIn 300ms ease-out;
   max-width: 420px;
+  text-align: center;
 }
 
-@keyframes shake {
-  0%, 100% {
-    transform: translateX(0);
-  }
-  25% {
-    transform: translateX(-4px);
-  }
-  75% {
-    transform: translateX(4px);
-  }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
 /* ────────────────────────────────────────────────────────────────
-   底部版本号 - 从孤立展示到氛围水印
+   版本号 - 右下角水印
 ──────────────────────────────────────────────────────────────── */
 
-.footer {
+.version {
   position: absolute;
-  right: var(--spacing-xl);
-  bottom: var(--spacing-xl);
-  z-index: 1;
-  animation: fadeInUp 1000ms cubic-bezier(0.22, 1, 0.36, 1) 300ms both;
-}
-
-.footerVersion {
+  right: 16px;
+  bottom: 12px;
+  z-index: 5;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
-  color: var(--color-text-muted);
-  letter-spacing: 1px;
-  opacity: 0.5;
+  color: rgba(255, 255, 255, 0.3);
+  letter-spacing: 0.5px;
   font-variant-numeric: tabular-nums;
+  user-select: none;
 }
 
 /* ────────────────────────────────────────────────────────────────
-   响应式 - 小窗口适配
-──────────────────────────────────────────────────────────────── */
-
-@media (max-height: 600px) {
-  .iconWrap {
-    width: 96px;
-    height: 96px;
-    margin-bottom: var(--spacing-md);
-  }
-
-  .title {
-    font-size: 32px;
-    margin-bottom: var(--spacing-md);
-  }
-
-  .tagline {
-    margin-bottom: var(--spacing-md);
-  }
-
-  .meta {
-    margin-bottom: var(--spacing-lg);
-  }
-}
-
-@media (max-width: 480px) {
-  .content {
-    max-width: 100%;
-  }
-
-  .title {
-    font-size: 32px;
-  }
-
-  .taglineZh {
-    font-size: var(--font-size-md);
-  }
-}
-
-/* ────────────────────────────────────────────────────────────────
-   降低动效偏好 - 尊重用户系统设置
+   降低动效偏好
 ──────────────────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
-  .content,
-  .iconWrap,
-  .footer {
+  .window {
     animation: none;
   }
 
-  .glow,
-  .iconHalo,
-  .beam {
-    animation: none;
+  .openBtn:hover {
+    transform: none;
   }
 
-  .button:hover {
+  .closeBtn:hover {
     transform: none;
   }
 }
