@@ -8,6 +8,7 @@ import { useProcessing } from '../hooks/useProcessing';
 import { useKeyboard } from '../hooks/useKeyboard';
 import { useTauriEvents } from '../hooks/useTauriEvents';
 import { ProgressDialog } from '../components/dialogs/ProgressDialog';
+import { ExportProgressDialog } from '../components/dialogs/ExportProgressDialog';
 import InfiniteCanvas, { type InfiniteCanvasHandle } from '../components/canvas/InfiniteCanvas';
 import { TopNavBar } from '../components/panels/TopNavBar';
 import { BottomFilmstrip } from '../components/panels/BottomFilmstrip';
@@ -16,6 +17,7 @@ import { AboutDialog } from '../components/dialogs/AboutDialog';
 import { computeVerticalGridLayout, type LayoutResult, type ImageDimension } from '../utils/layout';
 import * as imageService from '../services/imageService';
 import { runExportFlow } from '../services/exportService';
+import type { ExportProgress } from '../services/exportService';
 import type { ImageMetadata, FocusScoringMethod } from '../types';
 import cls from './MainPage.module.css';
 
@@ -43,15 +45,26 @@ function MainPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
 
+  // ── 导出进度状态 ──
+  const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
+
   // ── 导出流程 ──
   const handleExport = useCallback(async () => {
     const { selectedHashes } = useSelectionStore.getState();
     const hashes = Array.from(selectedHashes);
     if (hashes.length === 0) return;
 
-    const result = await runExportFlow(hashes);
+    setExportProgress({ current: 0, total: hashes.length, elapsedMs: 0 });
 
-    if (result.cancelled) return;
+    const result = await runExportFlow(hashes, (p) => setExportProgress(p));
+
+    if (result.cancelled) {
+      setExportProgress(null);
+      return;
+    }
+
+    // 延迟 500ms 关闭弹窗，确保用户看到 100%
+    setTimeout(() => setExportProgress(null), 500);
 
     if (result.success && result.result) {
       const r = result.result;
@@ -325,6 +338,9 @@ function MainPage() {
         progress={progress}
         onCancel={handleCancel}
       />
+
+      {/* 导出进度对话框（模态） */}
+      <ExportProgressDialog progress={exportProgress} />
 
       {/* 画布区域 */}
       <div ref={canvasContainerRef} className={cls.canvasArea}>

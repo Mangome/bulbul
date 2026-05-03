@@ -9,6 +9,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use serde::Serialize;
 use tauri::{Emitter, Window};
@@ -27,9 +28,12 @@ pub struct ExportResult {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExportProgress {
     pub current: usize,
     pub total: usize,
+    pub current_file: Option<String>,
+    pub elapsed_ms: f64,
 }
 
 // ─── select_export_dir ────────────────────────────────
@@ -77,18 +81,20 @@ pub async fn export_images(
 
     let mut exported_count = 0usize;
     let mut failed_files: Vec<String> = Vec::new();
+    let start = Instant::now();
 
     for (idx, hash) in hashes.iter().enumerate() {
         let src_path = match hash_path_map.get(hash) {
             Some(p) => p,
             None => {
                 failed_files.push(format!("hash {} 未找到源文件", hash));
-                // 发送进度
                 let _ = window.emit(
                     "export-progress",
                     ExportProgress {
                         current: idx + 1,
                         total,
+                        current_file: None,
+                        elapsed_ms: start.elapsed().as_millis() as f64,
                     },
                 );
                 continue;
@@ -120,12 +126,13 @@ pub async fn export_images(
             }
         }
 
-        // 发送进度
         let _ = window.emit(
             "export-progress",
             ExportProgress {
                 current: idx + 1,
                 total,
+                current_file: Some(file_name),
+                elapsed_ms: start.elapsed().as_millis() as f64,
             },
         );
     }

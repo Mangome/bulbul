@@ -13,6 +13,8 @@ import type { ExportResult } from '../types';
 export interface ExportProgress {
   current: number;
   total: number;
+  currentFile?: string;
+  elapsedMs: number;
 }
 
 // ─── 命令封装 ─────────────────────────────────────────

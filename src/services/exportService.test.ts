@@ -10,13 +10,18 @@ vi.mock('@tauri-apps/api/event', () => ({
 }));
 
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { runExportFlow } from './exportService';
+import type { ExportProgress } from './exportService';
 
 const mockInvoke = vi.mocked(invoke);
+const mockListen = vi.mocked(listen);
 
 describe('exportService', () => {
   beforeEach(() => {
     mockInvoke.mockReset();
+    mockListen.mockReset();
+    mockListen.mockResolvedValue(() => {});
   });
 
   it('空 hashes 列表返回错误', async () => {
@@ -75,6 +80,48 @@ describe('exportService', () => {
     expect(mockInvoke).toHaveBeenCalledWith('export_images', {
       hashes: ['hash_abc'],
       targetDir: 'D:\\out',
+    });
+  });
+
+  it('onProgress 回调接收含新字段的进度', async () => {
+    const exportResult = {
+      exportedCount: 2,
+      totalCount: 2,
+      targetDir: 'D:\\exports',
+      failedFiles: [],
+    };
+
+    let capturedListener: ((event: { payload: ExportProgress }) => void) | null = null;
+    mockListen.mockImplementationOnce((_event, handler) => {
+      capturedListener = handler as (event: { payload: ExportProgress }) => void;
+      return Promise.resolve(() => {});
+    });
+
+    mockInvoke
+      .mockResolvedValueOnce('D:\\exports')
+      .mockImplementationOnce(async () => {
+        // 模拟后端发送进度事件
+        if (capturedListener) {
+          capturedListener({
+            payload: { current: 1, total: 2, currentFile: 'IMG_001.nef', elapsedMs: 5000 },
+          });
+          capturedListener({
+            payload: { current: 2, total: 2, currentFile: 'IMG_002.nef', elapsedMs: 12000 },
+          });
+        }
+        return exportResult;
+      });
+
+    const progressCalls: ExportProgress[] = [];
+    const result = await runExportFlow(['h1', 'h2'], (p) => progressCalls.push(p));
+
+    expect(result.success).toBe(true);
+    expect(progressCalls).toHaveLength(2);
+    expect(progressCalls[0]).toEqual({
+      current: 1, total: 2, currentFile: 'IMG_001.nef', elapsedMs: 5000,
+    });
+    expect(progressCalls[1]).toEqual({
+      current: 2, total: 2, currentFile: 'IMG_002.nef', elapsedMs: 12000,
     });
   });
 });
