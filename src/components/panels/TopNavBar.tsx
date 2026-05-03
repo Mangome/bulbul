@@ -58,6 +58,17 @@ function IconMap() {
   );
 }
 
+function IconBirdStats() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+      <path d="M3 8c1-3 4-5 7-5M10 3l2 1-2 1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2 10c2-1 4 0 6-1s3-3 4-5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="11.5" cy="11.5" r="3" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M11.5 10v3M10 11.5h3" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function IconSettings() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
@@ -76,6 +87,7 @@ export interface TopNavBarProps {
   onExport: () => void;
   onSwitchFolder: () => void;
   onOpenSettings: () => void;
+  onOpenSpeciesDashboard: () => void;
 }
 
 // ─── 工具函数 ─────────────────────────────────────────
@@ -96,6 +108,7 @@ export function TopNavBar({
   onExport,
   onSwitchFolder,
   onOpenSettings,
+  onOpenSpeciesDashboard,
 }: TopNavBarProps) {
   const currentGroupIndex = useCanvasStore((s) => s.currentGroupIndex);
   const groupCount = useCanvasStore((s) => s.groupCount);
@@ -290,6 +303,17 @@ export function TopNavBar({
             )}
           </AnimatePresence>
         </div>
+
+        {/* 鸟种统计 */}
+        <button
+          className={cls.toolBtn}
+          onClick={onOpenSpeciesDashboard}
+          title="鸟种统计"
+          aria-label="鸟种统计"
+          disabled={!hasGroups}
+        >
+          <IconBirdStats />
+        </button>
 
         {/* 设置 */}
         <button

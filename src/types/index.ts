@@ -136,6 +136,14 @@ export interface ProcessingProgress {
   estimatedRemainingMs: number | null;
 }
 
+/** 鸟种统计条目 */
+export interface SpeciesStat {
+  /** 鸟种名称 */
+  name: string;
+  /** 包含该鸟种的图片数量（同图多框去重） */
+  count: number;
+}
+
 /** 文件夹信息 */
 export interface FolderInfo {
   path: string;

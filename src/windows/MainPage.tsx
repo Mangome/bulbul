@@ -13,6 +13,7 @@ import InfiniteCanvas, { type InfiniteCanvasHandle } from '../components/canvas/
 import { TopNavBar } from '../components/panels/TopNavBar';
 import { BottomFilmstrip } from '../components/panels/BottomFilmstrip';
 import { SettingsPanel } from '../components/panels/SettingsPanel';
+import { SpeciesDashboard } from '../components/panels/SpeciesDashboard';
 import { AboutDialog } from '../components/dialogs/AboutDialog';
 import { computeVerticalGridLayout, type LayoutResult, type ImageDimension } from '../utils/layout';
 import * as imageService from '../services/imageService';
@@ -44,6 +45,7 @@ function MainPage() {
   // ── 设置面板状态 ──
   const [showSettings, setShowSettings] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
+  const [showSpeciesDashboard, setShowSpeciesDashboard] = useState(false);
 
   // ── 导出进度状态 ──
   const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
@@ -360,6 +362,7 @@ function MainPage() {
               onExport={handleExport}
               onSwitchFolder={handleOpenFolder}
               onOpenSettings={() => setShowSettings(true)}
+              onOpenSpeciesDashboard={() => setShowSpeciesDashboard(true)}
             />
 
             {/* 底部胶片条 */}
@@ -375,6 +378,13 @@ function MainPage() {
               onCacheCleared={handleCacheCleared}
               onOpenAbout={() => { setShowSettings(false); setShowAbout(true); }}
               processingState={processingState}
+            />
+
+            {/* 鸟种统计面板 */}
+            <SpeciesDashboard
+              open={showSpeciesDashboard}
+              onClose={() => setShowSpeciesDashboard(false)}
+              metadataMap={metadataMap}
             />
 
             {/* 关于对话框 */}
