@@ -68,6 +68,7 @@ function WelcomePage() {
 
       {/* 主交互区 */}
       <div className={cls.actions}>
+        <span className={cls.appName}>Bulbul</span>
         <button
           className={`${cls.openBtn} ${loading ? cls.openBtnDisabled : ''}`}
           onClick={handleSelectFolder}

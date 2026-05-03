@@ -108,6 +108,26 @@
   left: 50%;
   transform: translateX(-50%);
   z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   应用名称 - 毛玻璃文字
+──────────────────────────────────────────────────────────────── */
+
+.appName {
+  display: block;
+  margin-bottom: 14px;
+  font-size: 22px;
+  font-weight: 700;
+  font-family: inherit;
+  letter-spacing: 1.2px;
+  color: rgba(0, 0, 0, 0.72);
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.8), 0 0 4px rgba(255, 255, 255, 0.6);
+  text-align: center;
+  user-select: none;
 }
 
 /* ────────────────────────────────────────────────────────────────
