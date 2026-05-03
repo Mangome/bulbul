@@ -429,7 +429,7 @@ export function SettingsPanel({ open, onClose, onCacheCleared, onOpenAbout, proc
                 </div>
 
                 <div className={cls.row}>
-                  <span className={cls.rowLabel}>检测框覆盖层</span>
+                  <span className={cls.rowLabel}>显示鸟种检测框</span>
                   <button
                     className={`${cls.toggle} ${showDetectionOverlay ? cls.toggleActive : ''}`}
                     onClick={toggleDetectionOverlay}
