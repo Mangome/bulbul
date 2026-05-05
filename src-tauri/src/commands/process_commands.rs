@@ -62,8 +62,10 @@ pub async fn process_folder(
     folder_path: String,
     similarity_threshold: Option<f64>,
     time_gap_seconds: Option<u64>,
-    lat: Option<f64>,
-    lng: Option<f64>,
+    min_lat: Option<f64>,
+    max_lat: Option<f64>,
+    min_lng: Option<f64>,
+    max_lng: Option<f64>,
     force_refresh: Option<bool>,
 ) -> Result<GroupResult, String> {
     let pipeline_start = Instant::now();
@@ -267,9 +269,13 @@ pub async fn process_folder(
                         })
                         .collect();
 
-                    let gps = match (lat, lng) {
-                        (Some(la), Some(ln)) if la != 0.0 || ln != 0.0 => Some((la, ln)),
-                        _ => bird_classification::DEFAULT_GPS,
+                    let bbox = match (min_lat, max_lat, min_lng, max_lng) {
+                        (Some(minla), Some(maxla), Some(minln), Some(maxln))
+                            if minla != 0.0 || maxla != 0.0 || minln != 0.0 || maxln != 0.0 =>
+                        {
+                            Some((minla, maxla, minln, maxln))
+                        }
+                        _ => bird_classification::DEFAULT_BBOX,
                     };
 
                     let app_clone = app.clone();
@@ -285,7 +291,7 @@ pub async fn process_folder(
                             &focus_start,
                             &group_result_clone,
                             state_arc,
-                            gps,
+                            bbox,
                         )
                         .await
                         {
@@ -781,19 +787,26 @@ pub async fn process_folder(
     // ═══════════════════════════════════════════════════════
     // 异步阶段 6: FocusScoring — 后台计算合焦程度
     // ═══════════════════════════════════════════════════════
-    // 解析 GPS：用户选择省份 > 默认中国中心
-    let gps = match (lat, lng) {
-        (Some(la), Some(ln)) if la != 0.0 || ln != 0.0 => {
-            log::info!("使用用户选择的省份 GPS: ({:.1}, {:.1})", la, ln);
-            Some((la, ln))
+    // 解析边界框：用户选择省份 > 默认中国中心
+    let bbox = match (min_lat, max_lat, min_lng, max_lng) {
+        (Some(minla), Some(maxla), Some(minln), Some(maxln))
+            if minla != 0.0 || maxla != 0.0 || minln != 0.0 || maxln != 0.0 =>
+        {
+            log::info!(
+                "使用用户选择的省份边界框: ({:.1}~{:.1}°N, {:.1}~{:.1}°E)",
+                minla, maxla, minln, maxln
+            );
+            Some((minla, maxla, minln, maxln))
         }
         _ => {
             log::info!(
-                "使用默认 GPS: ({:.1}, {:.1})",
-                bird_classification::DEFAULT_GPS.unwrap().0,
-                bird_classification::DEFAULT_GPS.unwrap().1,
+                "使用默认边界框: ({:.1}~{:.1}°N, {:.1}~{:.1}°E)",
+                bird_classification::DEFAULT_BBOX.unwrap().0,
+                bird_classification::DEFAULT_BBOX.unwrap().1,
+                bird_classification::DEFAULT_BBOX.unwrap().2,
+                bird_classification::DEFAULT_BBOX.unwrap().3,
             );
-            bird_classification::DEFAULT_GPS
+            bird_classification::DEFAULT_BBOX
         }
     };
 
@@ -814,7 +827,7 @@ pub async fn process_folder(
                 &pipeline_start,
                 &group_result_clone,
                 state_arc,
-                gps,
+                bbox,
             )
             .await
             {
@@ -893,16 +906,18 @@ pub async fn regroup(
     Ok(group_result)
 }
 
-/// 使用指定 GPS 坐标重新分类（复用检测结果，仅重跑分类）
+/// 使用指定边界框重新分类（复用检测结果，仅重跑分类）
 ///
-/// 当 lat=0.0 且 lng=0.0 时，表示不应用地理过滤。
-/// GPS 坐标来源于用户选择的省份，不再从图片 EXIF 中提取。
+/// 当 min_lat=0.0, max_lat=0.0, min_lng=0.0, max_lng=0.0 时，表示不应用地理过滤。
+/// 边界框参数来源于用户选择的省份，覆盖省内所有网格的物种并集。
 #[tauri::command]
 pub async fn reclassify(
     app: tauri::AppHandle,
     state: tauri::State<'_, Arc<Mutex<SessionState>>>,
-    lat: f64,
-    lng: f64,
+    min_lat: f64,
+    max_lat: f64,
+    min_lng: f64,
+    max_lng: f64,
 ) -> Result<(), String> {
     // 读取 detection_cache 和相关数据
     let (detection_cache, group_result, cache_dir) = {
@@ -938,11 +953,11 @@ pub async fn reclassify(
         .ok()
         .filter(|p| p.exists());
 
-    // 判断是否应用省份 GPS
-    let province_gps = if lat == 0.0 && lng == 0.0 {
+    // 判断是否应用省份边界框
+    let province_bbox = if min_lat == 0.0 && max_lat == 0.0 && min_lng == 0.0 && max_lng == 0.0 {
         None
     } else {
-        Some((lat, lng))
+        Some((min_lat, max_lat, min_lng, max_lng))
     };
 
     let total = detection_cache.len();
@@ -967,7 +982,7 @@ pub async fn reclassify(
             &mut bboxes,
             classifier_model_path.as_deref(),
             species_db_path.as_deref(),
-            province_gps,
+            province_bbox,
             geo_grid_path.as_deref(),
         );
 
@@ -1036,7 +1051,7 @@ pub async fn reclassify(
             &mut vote_bboxes_refs,
             classifier_model_path.as_deref(),
             species_db_path.as_deref(),
-            province_gps,
+            province_bbox,
             geo_grid_path.as_deref(),
         ) {
             log::warn!("reclassify 分组 {} 投票融合失败: {}", group.id, e);
@@ -1304,7 +1319,7 @@ async fn compute_focus_scores_background(
     focus_scoring_start: &Instant,
     group_result: &GroupResult,
     state: Arc<Mutex<SessionState>>,
-    gps: Option<(f64, f64)>,
+    bbox: Option<(f64, f64, f64, f64)>,
 ) -> Result<(), String> {
     if results.is_empty() {
         return Ok(());
@@ -1345,11 +1360,10 @@ async fn compute_focus_scores_background(
         .ok()
         .filter(|p| p.exists());
     if geo_grid_path.is_some() {
-        if let Some((la, ln)) = gps {
+        if let Some((minla, maxla, minln, maxln)) = bbox {
             log::info!(
-                "地理过滤网格数据已找到，将启用 GPS 物种过滤 ({:.1}°N, {:.1}°E)",
-                la,
-                ln
+                "地理过滤网格数据已找到，将启用边界框物种过滤 ({:.1}~{:.1}°N, {:.1}~{:.1}°E)",
+                minla, maxla, minln, maxln
             );
         }
     }
@@ -1370,7 +1384,7 @@ async fn compute_focus_scores_background(
     );
 
     // 为每个结果生成任务
-    let gps_for_tasks = gps; // f64 Copy，无需 Arc
+    let bbox_for_tasks = bbox; // f64 Copy，无需 Arc
     for (idx, result) in results.iter().enumerate() {
         let sem = Arc::clone(&semaphore);
         let hash = result.hash.clone();
@@ -1391,7 +1405,7 @@ async fn compute_focus_scores_background(
             let classifier_model_clone = classifier_model_for_task.clone();
             let species_db_clone = species_db_for_task.clone();
             let geo_grid_clone = geo_grid_for_task.clone();
-            let gps_clone = gps_for_tasks;
+            let bbox_clone = bbox_for_tasks;
             let result = tokio::task::spawn_blocking(move || {
                 // 1. 鸟类检测
                 let detection =
@@ -1424,7 +1438,7 @@ async fn compute_focus_scores_background(
                         &mut all_bboxes,
                         classifier_model_clone.as_deref(),
                         species_db_clone.as_deref(),
-                        gps_clone,
+                        bbox_clone,
                         geo_grid_clone.as_deref(),
                     );
                 }
@@ -1656,7 +1670,7 @@ async fn compute_focus_scores_background(
             &mut vote_bboxes_refs,
             classifier_model_path.as_deref(),
             species_db_path.as_deref(),
-            gps,
+            bbox,
             geo_grid_path.as_deref(),
         ) {
             log::warn!("分组 {} 投票融合失败: {}", group.id, e);
@@ -1845,26 +1859,28 @@ mod tests {
         assert!(should_error, "detection_cache 为空时应触发错误");
     }
 
-    /// 测试：省份 GPS 坐标直接用于地理过滤
+    /// 测试：省份边界框用于地理过滤
     #[test]
-    fn test_reclassify_province_gps() {
-        let province_gps = Some((25.0, 102.7));
-        assert_eq!(province_gps, Some((25.0, 102.7)), "应使用省份坐标");
+    fn test_reclassify_province_bbox() {
+        let province_bbox: Option<(f64, f64, f64, f64)> = Some((21.1, 29.3, 97.5, 106.2));
+        assert_eq!(province_bbox, Some((21.1, 29.3, 97.5, 106.2)), "应使用省份边界框");
     }
 
-    /// 测试：lat=0.0, lng=0.0 时表示不应用地理过滤
+    /// 测试：全零边界框表示不应用地理过滤
     #[test]
     fn test_reclassify_no_geo_filter() {
-        let lat = 0.0;
-        let lng = 0.0;
+        let min_lat = 0.0;
+        let max_lat = 0.0;
+        let min_lng = 0.0;
+        let max_lng = 0.0;
 
-        let province_gps = if lat == 0.0 && lng == 0.0 {
+        let province_bbox = if min_lat == 0.0 && max_lat == 0.0 && min_lng == 0.0 && max_lng == 0.0 {
             None
         } else {
-            Some((lat, lng))
+            Some((min_lat, max_lat, min_lng, max_lng))
         };
 
-        assert_eq!(province_gps, None, "lat=0, lng=0 时不应用地理过滤");
+        assert_eq!(province_bbox, None, "全零边界框时不应用地理过滤");
     }
 
     /// 测试：detection_cache 读写

@@ -1,8 +1,4 @@
-## Purpose
-
-省份地理选择器能力：提供前端省份选择 UI 和状态管理，让用户通过选择拍摄省份为无 GPS 照片提供地理过滤坐标。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: 省份坐标数据
 系统 SHALL 提供 34 个省级行政区（含港澳台）的静态数据，每个省份包含名称、省会纬度、省会经度、以及边界框（minLat, maxLat, minLng, maxLng）。数据 SHALL 定义在前端 `src/data/provinces.ts` 中，类型为 `Province[]`。
@@ -40,18 +36,6 @@
 
 ### Requirement: TopNavBar 省份选择器
 TopNavBar 工具栏 SHALL 在检测框切换按钮旁新增省份选择器按钮。按钮 SHALL 显示当前选中省份名称或"地区"（未选择时）。点击 SHALL 弹出可搜索的下拉列表，列出 34 个省级行政区。
-
-#### Scenario: 按钮显示选中省份
-- **WHEN** 用户已选择"云南"
-- **THEN** 按钮文本 SHALL 显示"云南"
-
-#### Scenario: 按钮显示默认文本
-- **WHEN** 未选择任何省份
-- **THEN** 按钮文本 SHALL 显示"地区"
-
-#### Scenario: 搜索过滤
-- **WHEN** 用户在搜索框输入"云"
-- **THEN** 列表 SHALL 仅显示"云南"
 
 #### Scenario: 选择省份触发重分类
 - **WHEN** 用户从下拉列表选择一个省份

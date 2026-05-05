@@ -41,15 +41,15 @@ const SPECIES_CONFIDENCE_THRESHOLD: f32 = 0.10;
 /// 分类器推理线程数
 const CLASSIFIER_INTRA_THREADS: usize = 2;
 
-/// 默认 GPS 坐标：中国地理中心（陕西省泾阳县附近，约 35°N, 105°E）
+/// 默认边界框：中国地理中心附近（陕西省泾阳县，约 35°N, 105°E）
 ///
-/// 当用户未选择省份时，使用此坐标作为地理过滤的默认值，
+/// 当用户未选择省份时，使用此边界框作为地理过滤的默认值，
 /// 将 10,964 种全球鸟类缩减到约 100-200 种中国可见鸟种，大幅提升识别准确率。
 ///
-/// 选择 35°N, 105°E 而非某具体省份的原因：
-/// - 该坐标位于中国中部，1 度网格覆盖的物种列表对中国大部分地区有较好代表性
+/// 选择 35°N, 105°E 附近 2°×2° 边界框的原因：
+/// - 该坐标位于中国中部，覆盖的物种列表对中国大部分地区有较好代表性
 /// - 用户后续可通过省份选择器精确定位，覆盖更精准的结果
-pub const DEFAULT_GPS: Option<(f64, f64)> = Some((35.0, 105.0));
+pub const DEFAULT_BBOX: Option<(f64, f64, f64, f64)> = Some((34.0, 36.0, 104.0, 106.0));
 
 /// 物种数据库条目
 #[derive(Debug, Clone, Deserialize)]
@@ -230,10 +230,10 @@ fn softmax(logits: &[f32]) -> Vec<f32> {
 /// 返回 `(probs, best_idx, best_conf)`，probs 为 softmax 后的概率向量。
 /// 用于分组内多帧概率平均融合，比单帧 argmax 投票更准确。
 ///
-/// 当 `gps` 为 `Some((lat, lng))` 时，在 softmax 后对概率向量应用地理过滤。
+/// 当 `bbox` 为 `Some((min_lat, max_lat, min_lng, max_lng))` 时，在 softmax 后对概率向量应用地理过滤。
 fn classify_crop_with_probs(
     crop: &image::DynamicImage,
-    gps: Option<(f64, f64)>,
+    bbox: Option<(f64, f64, f64, f64)>,
     grid_path: Option<&Path>,
 ) -> Option<(Vec<f32>, usize, f32)> {
     let mut session_guard = CLASSIFIER_SESSION.lock().ok()?;
@@ -252,15 +252,14 @@ fn classify_crop_with_probs(
     let logits: Vec<f32> = out_data.to_vec();
     let raw_probs = softmax(&logits);
 
-    // 有 GPS 时：同时计算过滤和不过滤的结果，取置信度更高的
+    // 有边界框时：同时计算过滤和不过滤的结果，取置信度更高的
     // 原因：分布数据不完整时，正确鸟种可能不在当地列表中被错误清零，
     // 此时不过滤的结果反而更准确
-    let (best_idx, best_prob) = if let (Some((lat, lng)), Some(gp)) = (gps, grid_path) {
-        if let Some(local_species) = geo_filter::query_local_species(lat, lng, gp) {
+    let (best_idx, best_prob) = if let (Some((min_lat, max_lat, min_lng, max_lng)), Some(gp)) = (bbox, grid_path) {
+        if let Some(local_species) = geo_filter::query_local_species_in_bbox(min_lat, max_lat, min_lng, max_lng, gp) {
             log::info!(
-                "地理过滤已应用: ({:.2}, {:.2}) → {} 个当地物种",
-                lat,
-                lng,
+                "地理过滤已应用: ({:.1}~{:.1}°N, {:.1}~{:.1}°E) → {} 个当地物种",
+                min_lat, max_lat, min_lng, max_lng,
                 local_species.len()
             );
 
@@ -298,7 +297,7 @@ fn classify_crop_with_probs(
                 (raw_idx, raw_prob)
             }
         } else {
-            log::debug!("地理过滤: ({:.2}, {:.2}) 无网格数据，跳过过滤", lat, lng);
+            log::debug!("地理过滤: ({:.1}~{:.1}°N, {:.1}~{:.1}°E) 无网格数据，跳过过滤", min_lat, max_lat, min_lng, max_lng);
             let (idx, &prob) = raw_probs
                 .iter()
                 .enumerate()
@@ -321,10 +320,10 @@ fn classify_crop_with_probs(
 /// 返回 (class_id_0indexed, confidence)，失败返回 None
 fn classify_crop(
     crop: &image::DynamicImage,
-    gps: Option<(f64, f64)>,
+    bbox: Option<(f64, f64, f64, f64)>,
     grid_path: Option<&Path>,
 ) -> Option<(usize, f32)> {
-    classify_crop_with_probs(crop, gps, grid_path).map(|(_, idx, prob)| (idx, prob))
+    classify_crop_with_probs(crop, bbox, grid_path).map(|(_, idx, prob)| (idx, prob))
 }
 
 /// 根据类别索引查找物种显示名称
@@ -456,14 +455,14 @@ pub fn resolve_geo_grid_path_from_resource_dir(resource_dir: &Path) -> PathBuf {
 /// - `bboxes`: 检测框列表（会被原地修改）
 /// - `model_path`: 分类器模型路径（显式路径或 None 自动查找）
 /// - `db_path`: 物种数据库路径（显式路径或 None 自动查找）
-/// - `gps`: 可选的 GPS 坐标 (latitude, longitude)，有值时应用地理过滤
+/// - `bbox`: 可选的边界框 (min_lat, max_lat, min_lng, max_lng)，有值时应用地理过滤
 /// - `grid_path`: 地理过滤网格数据路径，有值时用于地理过滤
 pub fn classify_detections(
     image_path: &Path,
     bboxes: &mut Vec<DetectionBox>,
     model_path: Option<&Path>,
     db_path: Option<&Path>,
-    gps: Option<(f64, f64)>,
+    bbox: Option<(f64, f64, f64, f64)>,
     grid_path: Option<&Path>,
 ) -> Result<(), AppError> {
     if bboxes.is_empty() {
@@ -487,10 +486,10 @@ pub fn classify_detections(
     };
 
     // 对每个 bbox 分类
-    for bbox in bboxes.iter_mut() {
-        let crop = crop_bbox_region(&img, bbox);
+    for detection_bbox in bboxes.iter_mut() {
+        let crop = crop_bbox_region(&img, detection_bbox);
 
-        match classify_crop(&crop, gps, grid_path) {
+        match classify_crop(&crop, bbox, grid_path) {
             Some((class_idx, confidence)) => {
                 if confidence < SPECIES_CONFIDENCE_THRESHOLD {
                     log::debug!("分类置信度过低 ({:.1}%)，跳过物种标注", confidence * 100.0);
@@ -500,8 +499,8 @@ pub fn classify_detections(
                 match lookup_species_name(class_idx) {
                     Some(name) => {
                         log::debug!("鸟种分类: {} (置信度 {:.1}%)", name, confidence * 100.0);
-                        bbox.species_name = Some(name);
-                        bbox.species_confidence = Some(confidence);
+                        detection_bbox.species_name = Some(name);
+                        detection_bbox.species_confidence = Some(confidence);
                     }
                     None => {
                         log::warn!("类别索引 {} 在物种数据库中未找到", class_idx);
@@ -540,7 +539,7 @@ struct FrameClassification {
 /// - `image_paths_and_bboxes`: 同组内各图片的 (路径, bboxes) 列表
 /// - `model_path`: 分类器模型路径
 /// - `db_path`: 物种数据库路径
-/// - `gps`: 可选的 GPS 坐标 (latitude, longitude)，有值时在融合后应用地理过滤
+/// - `bbox`: 可选的边界框 (min_lat, max_lat, min_lng, max_lng)，有值时在融合后应用地理过滤
 /// - `grid_path`: 地理过滤网格数据路径
 ///
 /// # 返回
@@ -550,7 +549,7 @@ pub fn classify_group_with_fusion(
     image_paths_and_bboxes: &mut [(&Path, &mut Vec<DetectionBox>)],
     model_path: Option<&Path>,
     db_path: Option<&Path>,
-    gps: Option<(f64, f64)>,
+    bbox: Option<(f64, f64, f64, f64)>,
     grid_path: Option<&Path>,
 ) -> Result<(), AppError> {
     if image_paths_and_bboxes.is_empty() {
@@ -643,12 +642,11 @@ pub fn classify_group_with_fusion(
         }
 
         // 融合后地理过滤：同时比较过滤和不过滤的结果，取置信度更高的
-        let (best_idx, best_prob) = if let (Some((lat, lng)), Some(gp)) = (gps, grid_path) {
-            if let Some(local_species) = geo_filter::query_local_species(lat, lng, gp) {
+        let (best_idx, best_prob) = if let (Some((min_lat, max_lat, min_lng, max_lng)), Some(gp)) = (bbox, grid_path) {
+            if let Some(local_species) = geo_filter::query_local_species_in_bbox(min_lat, max_lat, min_lng, max_lng, gp) {
                 log::info!(
-                    "融合后地理过滤: ({:.2}, {:.2}) → {} 个当地物种",
-                    lat,
-                    lng,
+                    "融合后地理过滤: ({:.1}~{:.1}°N, {:.1}~{:.1}°E) → {} 个当地物种",
+                    min_lat, max_lat, min_lng, max_lng,
                     local_species.len()
                 );
 

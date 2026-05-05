@@ -42,6 +42,31 @@ function isValidProvince(value: unknown): value is Province {
 }
 
 /**
+ * 为旧版 Province 数据补全边界框字段。
+ * 缺少边界框字段时，用省会坐标推算默认值（lat±2, lng±2）。
+ */
+function migrateProvince(p: Province): Province {
+  const rec = p as unknown as Record<string, unknown>;
+  if (
+    typeof rec.minLat === 'number' &&
+    typeof rec.maxLat === 'number' &&
+    typeof rec.minLng === 'number' &&
+    typeof rec.maxLng === 'number'
+  ) {
+    return p;
+  }
+  return {
+    name: p.name,
+    lat: p.lat,
+    lng: p.lng,
+    minLat: p.lat - 2,
+    maxLat: p.lat + 2,
+    minLng: p.lng - 2,
+    maxLng: p.lng + 2,
+  };
+}
+
+/**
  * 从磁盘加载设置（$APPDATA/bulbul/settings.json）。
  * 文件不存在或解析失败时返回默认值。
  */
@@ -65,7 +90,7 @@ export async function loadSettings(): Promise<PersistedSettings> {
       showHistogram: typeof parsed.showHistogram === 'boolean' ? parsed.showHistogram : DEFAULTS.showHistogram,
       similarityThreshold: typeof parsed.similarityThreshold === 'number' ? parsed.similarityThreshold : DEFAULTS.similarityThreshold,
       timeGapSeconds: typeof parsed.timeGapSeconds === 'number' ? parsed.timeGapSeconds : DEFAULTS.timeGapSeconds,
-      province: isValidProvince(parsed.province) ? parsed.province : DEFAULTS.province,
+      province: isValidProvince(parsed.province) ? migrateProvince(parsed.province) : DEFAULTS.province,
     };
     return result;
   } catch (e) {

@@ -62,6 +62,9 @@ fn ensure_grid_loaded(grid_path: &Path) -> Option<HashMap<String, Vec<u16>>> {
 /// # 返回
 /// - `Some(Vec<u16>)`: 该位置的物种 cls 索引列表
 /// - `None`: 该位置无网格数据或加载失败
+///
+/// 保留用于默认 GPS 坐标（非省份选择）场景。
+#[allow(dead_code)]
 pub fn query_local_species(lat: f64, lng: f64, grid_path: &Path) -> Option<Vec<u16>> {
     let grid = ensure_grid_loaded(grid_path)?;
 
@@ -71,6 +74,62 @@ pub fn query_local_species(lat: f64, lng: f64, grid_path: &Path) -> Option<Vec<u
     let key = format!("{},{}", lat_idx, lng_idx);
 
     grid.get(&key).cloned()
+}
+
+/// 根据经纬度边界框查询所有 1° 网格单元的物种并集
+///
+/// 遍历边界框内所有网格 key（lat 从 floor(min_lat) 到 floor(max_lat)，
+/// lng 从 floor(min_lng) 到 floor(max_lng)），将每个网格的物种 cls 列表合并为去重并集。
+///
+/// # 参数
+/// - `min_lat`: 最小纬度
+/// - `max_lat`: 最大纬度
+/// - `min_lng`: 最小经度
+/// - `max_lng`: 最大经度
+/// - `grid_path`: 网格数据文件路径
+///
+/// # 返回
+/// - `Some(Vec<u16>)`: 边界框内所有网格的物种去重并集
+/// - `None`: 空边界框（全为 0）、无网格数据或加载失败
+pub fn query_local_species_in_bbox(
+    min_lat: f64,
+    max_lat: f64,
+    min_lng: f64,
+    max_lng: f64,
+    grid_path: &Path,
+) -> Option<Vec<u16>> {
+    // 空边界框：全为 0 表示不应用地理过滤
+    if min_lat == 0.0 && max_lat == 0.0 && min_lng == 0.0 && max_lng == 0.0 {
+        return None;
+    }
+
+    let grid = ensure_grid_loaded(grid_path)?;
+
+    let lat_start = min_lat.floor() as i32;
+    let lat_end = max_lat.floor() as i32;
+    let lng_start = min_lng.floor() as i32;
+    let lng_end = max_lng.floor() as i32;
+
+    let mut species_set: HashSet<u16> = HashSet::new();
+
+    for lat_idx in lat_start..=lat_end {
+        for lng_idx in lng_start..=lng_end {
+            let key = format!("{},{}", lat_idx, lng_idx);
+            if let Some(species) = grid.get(&key) {
+                for &cls in species {
+                    species_set.insert(cls);
+                }
+            }
+        }
+    }
+
+    if species_set.is_empty() {
+        None
+    } else {
+        let mut result: Vec<u16> = species_set.into_iter().collect();
+        result.sort_unstable();
+        Some(result)
+    }
 }
 
 /// 对概率向量应用地理过滤
@@ -291,5 +350,122 @@ mod tests {
 
         let result = load_grid_data(&grid_path);
         assert!(result.is_err());
+    }
+
+    // ─── query_local_species_in_bbox 测试 ─────────────
+
+    /// 创建多网格测试数据，用于边界框查询
+    fn create_multi_cell_test_grid() -> Vec<u8> {
+        let grid: HashMap<String, Vec<u16>> = {
+            let mut g = HashMap::new();
+            // 北京区域：39,116 和 40,116 和 39,117 和 40,117
+            g.insert("39,116".to_string(), vec![0, 5, 10]);
+            g.insert("40,116".to_string(), vec![5, 15, 20]);
+            g.insert("39,117".to_string(), vec![10, 25, 30]);
+            g.insert("40,117".to_string(), vec![20, 35, 40]);
+            // 远处区域
+            g.insert("25,102".to_string(), vec![100, 200]);
+            g
+        };
+        let json = serde_json::to_string(&grid).unwrap();
+
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        encoder.write_all(json.as_bytes()).unwrap();
+        encoder.finish().unwrap()
+    }
+
+    #[test]
+    fn test_query_local_species_in_bbox_normal() {
+        let grid_data = create_multi_cell_test_grid();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let grid_path = temp_dir.path().join("test_grid.json.gz");
+        std::fs::write(&grid_path, &grid_data).unwrap();
+
+        {
+            let mut cache = GRID_DATA.lock().unwrap();
+            *cache = None;
+        }
+
+        // 查询北京区域：min_lat=39.4, max_lat=41.1, min_lng=115.4, max_lng=117.5
+        // 遍历 lat=39..41, lng=115..117 → 命中 (39,116), (40,116), (39,117), (40,117)
+        let result = query_local_species_in_bbox(39.4, 41.1, 115.4, 117.5, &grid_path);
+        assert!(result.is_some());
+        let species = result.unwrap();
+        // 并集: 0, 5, 10, 15, 20, 25, 30, 35, 40
+        assert_eq!(species, vec![0, 5, 10, 15, 20, 25, 30, 35, 40]);
+    }
+
+    #[test]
+    fn test_query_local_species_in_bbox_empty_bbox() {
+        let grid_data = create_multi_cell_test_grid();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let grid_path = temp_dir.path().join("test_grid.json.gz");
+        std::fs::write(&grid_path, &grid_data).unwrap();
+
+        {
+            let mut cache = GRID_DATA.lock().unwrap();
+            *cache = None;
+        }
+
+        // 全零边界框应返回 None
+        let result = query_local_species_in_bbox(0.0, 0.0, 0.0, 0.0, &grid_path);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_query_local_species_in_bbox_no_data_area() {
+        let grid_data = create_multi_cell_test_grid();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let grid_path = temp_dir.path().join("test_grid.json.gz");
+        std::fs::write(&grid_path, &grid_data).unwrap();
+
+        {
+            let mut cache = GRID_DATA.lock().unwrap();
+            *cache = None;
+        }
+
+        // 海洋区域（无网格数据）
+        let result = query_local_species_in_bbox(10.0, 12.0, 10.0, 12.0, &grid_path);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_query_local_species_in_bbox_single_cell() {
+        let grid_data = create_multi_cell_test_grid();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let grid_path = temp_dir.path().join("test_grid.json.gz");
+        std::fs::write(&grid_path, &grid_data).unwrap();
+
+        {
+            let mut cache = GRID_DATA.lock().unwrap();
+            *cache = None;
+        }
+
+        // 仅覆盖一个网格 (25, 102)
+        let result = query_local_species_in_bbox(25.1, 25.9, 102.1, 102.9, &grid_path);
+        assert!(result.is_some());
+        let species = result.unwrap();
+        assert_eq!(species, vec![100, 200]);
+    }
+
+    #[test]
+    fn test_query_local_species_in_bbox_boundary_cross() {
+        let grid_data = create_multi_cell_test_grid();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let grid_path = temp_dir.path().join("test_grid.json.gz");
+        std::fs::write(&grid_path, &grid_data).unwrap();
+
+        {
+            let mut cache = GRID_DATA.lock().unwrap();
+            *cache = None;
+        }
+
+        // 北京：min_lat=39.4, max_lat=41.1 → lat=39..41（2 行）
+        // 仅查 lng=116 列
+        let result = query_local_species_in_bbox(39.4, 41.1, 116.0, 116.9, &grid_path);
+        assert!(result.is_some());
+        let species = result.unwrap();
+        // (39,116): [0,5,10], (40,116): [5,15,20] → 并集: 0,5,10,15,20
+        assert_eq!(species, vec![0, 5, 10, 15, 20]);
     }
 }

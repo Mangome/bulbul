@@ -8,8 +8,10 @@ export async function processFolder(
   options?: {
     similarityThreshold?: number;
     timeGapSeconds?: number;
-    lat?: number;
-    lng?: number;
+    minLat?: number;
+    maxLat?: number;
+    minLng?: number;
+    maxLng?: number;
     forceRefresh?: boolean;
   }
 ): Promise<GroupResult> {
@@ -17,8 +19,10 @@ export async function processFolder(
     folderPath,
     similarityThreshold: options?.similarityThreshold ?? 90.0,
     timeGapSeconds: options?.timeGapSeconds ?? 10,
-    lat: options?.lat,
-    lng: options?.lng,
+    minLat: options?.minLat,
+    maxLat: options?.maxLat,
+    minLng: options?.minLng,
+    maxLng: options?.maxLng,
     forceRefresh: options?.forceRefresh,
   });
 }
@@ -39,9 +43,14 @@ export async function regroup(
   });
 }
 
-/** 使用指定 GPS 坐标重新分类（复用检测结果，仅重跑分类） */
-export async function reclassify(lat: number, lng: number): Promise<void> {
-  return await invoke('reclassify', { lat, lng });
+/** 使用指定边界框重新分类（复用检测结果，仅重跑分类） */
+export async function reclassify(
+  minLat: number,
+  maxLat: number,
+  minLng: number,
+  maxLng: number,
+): Promise<void> {
+  return await invoke('reclassify', { minLat, maxLat, minLng, maxLng });
 }
 
 /** 监听处理进度事件 */

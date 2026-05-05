@@ -41,8 +41,10 @@ export function useProcessing() {
         const result = await processService.processFolder(folderPath, {
           similarityThreshold,
           timeGapSeconds,
-          lat: selectedProvince?.lat,
-          lng: selectedProvince?.lng,
+          minLat: selectedProvince?.minLat,
+          maxLat: selectedProvince?.maxLat,
+          minLng: selectedProvince?.minLng,
+          maxLng: selectedProvince?.maxLng,
           forceRefresh,
         });
         setGroups(result.groups, result.totalImages);

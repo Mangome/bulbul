@@ -136,9 +136,9 @@ export function TopNavBar({
     setReclassifyLoading(true);
     try {
       if (province) {
-        await reclassify(province.lat, province.lng);
+        await reclassify(province.minLat, province.maxLat, province.minLng, province.maxLng);
       } else {
-        await reclassify(0.0, 0.0);
+        await reclassify(0.0, 0.0, 0.0, 0.0);
       }
     } catch (e) {
       console.error('重分类失败:', e);
