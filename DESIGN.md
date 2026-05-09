@@ -10,6 +10,8 @@ colors:
   sky-active: "#3B7FD6"
   gorge-light: "#E4ECF5"
   sky-light: "rgba(74,144,226,0.15)"
+  gorge-vivid: "#2563A8"
+  sky-canvas: "#4A90E2"
   fog-white: "#F5F5F7"
   slate-mist: "#6E6E73"
   ash-whisper: "#AEAEB2"
@@ -171,6 +173,7 @@ The palette is organized around a single blue family that shifts character betwe
 - **Gorge Hover** (#264A78) / **Sky Hover** (#5FA0F0): Interactive feedback for primary actions. One step lighter than the base primary.
 - **Gorge Active** (#152D4A) / **Sky Active** (#3B7FD6): Pressed state for primary actions. One step darker than the base primary.
 - **Gorge Light** (#E4ECF5) / **Sky Light** (rgba(74,144,226,0.15)): Tinted background for selected rows, ghost button hover, and subtle emphasis zones. The light-mode variant is opaque and clearly blue-tinted; the dark-mode variant uses alpha transparency for the same effect.
+- **Gorge Vivid** (#2563A8) / **Sky Canvas** (#4A90E2): Canvas selection color. A deliberately more vivid variant of the primary family, used exclusively for Canvas 2D selection borders, checkmark badges, and loupe source rectangles. In light mode, Gorge Vivid is brighter than Deep Gorge Blue to maintain visibility against dark photo edges. In dark mode, Sky Canvas equals Clear Sky Blue since the dark background already provides sufficient contrast. Always read from CSS variable `--color-selection-canvas` to stay theme-synced; never hardcode in Canvas 2D code.
 
 ### Neutral
 

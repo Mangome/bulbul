@@ -38,6 +38,7 @@ import { useSelectionStore } from '../../stores/useSelectionStore';
 import { useThemeStore } from '../../stores/useThemeStore';
 import { Loupe, type LoupeSourceRect } from './Loupe';
 import type { ItemRect } from './Loupe';
+import { getCssVarRgb } from '../../utils/cssVars';
 import { easeOutQuart, lerpColorNum } from '../../utils/easing';
 
 // ─── 常量 ─────────────────────────────────────────────
@@ -486,10 +487,11 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     const sourceRect = loupeSourceRectRef.current;
     if (sourceRect) {
       ctx.save();
-      // 外框：主色调半透明填充 + 粗边框
-      ctx.fillStyle = 'rgba(74, 144, 226, 0.08)';
+      // 外框：画布选中色半透明填充 + 粗边框
+      const [sr, sg, sb] = getCssVarRgb('--color-selection-canvas-rgb');
+      ctx.fillStyle = `rgba(${sr}, ${sg}, ${sb}, 0.08)`;
       ctx.fillRect(sourceRect.x, sourceRect.y, sourceRect.w, sourceRect.h);
-      ctx.strokeStyle = 'rgba(74, 144, 226, 0.7)';
+      ctx.strokeStyle = `rgba(${sr}, ${sg}, ${sb}, 0.7)`;
       ctx.lineWidth = 2;
       ctx.strokeRect(sourceRect.x, sourceRect.y, sourceRect.w, sourceRect.h);
       // 四角高亮标记（L 形角标）

@@ -15,14 +15,21 @@ import type { LayoutItem } from '../../utils/layout';
 import type { ImageMetadata, DetectionBox } from '../../types';
 import { drawDetectionOverlay } from './drawDetectionOverlay';
 import { easeOutQuart } from '../../utils/easing';
+import { getCssVar } from '../../utils/cssVars';
 
 // ─── 常量 ─────────────────────────────────────────────
 
 /** 占位色块颜色 */
 const PLACEHOLDER_COLOR = '#E0E4EB';
 
-/** 选中色（品牌靛蓝，在画布背景上辨识度高） */
-const SELECTION_COLOR = '#2563A8';
+/**
+ * 画布选中色 — 从 CSS 变量 --color-selection-canvas 读取，
+ * 确保与设计系统同步、随主题自动切换。
+ * 缓存当前值，主题变更后下次调用自动刷新。
+ */
+function getSelectionColor(): string {
+  return getCssVar('--color-selection-canvas') || '#2563A8';
+}
 /** 选中边框宽度（屏幕像素） */
 const SELECTION_BORDER_WIDTH = 2.5;
 /** 对勾角标半径（屏幕像素） */
@@ -679,7 +686,8 @@ export class CanvasImageItem {
     // ─── 内缩边框（恒定屏幕像素宽度）───
     const borderW = SELECTION_BORDER_WIDTH * invZoom;
     const halfBorder = borderW / 2;
-    ctx.strokeStyle = SELECTION_COLOR;
+    const selectionColor = getSelectionColor();
+    ctx.strokeStyle = selectionColor;
     ctx.lineWidth = borderW;
     ctx.strokeRect(halfBorder, halfBorder, this.width - borderW, this.height - borderW);
 
@@ -698,7 +706,7 @@ export class CanvasImageItem {
     ctx.shadowOffsetY = 1 * invZoom;
 
     // 品牌色圆形背景
-    ctx.fillStyle = SELECTION_COLOR;
+    ctx.fillStyle = selectionColor;
     ctx.beginPath();
     ctx.arc(badgeCx, badgeCy, badgeR * invZoom, 0, Math.PI * 2);
     ctx.fill();
