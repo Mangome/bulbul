@@ -92,9 +92,17 @@ export function Toast({ toast }: ToastProps) {
     removeToast(toast.id);
   };
 
+  const handleClick = toast.onClick
+    ? () => {
+        removeToast(toast.id);
+        toast.onClick!();
+      }
+    : undefined;
+
   return (
     <div
-      className={`${styles.toast} ${styles[toast.type]}`}
+      className={`${styles.toast} ${styles[toast.type]}${toast.onClick ? ` ${styles.clickable}` : ''}`}
+      onClick={handleClick}
       onMouseEnter={pauseTimer}
       onMouseLeave={startTimer}
       onFocus={pauseTimer}

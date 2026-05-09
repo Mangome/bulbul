@@ -7,11 +7,12 @@ export interface ToastItem {
   type: ToastType;
   message: string;
   duration: number;
+  onClick?: () => void;
 }
 
 interface ToastState {
   toasts: ToastItem[];
-  addToast: (params: { type: ToastType; message: string; duration?: number }) => string;
+  addToast: (params: { type: ToastType; message: string; duration?: number; onClick?: () => void }) => string;
   removeToast: (id: string) => void;
 }
 
@@ -28,13 +29,14 @@ const DEFAULT_DURATION: Record<ToastType, number> = {
 export const useToastStore = create<ToastState>((set) => ({
   toasts: [],
 
-  addToast: ({ type, message, duration }) => {
+  addToast: ({ type, message, duration, onClick }) => {
     const id = String(nextId++);
     const toast: ToastItem = {
       id,
       type,
       message,
       duration: duration ?? DEFAULT_DURATION[type],
+      onClick,
     };
 
     set((state) => {
