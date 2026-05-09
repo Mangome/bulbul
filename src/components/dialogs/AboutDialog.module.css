@@ -18,6 +18,7 @@
   position: absolute;
   inset: 0;
   background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(2px);
 }
 
 .dialog {
@@ -25,7 +26,7 @@
   width: 300px;
   background: var(--color-bg-primary);
   border-radius: 14px;
-  border: 1px solid var(--color-border-light);
+  border: 1px solid var(--color-border);
   box-shadow:
     0 8px 40px rgba(0, 0, 0, 0.12),
     0 0 0 0.5px rgba(0, 0, 0, 0.05);
@@ -37,9 +38,20 @@
 }
 
 [data-theme="dark"] .dialog {
+  background: var(--color-bg-secondary);
+  border-color: var(--color-border);
   box-shadow:
     0 8px 40px rgba(0, 0, 0, 0.5),
     0 0 0 0.5px rgba(255, 255, 255, 0.06);
+}
+
+/* ─── 交错入场容器 ──────────────────────────────────── */
+
+.staggerContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
 }
 
 /* ─── 图标 ──────────────────────────────────────────── */
@@ -47,6 +59,8 @@
 .iconWrap {
   position: relative;
   margin-bottom: 20px;
+  display: flex;
+  justify-content: center;
 }
 
 .icon {
@@ -56,6 +70,12 @@
   object-fit: contain;
   position: relative;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  cursor: default;
+  transition: transform 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.icon:hover {
+  transform: scale(1.05);
 }
 
 /* ─── 应用名 ────────────────────────────────────────── */
@@ -151,7 +171,9 @@
 }
 
 .contactLink:active {
-  background: var(--color-border-light);
+  background: var(--color-bg-tertiary);
+  filter: brightness(0.96);
+  transform: scale(0.98);
 }
 
 /* ─── 关闭按钮 ──────────────────────────────────────── */

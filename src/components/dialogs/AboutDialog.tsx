@@ -45,6 +45,25 @@ function IconXiaohongshu() {
   );
 }
 
+// ─── 动效变体 ─────────────────────────────────────────
+
+const stagger = {
+  container: {
+    hidden: {},
+    visible: {
+      transition: { staggerChildren: 0.06 },
+    },
+  },
+  item: {
+    hidden: { opacity: 0, y: 6 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: 0.25, ease: [0.25, 1, 0.5, 1] as [number, number, number, number] },
+    },
+  },
+};
+
 // ─── 组件 ─────────────────────────────────────────────
 
 export function AboutDialog({ open, onClose }: AboutDialogProps) {
@@ -95,34 +114,41 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
               <IconClose />
             </button>
 
-            <div className={cls.iconWrap}>
-              <img src={appIcon} alt="" className={cls.icon} draggable={false} />
-            </div>
+            <motion.div
+              className={cls.staggerContainer}
+              variants={stagger.container}
+              initial="hidden"
+              animate="visible"
+            >
+              <motion.div className={cls.iconWrap} variants={stagger.item}>
+                <img src={appIcon} alt="" className={cls.icon} draggable={false} />
+              </motion.div>
 
-            <h2 className={cls.appName}>Bulbul</h2>
-            <p className={cls.version}>版本 {version}</p>
+              <motion.h2 className={cls.appName} variants={stagger.item}>Bulbul</motion.h2>
+              <motion.p className={cls.version} variants={stagger.item}>版本 {version}</motion.p>
 
-            <div className={cls.divider} />
+              <motion.div className={cls.divider} variants={stagger.item} />
 
-            <div className={cls.contactList}>
-              {/* GitHub — 可点击跳转 */}
-              <button className={cls.contactLink} onClick={handleOpenGithub}>
-                <span className={cls.contactIcon}><IconGithub /></span>
-                <div>
-                  <div className={cls.contactLabel}>GitHub</div>
-                  <div className={cls.contactValue}>Mangome/bulbul</div>
-                </div>
-              </button>
+              <div className={cls.contactList}>
+                {/* GitHub — 可点击跳转 */}
+                <motion.button className={cls.contactLink} variants={stagger.item} onClick={handleOpenGithub}>
+                  <span className={cls.contactIcon}><IconGithub /></span>
+                  <div>
+                    <div className={cls.contactLabel}>GitHub</div>
+                    <div className={cls.contactValue}>Mangome/bulbul</div>
+                  </div>
+                </motion.button>
 
-              {/* 小红书 — 可点击跳转 */}
-              <button className={cls.contactLink} onClick={handleOpenXiaohongshu}>
-                <span className={cls.contactIcon}><IconXiaohongshu /></span>
-                <div>
-                  <div className={cls.contactLabel}>小红书</div>
-                  <div className={cls.contactValue}>Mango</div>
-                </div>
-              </button>
-            </div>
+                {/* 小红书 — 可点击跳转 */}
+                <motion.button className={cls.contactLink} variants={stagger.item} onClick={handleOpenXiaohongshu}>
+                  <span className={cls.contactIcon}><IconXiaohongshu /></span>
+                  <div>
+                    <div className={cls.contactLabel}>小红书</div>
+                    <div className={cls.contactValue}>Mango</div>
+                  </div>
+                </motion.button>
+              </div>
+            </motion.div>
           </motion.div>
         </motion.div>
       )}

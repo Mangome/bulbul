@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -6,105 +6,23 @@ import { selectFolder } from '../services/fileService';
 import appIcon from '../assets/app-icon.png';
 import cls from './WelcomePage.module.css';
 
-function drawLogoWithEdgeExtension(
-  canvas: HTMLCanvasElement,
-  img: HTMLImageElement,
-) {
-  const dpr = window.devicePixelRatio || 1;
-  const w = canvas.clientWidth;
-  const h = canvas.clientHeight;
-
-  canvas.width = w * dpr;
-  canvas.height = h * dpr;
-
-  const ctx = canvas.getContext('2d')!;
-  ctx.scale(dpr, dpr);
-
-  // Contain 计算
-  const imgRatio = img.naturalWidth / img.naturalHeight;
-  const canvasRatio = w / h;
-
-  let dw: number, dh: number, dx: number, dy: number;
-
-  if (imgRatio > canvasRatio) {
-    dw = w;
-    dh = w / imgRatio;
-    dx = 0;
-    dy = (h - dh) / 2;
-  } else {
-    dh = h;
-    dw = h * imgRatio;
-    dx = (w - dw) / 2;
-    dy = 0;
-  }
-
-  // 居中绘制 Logo
-  ctx.drawImage(img, dx, dy, dw, dh);
-
-  // 从已渲染的 Canvas 读取边缘像素，拉伸填满空白区域
-  const stretchStrip = (
-    srcX: number, srcY: number, srcW: number, srcH: number,
-    destX: number, destY: number, destW: number, destH: number,
-  ) => {
-    const px = Math.round(srcX * dpr);
-    const py = Math.round(srcY * dpr);
-    const pw = Math.max(1, Math.round(srcW * dpr));
-    const ph = Math.max(1, Math.round(srcH * dpr));
-
-    const off = document.createElement('canvas');
-    off.width = pw;
-    off.height = ph;
-    off.getContext('2d')!.drawImage(canvas, px, py, pw, ph, 0, 0, pw, ph);
-    ctx.drawImage(off, destX, destY, destW, destH);
-  };
-
-  // 左侧延展
-  if (dx > 0) {
-    stretchStrip(dx, dy, 1, dh, 0, dy, dx, dh);
-  }
-
-  // 右侧延展
-  const rightGap = w - dx - dw;
-  if (rightGap > 0) {
-    stretchStrip(dx + dw - 1, dy, 1, dh, dx + dw, dy, rightGap, dh);
-  }
-
-  // 顶部延展
-  if (dy > 0) {
-    stretchStrip(dx, dy, dw, 1, dx, 0, dw, dy);
-  }
-
-  // 底部延展
-  const bottomGap = h - dy - dh;
-  if (bottomGap > 0) {
-    stretchStrip(dx, dy + dh - 1, dw, 1, dx, dy + dh, dw, bottomGap);
-  }
-}
-
 function WelcomePage() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [version, setVersion] = useState('');
+  const [shortcutHint, setShortcutHint] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const logoRef = useRef<HTMLImageElement>(null);
 
   useEffect(() => {
     getVersion().then(setVersion);
-  }, []);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const img = new Image();
-    img.src = appIcon;
-    img.onload = () => drawLogoWithEdgeExtension(canvas, img);
   }, []);
 
   const handleClose = () => {
     getCurrentWindow().close();
   };
 
-  const handleSelectFolder = async () => {
+  const handleSelectFolder = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -120,12 +38,93 @@ function WelcomePage() {
       setError(err instanceof Error ? err.message : String(err));
       setLoading(false);
     }
-  };
+  }, []);
+
+  // 键盘快捷键提示：延迟显示
+  useEffect(() => {
+    const timer = setTimeout(() => setShortcutHint(true), 2500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // 键盘快捷键：Ctrl+O
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
+        e.preventDefault();
+        handleSelectFolder();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleSelectFolder]);
+
+  // 鼠标视差
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!logoRef.current) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    const dx = (e.clientX - rect.left - cx) / cx;
+    const dy = (e.clientY - rect.top - cy) / cy;
+    logoRef.current.style.transform = `translate(${dx * -4}px, ${dy * -4}px) scale(1)`;
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    if (!logoRef.current) return;
+    logoRef.current.style.transform = 'translate(0, 0) scale(1)';
+  }, []);
+
+  // 拖拽文件夹
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+
+    const path = (file as File & { path: string }).path;
+    if (!path) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+      await invoke('open_main_window', { folderPath: path });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setLoading(false);
+    }
+  }, []);
 
   return (
-    <div className={cls.window}>
-      {/* Logo 画布 - contain 居中 + 边缘像素延展填充空白 */}
-      <canvas ref={canvasRef} className={cls.logoCanvas} />
+    <div
+      className={`${cls.window} ${isDragOver ? cls.dragOver : ''}`}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Logo 居中完整显示 */}
+      <img
+        ref={logoRef}
+        src={appIcon}
+        alt=""
+        className={cls.logo}
+        draggable={false}
+      />
 
       {/* 拖拽区域 - 覆盖上半部分 */}
       <div className={cls.dragRegion} data-tauri-drag-region />
@@ -178,6 +177,13 @@ function WelcomePage() {
             </svg>
           )}
         </button>
+        {/* 键盘快捷键提示 */}
+        <span
+          className={`${cls.shortcutHint} ${shortcutHint ? cls.shortcutHintVisible : ''}`}
+          aria-hidden="true"
+        >
+          Ctrl+O
+        </span>
       </div>
 
       {/* 错误提示 */}

@@ -5,7 +5,7 @@
 // 展示当前目录中已识别的鸟种统计（置信度 >= 85%）。
 // ============================================================
 
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo, useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { aggregateSpecies, UNIDENTIFIED_KEY } from '../../utils/speciesStats';
 import type { ImageMetadata } from '../../types';
@@ -38,6 +38,69 @@ function IconBird() {
   );
 }
 
+/** 空状态鸟剪影插图 */
+function IconBirdPerched() {
+  return (
+    <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+      <path
+        d="M12 28c1-4 5-8 10-8 2 0 4 1 5 2M27 20l3 1-3 1.5M9 32c3-1 6 0 10-1.5s5-4 7-7"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8 34c2-1 4 0 6-1M22 30c1 0 2-1 3-2"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+// ─── CountUp 动画 ────────────────────────────────────
+
+/** 从 0 滚动到目标数字的动画组件 */
+function CountUp({ target, duration = 400 }: { target: number; duration?: number }) {
+  const [value, setValue] = useState(0);
+  const frameRef = useRef(0);
+  const startRef = useRef(0);
+
+  useEffect(() => {
+    startRef.current = performance.now();
+    const animate = (now: number) => {
+      const elapsed = now - startRef.current;
+      const progress = Math.min(elapsed / duration, 1);
+      // ease-out-quart: 1 - (1 - t)^4
+      const eased = 1 - Math.pow(1 - progress, 4);
+      setValue(Math.round(eased * target));
+      if (progress < 1) {
+        frameRef.current = requestAnimationFrame(animate);
+      }
+    };
+    frameRef.current = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frameRef.current);
+  }, [target, duration]);
+
+  return <>{value}</>;
+}
+
+// ─── 交错入场动画变体 ─────────────────────────────────
+
+/** 单条柱状行入场动画 */
+function barItemTransition(index: number) {
+  return {
+    initial: { opacity: 0, x: 20 },
+    animate: { opacity: 1, x: 0 },
+    transition: {
+      delay: 0.28 + index * 0.035,
+      duration: 0.28,
+      ease: [0.25, 1, 0.5, 1] as [number, number, number, number],
+    },
+  };
+}
+
 // ─── 组件 ─────────────────────────────────────────────
 
 export function SpeciesDashboard({ open, onClose, metadataMap }: SpeciesDashboardProps) {
@@ -47,7 +110,7 @@ export function SpeciesDashboard({ open, onClose, metadataMap }: SpeciesDashboar
     return aggregateSpecies(metadataMap);
   }, [open, metadataMap]);
 
-  // P2: 面板滑入动画完成后再启用柱状条 transition，避免同时触发大量 width 动画
+  // P2: 面板滑入动画完成后再启用柱状条 width transition
   const [barsReady, setBarsReady] = useState(false);
 
   useEffect(() => {
@@ -65,6 +128,8 @@ export function SpeciesDashboard({ open, onClose, metadataMap }: SpeciesDashboar
     const maxSpecies = stats.species[0]?.count ?? 0;
     return Math.max(maxSpecies, stats.unidentifiedCount);
   }, [stats]);
+
+  const hasData = stats !== null && (stats.species.length > 0 || stats.unidentifiedCount > 0);
 
   // ESC 关闭
   useEffect(() => {
@@ -111,11 +176,15 @@ export function SpeciesDashboard({ open, onClose, metadataMap }: SpeciesDashboar
               <div className={cls.group}>
                 <div className={cls.summary}>
                   <div className={cls.summaryItem}>
-                    <span className={cls.summaryValue}>{stats.speciesCount}</span>
+                    <span className={cls.summaryValue}>
+                      <CountUp target={stats.speciesCount} />
+                    </span>
                     <span className={cls.summaryLabel}>鸟种</span>
                   </div>
                   <div className={cls.summaryItem}>
-                    <span className={cls.summaryValue}>{stats.detectedImageCount}</span>
+                    <span className={cls.summaryValue}>
+                      <CountUp target={stats.detectedImageCount} />
+                    </span>
                     <span className={cls.summaryLabel}>有检测结果</span>
                   </div>
                 </div>
@@ -130,12 +199,22 @@ export function SpeciesDashboard({ open, onClose, metadataMap }: SpeciesDashboar
                   <span className={cls.groupTitle}>识别结果</span>
                 </div>
 
-                {stats.species.length === 0 && stats.unidentifiedCount === 0 ? (
-                  <div className={cls.empty}>暂无鸟种识别数据</div>
+                {!hasData ? (
+                  <div className={cls.empty}>
+                    <span className={cls.emptyIcon}>
+                      <IconBirdPerched />
+                    </span>
+                    <span className={cls.emptyTitle}>还没有鸟种识别数据</span>
+                    <span className={cls.emptyHint}>开启鸟种检测后，这里会显示识别结果</span>
+                  </div>
                 ) : (
                   <>
-                    {stats.species.map((item) => (
-                      <div key={item.name} className={cls.barRow}>
+                    {stats.species.map((item, i) => (
+                      <motion.div
+                        key={item.name}
+                        className={cls.barRow}
+                        {...barItemTransition(i)}
+                      >
                         <span className={cls.barLabel} title={item.name}>{item.name}</span>
                         <div className={cls.barTrack}>
                           <div
@@ -144,13 +223,16 @@ export function SpeciesDashboard({ open, onClose, metadataMap }: SpeciesDashboar
                           />
                         </div>
                         <span className={cls.barCount}>{item.count}</span>
-                      </div>
+                      </motion.div>
                     ))}
 
                     {stats.unidentifiedCount > 0 && (
                       <>
                         {stats.species.length > 0 && <div className={cls.separator} />}
-                        <div className={`${cls.barRow} ${cls.barRowUnidentified}`}>
+                        <motion.div
+                          className={`${cls.barRow} ${cls.barRowUnidentified}`}
+                          {...barItemTransition(stats.species.length)}
+                        >
                           <span className={cls.barLabel}>{UNIDENTIFIED_KEY}</span>
                           <div className={cls.barTrack}>
                             <div
@@ -159,7 +241,7 @@ export function SpeciesDashboard({ open, onClose, metadataMap }: SpeciesDashboar
                             />
                           </div>
                           <span className={cls.barCount}>{stats.unidentifiedCount}</span>
-                        </div>
+                        </motion.div>
                       </>
                     )}
                   </>
