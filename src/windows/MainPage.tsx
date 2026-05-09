@@ -7,6 +7,7 @@ import { useToastStore } from '../stores/useToastStore';
 import { useProcessing } from '../hooks/useProcessing';
 import { useKeyboard } from '../hooks/useKeyboard';
 import { useTauriEvents } from '../hooks/useTauriEvents';
+import { useAutoUpdateCheck } from '../hooks/useAutoUpdateCheck';
 import { ProgressDialog } from '../components/dialogs/ProgressDialog';
 import { ExportProgressDialog } from '../components/dialogs/ExportProgressDialog';
 import InfiniteCanvas, { type InfiniteCanvasHandle } from '../components/canvas/InfiniteCanvas';
@@ -46,6 +47,9 @@ function MainPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [showSpeciesDashboard, setShowSpeciesDashboard] = useState(false);
+
+  // ── 启动时自动检查更新 ──
+  useAutoUpdateCheck(() => setShowSettings(true));
 
   // ── 导出进度状态 ──
   const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
