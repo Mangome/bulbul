@@ -306,14 +306,21 @@ export const Loupe = forwardRef<LoupeHandle, LoupeProps>(function Loupe(
 
   if (opacity <= 0 || !orientedCanvasRef.current) return null;
 
+  // 计算倍率：medium 图宽度 / 缩略图 CSS 宽度
+  const magnification = oriented && itemRect
+    ? (oriented.width / itemRect.width).toFixed(1)
+    : null;
+
   return (
     <div
-      className={styles.container}
+      className={`${styles.container} ${opacity < 1 ? styles.entering : ''}`}
       style={{
         left: position.x,
         top: position.y,
         opacity,
-        transition: opacity > 0 ? `opacity ${FADE_IN_DURATION}ms ease` : undefined,
+        transition: opacity > 0
+          ? `opacity ${FADE_IN_DURATION}ms ease, transform 200ms cubic-bezier(0.16, 1, 0.3, 1)`
+          : undefined,
       }}
     >
       <div
@@ -321,6 +328,9 @@ export const Loupe = forwardRef<LoupeHandle, LoupeProps>(function Loupe(
         style={{ width: loupeSize.w, height: loupeSize.h }}
       >
         <canvas ref={canvasRef} />
+        {magnification && (
+          <span className={styles.magnificationLabel}>{magnification}x</span>
+        )}
       </div>
     </div>
   );

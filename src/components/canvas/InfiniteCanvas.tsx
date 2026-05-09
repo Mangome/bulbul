@@ -486,9 +486,34 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     const sourceRect = loupeSourceRectRef.current;
     if (sourceRect) {
       ctx.save();
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
-      ctx.lineWidth = 1.5;
+      // 外框：主色调半透明填充 + 粗边框
+      ctx.fillStyle = 'rgba(74, 144, 226, 0.08)';
+      ctx.fillRect(sourceRect.x, sourceRect.y, sourceRect.w, sourceRect.h);
+      ctx.strokeStyle = 'rgba(74, 144, 226, 0.7)';
+      ctx.lineWidth = 2;
       ctx.strokeRect(sourceRect.x, sourceRect.y, sourceRect.w, sourceRect.h);
+      // 四角高亮标记（L 形角标）
+      const cornerLen = Math.min(12, sourceRect.w / 4, sourceRect.h / 4);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      // 左上
+      ctx.moveTo(sourceRect.x, sourceRect.y + cornerLen);
+      ctx.lineTo(sourceRect.x, sourceRect.y);
+      ctx.lineTo(sourceRect.x + cornerLen, sourceRect.y);
+      // 右上
+      ctx.moveTo(sourceRect.x + sourceRect.w - cornerLen, sourceRect.y);
+      ctx.lineTo(sourceRect.x + sourceRect.w, sourceRect.y);
+      ctx.lineTo(sourceRect.x + sourceRect.w, sourceRect.y + cornerLen);
+      // 右下
+      ctx.moveTo(sourceRect.x + sourceRect.w, sourceRect.y + sourceRect.h - cornerLen);
+      ctx.lineTo(sourceRect.x + sourceRect.w, sourceRect.y + sourceRect.h);
+      ctx.lineTo(sourceRect.x + sourceRect.w - cornerLen, sourceRect.y + sourceRect.h);
+      // 左下
+      ctx.moveTo(sourceRect.x + cornerLen, sourceRect.y + sourceRect.h);
+      ctx.lineTo(sourceRect.x, sourceRect.y + sourceRect.h);
+      ctx.lineTo(sourceRect.x, sourceRect.y + sourceRect.h - cornerLen);
+      ctx.stroke();
       ctx.restore();
     }
 
