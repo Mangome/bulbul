@@ -14,11 +14,11 @@ import styles from './Loupe.module.css';
 // ─── 常量 ─────────────────────────────────────────────
 
 /** 放大镜长边占视口短边的比例 */
-const LOUPE_RATIO = 0.60;
+const LOUPE_RATIO = 0.90;
 /** 放大镜长边最小像素 */
-const LOUPE_MIN = 300;
+const LOUPE_MIN = 450;
 /** 放大镜长边最大像素 */
-const LOUPE_MAX = 900;
+const LOUPE_MAX = 1350;
 
 const OFFSET_X = 20;
 const OFFSET_Y = 20;
