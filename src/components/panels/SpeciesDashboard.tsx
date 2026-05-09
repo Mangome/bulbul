@@ -114,7 +114,6 @@ export function SpeciesDashboard({ open, onClose, metadataMap }: SpeciesDashboar
                     <span className={cls.summaryValue}>{stats.speciesCount}</span>
                     <span className={cls.summaryLabel}>鸟种</span>
                   </div>
-                  <div className={cls.summaryDivider} />
                   <div className={cls.summaryItem}>
                     <span className={cls.summaryValue}>{stats.detectedImageCount}</span>
                     <span className={cls.summaryLabel}>有检测结果</span>

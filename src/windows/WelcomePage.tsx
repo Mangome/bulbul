@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -6,13 +6,98 @@ import { selectFolder } from '../services/fileService';
 import appIcon from '../assets/app-icon.png';
 import cls from './WelcomePage.module.css';
 
+function drawLogoWithEdgeExtension(
+  canvas: HTMLCanvasElement,
+  img: HTMLImageElement,
+) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+
+  const ctx = canvas.getContext('2d')!;
+  ctx.scale(dpr, dpr);
+
+  // Contain 计算
+  const imgRatio = img.naturalWidth / img.naturalHeight;
+  const canvasRatio = w / h;
+
+  let dw: number, dh: number, dx: number, dy: number;
+
+  if (imgRatio > canvasRatio) {
+    dw = w;
+    dh = w / imgRatio;
+    dx = 0;
+    dy = (h - dh) / 2;
+  } else {
+    dh = h;
+    dw = h * imgRatio;
+    dx = (w - dw) / 2;
+    dy = 0;
+  }
+
+  // 居中绘制 Logo
+  ctx.drawImage(img, dx, dy, dw, dh);
+
+  // 从已渲染的 Canvas 读取边缘像素，拉伸填满空白区域
+  const stretchStrip = (
+    srcX: number, srcY: number, srcW: number, srcH: number,
+    destX: number, destY: number, destW: number, destH: number,
+  ) => {
+    const px = Math.round(srcX * dpr);
+    const py = Math.round(srcY * dpr);
+    const pw = Math.max(1, Math.round(srcW * dpr));
+    const ph = Math.max(1, Math.round(srcH * dpr));
+
+    const off = document.createElement('canvas');
+    off.width = pw;
+    off.height = ph;
+    off.getContext('2d')!.drawImage(canvas, px, py, pw, ph, 0, 0, pw, ph);
+    ctx.drawImage(off, destX, destY, destW, destH);
+  };
+
+  // 左侧延展
+  if (dx > 0) {
+    stretchStrip(dx, dy, 1, dh, 0, dy, dx, dh);
+  }
+
+  // 右侧延展
+  const rightGap = w - dx - dw;
+  if (rightGap > 0) {
+    stretchStrip(dx + dw - 1, dy, 1, dh, dx + dw, dy, rightGap, dh);
+  }
+
+  // 顶部延展
+  if (dy > 0) {
+    stretchStrip(dx, dy, dw, 1, dx, 0, dw, dy);
+  }
+
+  // 底部延展
+  const bottomGap = h - dy - dh;
+  if (bottomGap > 0) {
+    stretchStrip(dx, dy + dh - 1, dw, 1, dx, dy + dh, dw, bottomGap);
+  }
+}
+
 function WelcomePage() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [version, setVersion] = useState('');
 
   useEffect(() => {
     getVersion().then(setVersion);
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const img = new Image();
+    img.src = appIcon;
+    img.onload = () => drawLogoWithEdgeExtension(canvas, img);
   }, []);
 
   const handleClose = () => {
@@ -39,13 +124,8 @@ function WelcomePage() {
 
   return (
     <div className={cls.window}>
-      {/* Logo 居中完整显示 */}
-      <img
-        src={appIcon}
-        alt=""
-        className={cls.logo}
-        draggable={false}
-      />
+      {/* Logo 画布 - contain 居中 + 边缘像素延展填充空白 */}
+      <canvas ref={canvasRef} className={cls.logoCanvas} />
 
       {/* 拖拽区域 - 覆盖上半部分 */}
       <div className={cls.dragRegion} data-tauri-drag-region />
