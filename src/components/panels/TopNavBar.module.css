@@ -232,7 +232,7 @@
   position: absolute;
   top: calc(100% + 12px);
   right: -8px;
-  width: 200px;
+  width: 220px;
   padding: 8px;
 
   background: var(--panel-bg);
@@ -272,11 +272,27 @@
 }
 
 .provinceList {
-  max-height: 240px;
+  max-height: 280px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 1px;
+}
+
+.regionLabel {
+  padding: 6px 8px 2px;
+  font-size: 10px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.regionLabel:not(:first-child) {
+  margin-top: 4px;
+  border-top: 1px solid var(--color-border);
+  padding-top: 6px;
 }
 
 .provinceItem {

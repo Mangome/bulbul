@@ -805,11 +805,31 @@ export class CanvasImageItem {
     return `${yyyy}-${MM}-${dd} ${hh}:${mm}:${ss}`;
   }
 
-  /** 基于字符宽度估算截断文本（避免每帧 measureText） */
+  /** 基于字符宽度估算截断文本（避免每帧 measureText）
+   *  CJK 字符宽度约为 ASCII 字符的 2 倍，需加权计算。*/
   private static _truncateText(text: string, maxWidthPx: number): string {
-    const maxChars = Math.floor(maxWidthPx / INFO_CHAR_WIDTH);
-    if (text.length <= maxChars) return text;
-    if (maxChars < 8) return text.substring(0, 5) + '...';
-    return text.substring(0, maxChars - 3) + '...';
+    const asciiW = INFO_CHAR_WIDTH;
+    const cjkW = INFO_FONT_SIZE;
+    let width = 0;
+    let lastFit = 0;
+    for (let i = 0; i < text.length; i++) {
+      const code = text.codePointAt(i)!;
+      const isCJK = (code >= 0x4E00 && code <= 0x9FFF)   // CJK Unified
+        || (code >= 0x3400 && code <= 0x4DBF)             // CJK Extension A
+        || (code >= 0x3000 && code <= 0x303F)             // CJK Symbols
+        || (code >= 0xFF01 && code <= 0xFF60)             // Fullwidth Forms
+        || (code >= 0xF900 && code <= 0xFAFF)             // CJK Compat
+        || (code >= 0x2E80 && code <= 0x2EFF)             // CJK Radicals
+        || (code >= 0xFE30 && code <= 0xFE4F);            // CJK Compat Forms
+      width += isCJK ? cjkW : asciiW;
+      if (width <= maxWidthPx) {
+        lastFit = i + 1;
+      } else {
+        break;
+      }
+    }
+    if (lastFit >= text.length) return text;
+    if (lastFit < 4) return text.substring(0, 3) + '...';
+    return text.substring(0, lastFit - 3) + '...';
   }
 }

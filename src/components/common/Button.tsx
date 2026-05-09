@@ -21,6 +21,7 @@ export interface ButtonProps {
   onClick?: () => void;
   children: ReactNode;
   style?: CSSProperties;
+  title?: string;
 }
 
 // ─── 组件 ─────────────────────────────────────────────
@@ -32,6 +33,7 @@ export function Button({
   onClick,
   children,
   style,
+  title,
 }: ButtonProps) {
   const handleClick = useCallback(() => {
     if (!disabled && onClick) {
@@ -54,6 +56,7 @@ export function Button({
       disabled={disabled}
       onClick={handleClick}
       style={style}
+      title={title}
     >
       {children}
     </button>

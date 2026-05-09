@@ -23,15 +23,21 @@ const SPECIES_LOW_CONFIDENCE = 0.50;
 /** 框线宽度 */
 const BOX_LINE_WIDTH = 2;
 /** 折角尺寸（px） */
-const CORNER_SIZE = 12;
-/** 标签背景色 */
-const LABEL_BG_COLOR = '#000000';
-/** 标签背景透明度 */
-const LABEL_BG_ALPHA = 0.7;
+const CORNER_SIZE = 16;
+/** 高置信标签背景色（深绿，确保白色文字可读） */
+const HIGH_LABEL_BG_COLOR = '#15803D';
+/** 低置信标签背景色（深橙，确保白色文字可读） */
+const LOW_LABEL_BG_COLOR = '#C2410C';
+/** 框内填充透明度 — 高置信 */
+const FILL_ALPHA_HIGH = 0.08;
+/** 框内填充透明度 — 低置信 */
+const FILL_ALPHA_LOW = 0.05;
+/** 框内填充透明度 — 仅检测 */
+const FILL_ALPHA_DETECT = 0.03;
 /** 标签字体大小 */
-const LABEL_FONT_SIZE = 12;
+const LABEL_FONT_SIZE = 13;
 /** 标签内边距 */
-const LABEL_PADDING = 6;
+const LABEL_PADDING = 8;
 /** 标签圆角半径 */
 const LABEL_RADIUS = 4;
 /** 最小框尺寸（像素），过小不绘制 */
@@ -110,13 +116,23 @@ function drawSingleBox(
 
   const color = getTierColor(tier);
 
+  // 框内填充（分级透明度，将检测区域从照片中视觉分离）
+  ctx.save();
+  const fillAlpha = tier === 'high' ? FILL_ALPHA_HIGH
+    : tier === 'low' ? FILL_ALPHA_LOW
+    : FILL_ALPHA_DETECT;
+  ctx.globalAlpha = fillAlpha;
+  ctx.fillStyle = color;
+  ctx.fillRect(px1, py1, boxW, boxH);
+  ctx.restore();
+
   // 绘制边框
   drawBoxBorder(ctx, px1, py1, px2, py2, color);
 
   // 绘制标签（仅高/低置信显示文本，detect 级别只保留识别框）
   if (tier !== 'detect') {
     const label = buildLabel(box, tier);
-    drawConfidenceLabel(ctx, px1, py1, label, color);
+    drawConfidenceLabel(ctx, px1, py1, label, tier);
   }
 }
 
@@ -160,7 +176,7 @@ function drawBoxBorder(
   ctx.stroke();
 
   // 在四个角画加粗折角（增强可视性）
-  ctx.lineWidth = BOX_LINE_WIDTH + 1;
+  ctx.lineWidth = BOX_LINE_WIDTH + 2;
 
   // 左上角
   ctx.beginPath();
@@ -199,12 +215,12 @@ function drawConfidenceLabel(
   boxX: number,
   boxY: number,
   label: string,
-  borderColor: string,
+  tier: BoxTier,
 ): void {
-  const text = label;
+  const bgColor = tier === 'high' ? HIGH_LABEL_BG_COLOR : LOW_LABEL_BG_COLOR;
 
-  ctx.font = `${LABEL_FONT_SIZE}px system-ui, -apple-system, sans-serif`;
-  const metrics = ctx.measureText(text);
+  ctx.font = `600 ${LABEL_FONT_SIZE}px system-ui, -apple-system, sans-serif`;
+  const metrics = ctx.measureText(label);
   const textWidth = metrics.width;
   const textHeight = LABEL_FONT_SIZE;
 
@@ -219,23 +235,16 @@ function drawConfidenceLabel(
     labelY = boxY + 2;
   }
 
-  // 绘制背景（圆角矩形）
-  ctx.save();
-  ctx.globalAlpha = LABEL_BG_ALPHA;
-  ctx.fillStyle = LABEL_BG_COLOR;
+  // 绘制背景（等级色圆角矩形，标签本身即传达置信等级）
+  ctx.fillStyle = bgColor;
   roundRect(ctx, labelX, labelY, bgWidth, bgHeight, LABEL_RADIUS);
   ctx.fill();
-  ctx.restore();
-
-  // 左侧色条（与边框颜色一致）
-  ctx.fillStyle = borderColor;
-  ctx.fillRect(labelX, labelY, 3, bgHeight);
 
   // 绘制文字
   ctx.fillStyle = '#FFFFFF';
-  ctx.font = `${LABEL_FONT_SIZE}px system-ui, -apple-system, sans-serif`;
-  ctx.textBaseline = 'top';
-  ctx.fillText(text, labelX + LABEL_PADDING, labelY + LABEL_PADDING / 2);
+  ctx.font = `600 ${LABEL_FONT_SIZE}px system-ui, -apple-system, sans-serif`;
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, labelX + LABEL_PADDING, labelY + bgHeight / 2);
 }
 
 /**

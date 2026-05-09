@@ -8,6 +8,49 @@ export interface Province {
   maxLng: number;
 }
 
+export interface RegionGroup {
+  label: string;
+  provinces: Province[];
+}
+
+export const REGION_GROUPS: RegionGroup[] = [
+  { label: '华北', provinces: [] },
+  { label: '东北', provinces: [] },
+  { label: '华东', provinces: [] },
+  { label: '华中', provinces: [] },
+  { label: '华南', provinces: [] },
+  { label: '西南', provinces: [] },
+  { label: '西北', provinces: [] },
+];
+
+/** 省份→地区映射 */
+const PROVINCE_REGION: Record<string, string> = {
+  '北京': '华北', '天津': '华北', '河北': '华北', '山西': '华北', '内蒙古': '华北',
+  '辽宁': '东北', '吉林': '东北', '黑龙江': '东北',
+  '上海': '华东', '江苏': '华东', '浙江': '华东', '安徽': '华东',
+  '福建': '华东', '江西': '华东', '山东': '华东',
+  '河南': '华中', '湖北': '华中', '湖南': '华中',
+  '广东': '华南', '广西': '华南', '海南': '华南',
+  '香港': '华南', '澳门': '华南', '台湾': '华南',
+  '重庆': '西南', '四川': '西南', '贵州': '西南', '云南': '西南', '西藏': '西南',
+  '陕西': '西北', '甘肃': '西北', '青海': '西北', '宁夏': '西北', '新疆': '西北',
+};
+
+function buildRegionGroups(): RegionGroup[] {
+  const map = new Map<string, Province[]>();
+  for (const rg of REGION_GROUPS) {
+    map.set(rg.label, []);
+  }
+  for (const p of PROVINCES) {
+    const region = PROVINCE_REGION[p.name];
+    if (region) {
+      map.get(region)!.push(p);
+    }
+  }
+  return REGION_GROUPS.filter((rg) => map.get(rg.label)!.length > 0)
+    .map((rg) => ({ label: rg.label, provinces: map.get(rg.label)! }));
+}
+
 export const PROVINCES: Province[] = [
   { name: '北京', lat: 39.9, lng: 116.4, minLat: 39.4, maxLat: 41.1, minLng: 115.4, maxLng: 117.5 },
   { name: '天津', lat: 39.1, lng: 117.2, minLat: 38.6, maxLat: 40.3, minLng: 116.7, maxLng: 118.0 },
@@ -44,3 +87,10 @@ export const PROVINCES: Province[] = [
   { name: '澳门', lat: 22.2, lng: 113.5, minLat: 22.1, maxLat: 22.2, minLng: 113.5, maxLng: 113.6 },
   { name: '台湾', lat: 25.0, lng: 121.5, minLat: 21.9, maxLat: 25.3, minLng: 120.0, maxLng: 122.0 },
 ];
+
+/** 按地区分组的省份列表（惰性计算） */
+let _grouped: RegionGroup[] | null = null;
+export function getProvincesGrouped(): RegionGroup[] {
+  if (!_grouped) _grouped = buildRegionGroups();
+  return _grouped;
+}

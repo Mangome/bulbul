@@ -390,6 +390,7 @@ export function SettingsPanel({ open, onClose, onCacheCleared, onOpenAbout, proc
                   <span className={cls.rowValue}>{Math.round(similarityThreshold)}%</span>
                 </div>
                 <div className={cls.sliderRow}>
+                  <span className={cls.sliderHint}>宽松</span>
                   <Slider
                     min={50}
                     max={100}
@@ -398,6 +399,7 @@ export function SettingsPanel({ open, onClose, onCacheCleared, onOpenAbout, proc
                     onChange={handleSimilarityChange}
                     aria-label="相似度阈值"
                   />
+                  <span className={cls.sliderHint}>严格</span>
                 </div>
 
                 <div className={cls.separator} />
@@ -408,6 +410,7 @@ export function SettingsPanel({ open, onClose, onCacheCleared, onOpenAbout, proc
                   <span className={cls.rowValue}>{timeGapSeconds}s</span>
                 </div>
                 <div className={cls.sliderRow}>
+                  <span className={cls.sliderHint}>短连拍</span>
                   <Slider
                     min={1}
                     max={120}
@@ -416,6 +419,7 @@ export function SettingsPanel({ open, onClose, onCacheCleared, onOpenAbout, proc
                     onChange={handleTimeGapChange}
                     aria-label="时间间隔阈值"
                   />
+                  <span className={cls.sliderHint}>长时段</span>
                 </div>
               </div>
 

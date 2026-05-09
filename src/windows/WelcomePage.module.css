@@ -13,7 +13,7 @@
   height: 100vh;
   border-radius: 12px;
   overflow: hidden;
-  background: #FFFFFF;
+  background: var(--color-bg-primary);
   animation: windowEnter 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
@@ -264,4 +264,13 @@
   .closeBtn:hover {
     transform: none;
   }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   暗色模式适配
+──────────────────────────────────────────────────────────────── */
+
+[data-theme="dark"] .appName {
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 0 12px rgba(0, 0, 0, 0.6), 0 0 4px rgba(0, 0, 0, 0.4);
 }

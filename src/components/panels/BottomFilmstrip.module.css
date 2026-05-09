@@ -28,6 +28,38 @@
     border-color var(--transition-normal);
 }
 
+/* 左右滚动渐变提示 */
+.container::before,
+.container::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  bottom: 0;
+  width: 32px;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.container::before {
+  left: 0;
+  background: linear-gradient(to right, var(--filmstrip-bg, var(--panel-bg)), transparent);
+}
+
+.container::after {
+  right: 0;
+  background: linear-gradient(to left, var(--filmstrip-bg, var(--panel-bg)), transparent);
+}
+
+.scrollLeft::before {
+  opacity: 1;
+}
+
+.scrollRight::after {
+  opacity: 1;
+}
+
 .scrollArea {
   display: flex;
   gap: 6px;

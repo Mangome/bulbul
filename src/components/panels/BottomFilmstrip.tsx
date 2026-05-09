@@ -6,7 +6,7 @@
 // 支持键盘导航自动滚动。
 // ============================================================
 
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { FilmstripItem } from './FilmstripItem';
 import { useCanvasStore } from '../../stores/useCanvasStore';
@@ -26,6 +26,29 @@ export function BottomFilmstrip({ groups, onGroupClick }: BottomFilmstripProps) 
   const currentGroupIndex = useCanvasStore((s) => s.currentGroupIndex);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastScrollTimeRef = useRef<number>(0);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  // 检测滚动位置，更新渐变提示可见性
+  const updateScrollHints = useRef(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 2);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
+  });
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    updateScrollHints.current();
+    el.addEventListener('scroll', updateScrollHints.current, { passive: true });
+    const ro = new ResizeObserver(updateScrollHints.current);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener('scroll', updateScrollHints.current);
+      ro.disconnect();
+    };
+  }, [groups]);
 
   // 当前分组变化时，自动滚动胶片条使活动项可见。
   // 连续快速切换时改用 instant，避免 smooth 动画排队造成卡顿。
@@ -49,7 +72,7 @@ export function BottomFilmstrip({ groups, onGroupClick }: BottomFilmstripProps) 
 
   return (
     <motion.div
-      className={cls.container}
+      className={`${cls.container} ${canScrollLeft ? cls.scrollLeft : ''} ${canScrollRight ? cls.scrollRight : ''}`}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}

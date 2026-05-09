@@ -17,8 +17,8 @@ import { useThemeStore } from '../../stores/useThemeStore';
 import { useAppStore } from '../../stores/useAppStore';
 import { useGeoStore } from '../../stores/useGeoStore';
 import { reclassify } from '../../services/processService';
-import { PROVINCES } from '../../data/provinces';
-import type { Province } from '../../data/provinces';
+import { getProvincesGrouped } from '../../data/provinces';
+import type { Province, RegionGroup } from '../../data/provinces';
 import type { GroupData } from '../../types';
 import cls from './TopNavBar.module.css';
 
@@ -124,10 +124,16 @@ export function TopNavBar({
   const hasGroups = useAppStore((s) => s.groups.length > 0);
   const [provinceSearch, setProvinceSearch] = useState('');
 
-  const filteredProvinces = useMemo(
-    () => provinceSearch ? PROVINCES.filter((p) => p.name.includes(provinceSearch)) : PROVINCES,
-    [provinceSearch],
-  );
+  const filteredGroups = useMemo((): RegionGroup[] => {
+    if (!provinceSearch) return getProvincesGrouped();
+    const keyword = provinceSearch;
+    return getProvincesGrouped()
+      .map((g) => ({
+        ...g,
+        provinces: g.provinces.filter((p) => p.name.includes(keyword)),
+      }))
+      .filter((g) => g.provinces.length > 0);
+  }, [provinceSearch]);
 
   const handleSelectProvince = useCallback(async (province: Province | null) => {
     setProvince(province);
@@ -286,16 +292,21 @@ export function TopNavBar({
                       清除选择
                     </button>
                   )}
-                  {filteredProvinces.map((p) => (
-                    <button
-                      key={p.name}
-                      className={`${cls.provinceItem} ${selectedProvince?.name === p.name ? cls.provinceItemActive : ''}`}
-                      onClick={() => handleSelectProvince(p)}
-                    >
-                      {p.name}
-                    </button>
+                  {filteredGroups.map((g) => (
+                    <div key={g.label}>
+                      <div className={cls.regionLabel}>{g.label}</div>
+                      {g.provinces.map((p) => (
+                        <button
+                          key={p.name}
+                          className={`${cls.provinceItem} ${selectedProvince?.name === p.name ? cls.provinceItemActive : ''}`}
+                          onClick={() => handleSelectProvince(p)}
+                        >
+                          {p.name}
+                        </button>
+                      ))}
+                    </div>
                   ))}
-                  {filteredProvinces.length === 0 && (
+                  {filteredGroups.length === 0 && (
                     <div className={cls.provinceEmpty}>无匹配结果</div>
                   )}
                 </div>
@@ -355,6 +366,7 @@ export function TopNavBar({
           size="sm"
           disabled={selectedCount === 0}
           onClick={onExport}
+          title="导出选中图片 (Ctrl+E)"
         >
           导出
           {selectedCount > 0 && (

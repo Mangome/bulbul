@@ -176,6 +176,12 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
   // ── 放大镜区域方框（由 Loupe 回调设置，renderFrame 中绘制） ──
   const loupeSourceRectRef = useRef<LoupeSourceRect | null>(null);
 
+  // ── 放大镜首次使用提示 ──
+  const LOUPE_HINT_KEY = 'bulbul-loupe-hint-dismissed';
+  const [loupeHintVisible, setLoupeHintVisible] = useState(() => !localStorage.getItem(LOUPE_HINT_KEY));
+  const loupeHintPosRef = useRef<{ x: number; y: number } | null>(null);
+  const loupeHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // ── wheel 事件 throttle ──
   const lastWheelUpdateTimeRef = useRef<number>(0);
   const WHEEL_THROTTLE_MS = 16;
@@ -648,6 +654,16 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
           longPressTimerRef.current = null;
           longPressActivatedRef.current = true;
 
+          // 放大镜首次激活 → 关闭提示并永久记录
+          if (loupeHintVisible) {
+            setLoupeHintVisible(false);
+            localStorage.setItem(LOUPE_HINT_KEY, '1');
+            if (loupeHintTimerRef.current) {
+              clearTimeout(loupeHintTimerRef.current);
+              loupeHintTimerRef.current = null;
+            }
+          }
+
           // 用当前图片位置刷新 itemRect（可能因滚动变化）
           const ci = canvasItemsRef.current.get(hitImage.hash);
           const itemRect = ci
@@ -766,6 +782,17 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
             if (newHoveredHash) {
               const next = canvasItemsRef.current.get(newHoveredHash);
               if (next) next.setHovered(true);
+
+              // 首次悬停 → 显示放大镜提示
+              if (loupeHintVisible && !localStorage.getItem(LOUPE_HINT_KEY)) {
+                loupeHintPosRef.current = { x: screenX, y: screenY };
+                setLoupeHintVisible(true);
+                if (loupeHintTimerRef.current) clearTimeout(loupeHintTimerRef.current);
+                loupeHintTimerRef.current = setTimeout(() => {
+                  setLoupeHintVisible(false);
+                  localStorage.setItem(LOUPE_HINT_KEY, '1');
+                }, 3500);
+              }
             }
             hoveredHashRef.current = newHoveredHash;
             markDirty();
@@ -1190,6 +1217,34 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
         viewportWidth={screenWidthRef.current}
         viewportHeight={screenHeightRef.current}
       />
+      {/* 放大镜首次使用提示 */}
+      {loupeHintVisible && loupeHintPosRef.current && (
+        <div
+          style={{
+            position: 'absolute',
+            left: loupeHintPosRef.current.x,
+            top: loupeHintPosRef.current.y - 36,
+            transform: 'translateX(-50%)',
+            pointerEvents: 'none',
+            zIndex: 20,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            padding: '4px 10px',
+            borderRadius: 6,
+            background: 'rgba(0, 0, 0, 0.72)',
+            backdropFilter: 'blur(8px)',
+            color: '#fff',
+            fontSize: 11,
+            fontWeight: 500,
+            whiteSpace: 'nowrap',
+            animation: 'loupe-hint-pulse 2s ease-in-out infinite',
+          }}
+        >
+          <svg width="12" height="12" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="6" r="4" /><line x1="9" y1="9" x2="13" y2="13" /></svg>
+          长按查看细节
+        </div>
+      )}
       {/* 屏幕阅读器播报区：选中变化 */}
       <div
         role="status"
