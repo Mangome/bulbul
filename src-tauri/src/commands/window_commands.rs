@@ -15,10 +15,20 @@ pub async fn open_main_window(
     state: tauri::State<'_, Arc<Mutex<SessionState>>>,
     folder_path: String,
 ) -> Result<(), String> {
+    let path = std::path::Path::new(&folder_path);
+
+    // 校验路径是否为有效目录
+    if !path.exists() {
+        return Err("路径不存在，请检查后重试".to_string());
+    }
+    if !path.is_dir() {
+        return Err("请选择文件夹，而非单个文件".to_string());
+    }
+
     // 保存文件夹路径到 SessionState
     {
         let mut s = state.lock().map_err(|e| e.to_string())?;
-        s.current_folder = Some(std::path::PathBuf::from(&folder_path));
+        s.current_folder = Some(path.to_path_buf());
     }
 
     // 检查 Main 窗口是否已存在
