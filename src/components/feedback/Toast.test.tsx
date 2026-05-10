@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Toast } from './Toast';
 import type { ToastItem } from '../../stores/useToastStore';
@@ -10,10 +10,10 @@ vi.mock('../../stores/useToastStore', () => ({
 import { useToastStore } from '../../stores/useToastStore';
 
 const mockRemoveToast = vi.fn();
-vi.mocked(useToastStore).mockImplementation((selector: never) => {
+vi.mocked(useToastStore).mockImplementation(((selector: (state: { removeToast: typeof mockRemoveToast }) => unknown) => {
   const state = { removeToast: mockRemoveToast };
   return selector(state);
-});
+}) as never);
 
 function createToast(overrides?: Partial<ToastItem>): ToastItem {
   return {
