@@ -1226,7 +1226,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
             top: loupeHintPosRef.current.y - 36,
             transform: 'translateX(-50%)',
             pointerEvents: 'none',
-            zIndex: 20,
+            zIndex: 92,
             display: 'flex',
             alignItems: 'center',
             gap: 4,
