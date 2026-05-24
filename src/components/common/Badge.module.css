@@ -13,7 +13,7 @@
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
   font-family: inherit;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   line-height: 1.4;
   min-width: 20px;
   white-space: nowrap;
@@ -41,7 +41,7 @@
 
 .primary {
   background: var(--color-primary);
-  color: #FFFFFF;
+  color: var(--color-text-inverse);
   border: none;
   box-shadow: var(--shadow-subtle);
 }
@@ -52,7 +52,7 @@
 
 .success {
   background: var(--color-success);
-  color: #FFFFFF;
+  color: var(--color-text-inverse);
   border: none;
   box-shadow: var(--shadow-subtle);
 }
@@ -63,7 +63,7 @@
 
 .warning {
   background: var(--color-warning);
-  color: #FFFFFF;
+  color: var(--color-text-inverse);
   border: none;
   box-shadow: var(--shadow-subtle);
 }
@@ -74,7 +74,7 @@
 
 .danger {
   background: var(--color-danger);
-  color: #FFFFFF;
+  color: var(--color-text-inverse);
   border: none;
   box-shadow: var(--shadow-subtle);
 }
@@ -85,7 +85,7 @@
 
 .onPrimary {
   background: rgba(255, 255, 255, 0.25);
-  color: #FFFFFF;
+  color: var(--color-text-inverse);
   border: none;
   margin-left: 4px;
 }

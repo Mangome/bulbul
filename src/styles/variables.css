@@ -1,11 +1,11 @@
 /* ============================================================================
    Bulbul Design System - 设计令牌系统
-   
+
    品牌理念：摄影师的专业工作室
    - 精致细节，不浮夸，富有意图
    - 深靛蓝 + 纯净背景，高对比度与清晰文字
    - 极简主义与优雅的结合
-   
+
    核心配色：
    - Light Mode: 纯白背景 + 深靛蓝主色（#1E3A5F）+ 高对比中性色
    - Dark Mode: 深靛背景 + 亮蓝主色（#4A90E2）+ 柔和中性色
@@ -51,12 +51,34 @@
   ──────────────────────────────────────────────────────────────── */
   --color-text-primary: #1D1D1F;
   --color-text-secondary: #6E6E73;
-  --color-text-muted: #AEAEB2;
+  --color-text-muted: #7C7C82;
+  --color-text-inverse: #FFFFFF;
   --color-bg-primary: #FFFFFF;
   --color-bg-secondary: #F5F5F7;
   --color-bg-tertiary: #E8E8ED;
   --color-border: #D2D2D7;
   --color-border-light: #E8E8ED;
+
+  /* ────────────────────────────────────────────────────────────────
+     透明层变量 (暗色模式使用 rgba，亮色模式引用中性色)
+  ──────────────────────────────────────────────────────────────── */
+  --color-surface-hover: var(--color-bg-tertiary);
+  --color-surface-active: var(--color-border);
+  --color-surface-raised: var(--color-bg-tertiary);
+  --color-surface-raised-hover: var(--color-border);
+  --color-surface-toggle: var(--color-border);
+  --color-border-inverse: var(--color-border-light);
+
+  /* ────────────────────────────────────────────────────────────────
+     画布颜色 (Canvas 2D 专用，通过 getCssVar() 桥接)
+  ──────────────────────────────────────────────────────────────── */
+  --color-canvas-bg: #FFFFFF;
+  --color-canvas-dot: #D2D2D7;
+  --color-canvas-placeholder: #E0E4EB;
+  --color-canvas-badge-bg: rgba(0, 0, 0, 0.55);
+  --color-canvas-info-gradient-start: rgba(0, 0, 0, 0);
+  --color-canvas-info-gradient-mid: rgba(0, 0, 0, 0.3);
+  --color-canvas-info-gradient-end: rgba(0, 0, 0, 0.6);
 
   /* ────────────────────────────────────────────────────────────────
      面板样式 (毛玻璃效果)
@@ -72,14 +94,35 @@
   --filmstrip-bg: rgba(255, 255, 255, 0.92);
 
   /* ────────────────────────────────────────────────────────────────
+     遮罩系统
+  ──────────────────────────────────────────────────────────────── */
+  --overlay-light: rgba(0, 0, 0, 0.3);
+  --overlay-medium: rgba(0, 0, 0, 0.35);
+  --overlay-heavy: rgba(0, 0, 0, 0.4);
+
+  /* ────────────────────────────────────────────────────────────────
      间距系统 (模块化，创造节奏)
   ──────────────────────────────────────────────────────────────── */
   --spacing-xs: 3px;
   --spacing-sm: 6px;
   --spacing-md: 12px;
+  --spacing-base: 16px;
   --spacing-lg: 18px;
   --spacing-xl: 24px;
   --spacing-2xl: 32px;
+
+  /* ────────────────────────────────────────────────────────────────
+     圆角系统
+  ──────────────────────────────────────────────────────────────── */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+  --radius-2xl: 12px;
+  --radius-3xl: 14px;
+  --radius-pill: 24px;
+  --radius-full: 999px;
 
   /* ────────────────────────────────────────────────────────────────
      字体系统
@@ -89,7 +132,9 @@
     sans-serif;
 
   /* 字体尺寸刻度 (模块化系统) */
+  --font-size-2xs: 10px;
   --font-size-xs: 11px;
+  --font-size-base: 12px;
   --font-size-sm: 13px;
   --font-size-md: 15px;
   --font-size-lg: 17px;
@@ -102,6 +147,27 @@
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
+
+  /* ────────────────────────────────────────────────────────────────
+     模糊系统
+  ──────────────────────────────────────────────────────────────── */
+  --blur-xs: 2px;
+  --blur-sm: 4px;
+  --blur-md: 8px;
+  --blur-lg: 12px;
+  --blur-xl: 16px;
+
+  /* ────────────────────────────────────────────────────────────────
+     Z-index 系统 (层级管理)
+  ──────────────────────────────────────────────────────────────── */
+  --z-index-filmstrip: 90;
+  --z-index-loupe: 91;
+  --z-index-loupe-hint: 92;
+  --z-index-navbar: 100;
+  --z-index-popover: 200;
+  --z-index-panel-overlay: 500;
+  --z-index-dialog: 600;
+  --z-index-modal: 1000;
 
   /* ────────────────────────────────────────────────────────────────
      阴影系统 (深度感)
@@ -166,12 +232,34 @@
   ──────────────────────────────────────────────────────────────── */
   --color-text-primary: #F5F5F7;
   --color-text-secondary: #A1A1A6;
-  --color-text-muted: #636366;
-  --color-bg-primary: #000000;
+  --color-text-muted: #7C7C82;
+  --color-text-inverse: #FFFFFF;
+  --color-bg-primary: #1C1C1E;
   --color-bg-secondary: #1C1C1E;
   --color-bg-tertiary: #2C2C2E;
   --color-border: #38383A;
   --color-border-light: #2C2C2E;
+
+  /* ────────────────────────────────────────────────────────────────
+     透明层变量 (暗色模式使用 rgba 半透明)
+  ──────────────────────────────────────────────────────────────── */
+  --color-surface-hover: rgba(255, 255, 255, 0.06);
+  --color-surface-active: rgba(255, 255, 255, 0.12);
+  --color-surface-raised: rgba(255, 255, 255, 0.10);
+  --color-surface-raised-hover: rgba(255, 255, 255, 0.16);
+  --color-surface-toggle: rgba(255, 255, 255, 0.15);
+  --color-border-inverse: rgba(255, 255, 255, 0.06);
+
+  /* ────────────────────────────────────────────────────────────────
+     画布颜色 (暗色模式)
+  ──────────────────────────────────────────────────────────────── */
+  --color-canvas-bg: #000000;
+  --color-canvas-dot: #38383A;
+  --color-canvas-placeholder: #2C2C2E;
+  --color-canvas-badge-bg: rgba(0, 0, 0, 0.55);
+  --color-canvas-info-gradient-start: rgba(0, 0, 0, 0);
+  --color-canvas-info-gradient-mid: rgba(0, 0, 0, 0.3);
+  --color-canvas-info-gradient-end: rgba(0, 0, 0, 0.6);
 
   /* ────────────────────────────────────────────────────────────────
      面板样式 (深靛毛玻璃)

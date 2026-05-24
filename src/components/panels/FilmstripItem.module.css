@@ -13,7 +13,7 @@
   flex-shrink: 0;
   cursor: pointer;
   padding: 4px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: none;
   background: transparent;
   position: relative;
@@ -90,7 +90,7 @@
 .thumb {
   width: var(--filmstrip-thumb-size, 48px);
   height: var(--filmstrip-thumb-size, 48px);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
   border: 1.5px solid transparent;
   background: var(--color-bg-tertiary);
@@ -127,7 +127,7 @@
 ──────────────────────────────────────────────────────────────── */
 
 .count {
-  font-size: 10px;
+  font-size: var(--font-size-2xs);
   font-weight: var(--font-weight-medium);
   color: var(--color-text-muted);
   line-height: 1;

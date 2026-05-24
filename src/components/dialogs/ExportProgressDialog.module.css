@@ -15,10 +15,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.4);
-  z-index: 1000;
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  background: var(--overlay-heavy);
+  z-index: var(--z-index-modal);
+  backdrop-filter: blur(var(--blur-xs));
+  -webkit-backdrop-filter: blur(var(--blur-xs));
 }
 
 /* ────────────────────────────────────────────────────────
@@ -28,7 +28,7 @@
 .dialog {
   background: var(--color-bg-primary);
   border: 1px solid var(--color-border);
-  border-radius: 12px;
+  border-radius: var(--radius-2xl);
   padding: var(--spacing-2xl) var(--spacing-2xl) var(--spacing-xl);
   min-width: 360px;
   max-width: 420px;
@@ -80,7 +80,7 @@
 
 .progressBarBg {
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   background: var(--color-bg-tertiary);
   overflow: hidden;
   margin-bottom: var(--spacing-lg);
@@ -88,7 +88,7 @@
 
 .progressBarFill {
   height: 100%;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   background: var(--color-primary);
   /* 450ms easeOutQuint */
   transition: width 450ms cubic-bezier(0.22, 1, 0.36, 1);

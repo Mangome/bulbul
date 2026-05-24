@@ -7,6 +7,7 @@
 // ============================================================
 
 import type { DetectionBox } from '../../types';
+import { getCssVar } from '../../utils/cssVars';
 
 // ─── 常量 ─────────────────────────────────────────────
 
@@ -241,7 +242,7 @@ function drawConfidenceLabel(
   ctx.fill();
 
   // 绘制文字
-  ctx.fillStyle = '#FFFFFF';
+  ctx.fillStyle = getCssVar('--color-text-inverse') || '#FFFFFF';
   ctx.font = `600 ${LABEL_FONT_SIZE}px system-ui, -apple-system, sans-serif`;
   ctx.textBaseline = 'middle';
   ctx.fillText(label, labelX + LABEL_PADDING, labelY + bgHeight / 2);

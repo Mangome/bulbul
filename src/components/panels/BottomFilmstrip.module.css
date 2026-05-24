@@ -11,16 +11,16 @@
   left: 0;
   right: 0;
   height: var(--filmstrip-height, 72px);
-  z-index: 90;
+  z-index: var(--z-index-filmstrip);
 
   background: var(--filmstrip-bg, var(--panel-bg));
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(var(--blur-lg));
+  -webkit-backdrop-filter: blur(var(--blur-lg));
   border-top: 1px solid var(--panel-border);
 
   display: flex;
   align-items: center;
-  padding: 0 16px;
+  padding: 0 var(--spacing-base);
   pointer-events: auto;
 
   transition:

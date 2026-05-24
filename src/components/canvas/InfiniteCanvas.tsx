@@ -38,7 +38,7 @@ import { useSelectionStore } from '../../stores/useSelectionStore';
 import { useThemeStore } from '../../stores/useThemeStore';
 import { Loupe, type LoupeSourceRect } from './Loupe';
 import type { ItemRect } from './Loupe';
-import { getCssVarRgb } from '../../utils/cssVars';
+import { getCssVar, getCssVarRgb } from '../../utils/cssVars';
 import { easeOutQuart, lerpColorNum } from '../../utils/easing';
 
 // ─── 常量 ─────────────────────────────────────────────
@@ -47,10 +47,25 @@ import { easeOutQuart, lerpColorNum } from '../../utils/easing';
 const LONG_PRESS_DELAY = 300;
 /** 长按期间允许的最大移动距离（px），超过则视为拖动 */
 const LONG_PRESS_MOVE_THRESHOLD = 10;
+/** 画布背景色 — 从 CSS 变量读取，随主题自动切换 */
 const BG_COLOR_LIGHT = '#FFFFFF';
 const BG_COLOR_DARK = '#000000';
 const BG_COLOR_LIGHT_NUM = 0xFFFFFF;
 const BG_COLOR_DARK_NUM = 0x000000;
+
+/** 从 CSS 变量获取画布背景色，带回退 */
+function getCanvasBgColor(theme: 'light' | 'dark'): string {
+  return getCssVar('--color-canvas-bg') || (theme === 'light' ? BG_COLOR_LIGHT : BG_COLOR_DARK);
+}
+
+/** 从 CSS 变量获取画布背景色数值（用于颜色插值动画） */
+function getCanvasBgColorNum(theme: 'light' | 'dark'): number {
+  const hex = getCssVar('--color-canvas-bg');
+  if (hex && hex.startsWith('#') && hex.length === 7) {
+    return parseInt(hex.slice(1), 16);
+  }
+  return theme === 'light' ? BG_COLOR_LIGHT_NUM : BG_COLOR_DARK_NUM;
+}
 /** 分组导航时，首图顶部预留的呼吸空间 (px) */
 const SCROLL_GROUP_PADDING = 50;
 const SCROLL_ANIMATION_MS =
@@ -438,8 +453,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       const elapsed = now - themeTransition.startTime;
       const progress = Math.min(elapsed / THEME_TRANSITION_MS, 1);
       const eased = easeOutQuart(progress);
-      const fromNum = themeTransition.fromTheme === 'light' ? BG_COLOR_LIGHT_NUM : BG_COLOR_DARK_NUM;
-      const toNum = themeTransition.toTheme === 'light' ? BG_COLOR_LIGHT_NUM : BG_COLOR_DARK_NUM;
+      const fromNum = getCanvasBgColorNum(themeTransition.fromTheme);
+      const toNum = getCanvasBgColorNum(themeTransition.toTheme);
       const interp = lerpColorNum(fromNum, toNum, eased);
       bgColorStr = '#' + interp.toString(16).padStart(6, '0');
       dotProgress = eased;
@@ -453,7 +468,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
       }
     } else {
       const theme = useThemeStore.getState().theme;
-      bgColorStr = theme === 'light' ? BG_COLOR_LIGHT : BG_COLOR_DARK;
+      bgColorStr = getCanvasBgColor(theme);
     }
 
     ctx.fillStyle = bgColorStr;
@@ -1226,15 +1241,15 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
             top: loupeHintPosRef.current.y - 36,
             transform: 'translateX(-50%)',
             pointerEvents: 'none',
-            zIndex: 92,
+            zIndex: parseInt(getCssVar('--z-index-loupe-hint')) || 92,
             display: 'flex',
             alignItems: 'center',
             gap: 4,
             padding: '4px 10px',
             borderRadius: 6,
             background: 'rgba(0, 0, 0, 0.72)',
-            backdropFilter: 'blur(8px)',
-            color: '#fff',
+            backdropFilter: `blur(${getCssVar('--blur-md') || '8px'})`,
+            color: getCssVar('--color-text-inverse') || '#fff',
             fontSize: 11,
             fontWeight: 500,
             whiteSpace: 'nowrap',

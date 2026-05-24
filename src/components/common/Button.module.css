@@ -23,7 +23,7 @@
   user-select: none;
   line-height: 1;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   
   /* 过渡效果 */
   transition: 
@@ -52,7 +52,7 @@
 
 .primary {
   background-color: var(--color-primary);
-  color: #FFFFFF;
+  color: var(--color-text-inverse);
   border: 1px solid var(--color-primary);
   box-shadow: var(--shadow-subtle);
 }
