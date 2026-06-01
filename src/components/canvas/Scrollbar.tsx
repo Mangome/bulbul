@@ -37,7 +37,6 @@ export function Scrollbar({ contentHeight, paddingTop, onScrollToY }: ScrollbarP
 
   const [viewportHeight, setViewportHeight] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
   const dragStartRef = useRef({ y: 0, scrollY: 0 });
 
   // ── 监听轨道高度变化 ──
@@ -128,22 +127,15 @@ export function Scrollbar({ contentHeight, paddingTop, onScrollToY }: ScrollbarP
   // ── 内容未超出视口时隐藏滚动条 ──
   if (maxScrollY <= 0) return null;
 
-  // ── 轨道 hover 判断（扩大点击区域用） ──
-  const isActive = isDragging || isHovered;
-
   return (
-    <div
-      className={styles.scrollbar}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
+    <div className={styles.scrollbar}>
       <div
         ref={trackRef}
         className={styles.track}
         onClick={handleTrackClick}
       >
         <div
-          className={`${styles.thumb} ${isActive ? styles.thumbVisible : ''} ${isDragging ? styles.thumbDragging : ''}`}
+          className={`${styles.thumb} ${isDragging ? styles.thumbDragging : ''}`}
           style={{
             height: `${thumbHeight}px`,
             transform: `translateY(${thumbTop}px)`,
