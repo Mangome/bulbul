@@ -15,7 +15,9 @@ function getCurrentVersion() {
 // 获取最新的 git tag 版本号（去掉 v 前缀）
 function getLatestTagVersion() {
   try {
-    const tags = execSync("git tag --sort=-v:refname", { encoding: "utf-8" }).trim();
+    const tags = execSync("git tag --sort=-v:refname", {
+      encoding: "utf-8",
+    }).trim();
     if (!tags) return null;
     const latest = tags.split("\n")[0].trim();
     return latest.replace(/^v/, "");
@@ -29,7 +31,12 @@ function compareSemver(a, b) {
   const parse = (v) => {
     const match = v.match(/^(\d+)\.(\d+)\.(\d+)(?:-(.+))?$/);
     if (!match) return null;
-    return { major: +match[1], minor: +match[2], patch: +match[3], pre: match[4] || null };
+    return {
+      major: +match[1],
+      minor: +match[2],
+      patch: +match[3],
+      pre: match[4] || null,
+    };
   };
   const va = parse(a);
   const vb = parse(b);
@@ -54,6 +61,16 @@ function ask(question) {
 }
 
 // --- 主流程 ---
+
+// 第一步：推送当前分支
+try {
+  console.log("推送当前分支...");
+  execSync("git push", { stdio: "inherit" });
+  console.log("✅ 已推送当前分支\n");
+} catch {
+  console.error("❌ 推送失败，请检查远程仓库连接或本地提交状态");
+  process.exit(1);
+}
 
 const currentVersion = getCurrentVersion();
 const latestTag = getLatestTagVersion();
