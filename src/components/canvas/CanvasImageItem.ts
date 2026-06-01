@@ -96,6 +96,17 @@ const GROUP_BADGE_PADDING_Y = 4;
 const GROUP_BADGE_OFFSET = 6;
 const GROUP_BADGE_RADIUS = 3;
 
+// ─── 分组亮度常量 ──────────────────────────────────────
+
+/** 非当前分组的亮度值（0-1，越低越暗） */
+const GROUP_DIM_BRIGHTNESS = 0.4;
+/** 分组亮度过渡时长（ms），尊重 prefers-reduced-motion */
+const getGroupBrightnessDuration = (): number => {
+  if (typeof window === 'undefined') return 200;
+  const prefersReduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  return prefersReduced ? 0 : 200;
+};
+
 // ─── 直方图常量 ─────────────────────────────────────────
 
 /** 直方图高度（屏幕像素，不随缩放变化） */
@@ -112,6 +123,7 @@ const HISTOGRAM_COLOR_B = 'rgba(80, 120, 255, 0.7)';
 export class CanvasImageItem {
   readonly hash: string;
   readonly groupId: number;
+  readonly groupIndex: number;
 
   // 布局信息
   x: number;
@@ -137,6 +149,12 @@ export class CanvasImageItem {
   private hoverAnimDirection: 'in' | 'out' = 'out';
   /** 最近一帧的 hover progress（0-1），用于避免动画完成后继续请求帧 */
   private hoverAnimValue: number = 0;
+
+  // 分组亮度动画状态（0 = 暗 dim，1 = 亮 bright）
+  private _isGroupActive: boolean = true;
+  private _brightnessAnimStartTime: number = 0;
+  private _brightnessAnimDirection: 'in' | 'out' = 'out';
+  private _brightnessAnimValue: number = 0;
 
   // 检测框
   private detectionBoxes: DetectionBox[] = [];
@@ -164,6 +182,7 @@ export class CanvasImageItem {
   constructor(layoutItem: LayoutItem) {
     this.hash = layoutItem.hash;
     this.groupId = layoutItem.groupId;
+    this.groupIndex = layoutItem.groupIndex;
     this.x = layoutItem.x;
     this.y = layoutItem.y;
     this.width = layoutItem.width;
@@ -246,6 +265,10 @@ export class CanvasImageItem {
 
     let needsNextFrame = false;
 
+    // 分组亮度过渡（动画追踪）
+    const brightnessNeedsFrame = this._updateBrightnessAnimation(now);
+    needsNextFrame = needsNextFrame || brightnessNeedsFrame;
+
     // 绘制占位色块或图片
     if (this.image && this._isImageUsable()) {
       this._drawImageWithOrientation(ctx);
@@ -284,6 +307,9 @@ export class CanvasImageItem {
       this._drawSelection(ctx, zoom);
     }
 
+    // 分组亮度遮罩（在所有绘制之后叠加半透明黑层）
+    this._drawBrightnessOverlay(ctx);
+
     ctx.restore();
 
     return needsNextFrame;
@@ -314,6 +340,17 @@ export class CanvasImageItem {
     this._isHovered = hovered;
     this.hoverAnimStartTime = performance.now();
     this.hoverAnimDirection = hovered ? 'in' : 'out';
+  }
+
+  /**
+   * 设置分组激活状态（带动画）
+   * 非当前分组 → brightness(0.4) 压暗；当前分组 → brightness(1.0) 正常。
+   */
+  setGroupActive(active: boolean): void {
+    if (this._isGroupActive === active) return;
+    this._isGroupActive = active;
+    this._brightnessAnimStartTime = performance.now();
+    this._brightnessAnimDirection = active ? 'in' : 'out';
   }
 
   /**
@@ -353,6 +390,9 @@ export class CanvasImageItem {
     this.hoverAnimStartTime = 0;
     this.hoverAnimValue = 0;
     this._isHovered = false;
+    this._brightnessAnimStartTime = 0;
+    this._brightnessAnimValue = 0;
+    this._isGroupActive = true;
     this.detectionBoxes = [];
     this.detectionVisible = false;
     this.histogramR = null;
@@ -778,6 +818,39 @@ export class CanvasImageItem {
     this.hoverAnimValue = this.hoverAnimDirection === 'in' ? eased : 1 - eased;
 
     return rawProgress < 1;
+  }
+
+  /**
+   * 更新分组亮度动画进度，返回是否需要继续渲染
+   */
+  private _updateBrightnessAnimation(now: number): boolean {
+    const duration = getGroupBrightnessDuration();
+    if (duration <= 0) {
+      this._brightnessAnimValue = this._isGroupActive ? 1 : 0;
+      return false;
+    }
+    const elapsed = now - this._brightnessAnimStartTime;
+    const rawProgress = Math.max(0, Math.min(1, elapsed / duration));
+    const eased = easeOutQuart(rawProgress);
+    this._brightnessAnimValue = this._brightnessAnimDirection === 'in' ? eased : 1 - eased;
+    return rawProgress < 1;
+  }
+
+  /**
+   * 绘制分组亮度遮罩（半透明黑层叠加，替代 ctx.filter 避免像素级滤镜开销）
+   * 仅在需要压暗时绘制（brightnessAnimValue < 1），完全亮起时跳过。
+   */
+  private _drawBrightnessOverlay(ctx: CanvasRenderingContext2D): void {
+    if (this._brightnessAnimValue >= 0.995) return;
+    // overlayAlpha: animValue=0 → 0.6 (压到 0.4 亮度)；animValue=1 → 0 (全亮)
+    const overlayAlpha = (1 - GROUP_DIM_BRIGHTNESS) * (1 - this._brightnessAnimValue);
+    if (overlayAlpha <= 0.005) return;
+
+    ctx.save();
+    ctx.globalAlpha = overlayAlpha;
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, this.width, this.height);
+    ctx.restore();
   }
 
   /** 格式化拍摄参数为显示字符串 */

@@ -138,6 +138,8 @@ export function SettingsPanel({ open, onClose, onCacheCleared, onOpenAbout, proc
   const toggleImageInfo = useCanvasStore((s) => s.toggleImageInfo);
   const showHistogram = useCanvasStore((s) => s.showHistogram);
   const toggleHistogram = useCanvasStore((s) => s.toggleHistogram);
+  const groupHighlightEnabled = useCanvasStore((s) => s.groupHighlightEnabled);
+  const toggleGroupHighlight = useCanvasStore((s) => s.toggleGroupHighlight);
 
   // 缓存
   const [cacheInfo, setCacheInfo] = useState<CacheSizeInfo | null>(null);
@@ -470,6 +472,21 @@ export function SettingsPanel({ open, onClose, onCacheCleared, onOpenAbout, proc
                     role="switch"
                     aria-checked={showHistogram}
                     aria-label="直方图开关"
+                  >
+                    <span className={cls.toggleKnob} />
+                  </button>
+                </div>
+
+                <div className={cls.separator} />
+
+                <div className={cls.row}>
+                  <span className={cls.rowLabel}>分组高亮</span>
+                  <button
+                    className={`${cls.toggle} ${groupHighlightEnabled ? cls.toggleActive : ''}`}
+                    onClick={toggleGroupHighlight}
+                    role="switch"
+                    aria-checked={groupHighlightEnabled}
+                    aria-label="分组高亮开关"
                   >
                     <span className={cls.toggleKnob} />
                   </button>

@@ -173,6 +173,12 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
     /** 长按是否已激活（放大镜正在显示） */
     const longPressActivatedRef = useRef(false);
 
+    // ── 分组亮度激活状态 ──
+    /** hover 是否已激活过某个分组（一旦激活，锁定 hover 驱动模式） */
+    const hoverHasActivatedRef = useRef(false);
+    /** 最近一次 hover 激活的分组索引 */
+    const lastHoveredGroupIdxRef = useRef<number | null>(null);
+
     // ── 分组导航锁定（动画期间禁止 updateViewport 覆盖 currentGroupIndex） ──
     const navigatingToGroupRef = useRef<number | null>(null);
 
@@ -220,6 +226,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
     const showDetectionOverlay = useCanvasStore((s) => s.showDetectionOverlay);
     const showImageInfo = useCanvasStore((s) => s.showImageInfo);
     const showHistogram = useCanvasStore((s) => s.showHistogram);
+    const groupHighlightEnabled = useCanvasStore((s) => s.groupHighlightEnabled);
     const currentGroupIndex = useCanvasStore((s) => s.currentGroupIndex);
     const setViewport = useCanvasStore((s) => s.setViewport);
     const setViewportRect = useCanvasStore((s) => s.setViewportRect);
@@ -532,7 +539,29 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
       ctx.save();
       ctx.translate(0, offsetY);
 
-      // 3a. 绘制所有可见 CanvasImageItem（含分组角标）
+      // 3a. 分组高亮：确定激活分组并更新所有可见 item 的亮度
+      const { groupHighlightEnabled: highlightOn } = useCanvasStore.getState();
+      if (highlightOn) {
+        const activeGroupIdx = determineActiveGroupIndex(
+          scrollY,
+          screenH,
+          hoveredHashRef.current,
+          canvasItemsRef.current,
+          layoutRef.current.pages,
+          hoverHasActivatedRef,
+          lastHoveredGroupIdxRef,
+        );
+        for (const item of canvasItemsRef.current.values()) {
+          item.setGroupActive(item.groupIndex === activeGroupIdx);
+        }
+      } else {
+        // 关闭时恢复所有 item 为全亮
+        for (const item of canvasItemsRef.current.values()) {
+          item.setGroupActive(true);
+        }
+      }
+
+      // 3b. 绘制所有可见 CanvasImageItem（含分组角标）
       let needsNextFrame = false;
       const itemsToReload: CanvasImageItem[] = [];
       for (const item of canvasItemsRef.current.values()) {
@@ -1144,6 +1173,9 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
       scrollAnimRef.current = null;
       internalGroupUpdateRef.current = true;
       useCanvasStore.setState({ currentGroupIndex: 0 });
+      // 重置 hover 激活状态（新文件夹 → 重新开始 scroll-position 驱动）
+      hoverHasActivatedRef.current = false;
+      lastHoveredGroupIdxRef.current = null;
       updateViewport();
       markDirty();
     }, [layout, updateViewport, markDirty]);
@@ -1262,10 +1294,10 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
       markDirty();
     }, [showDetectionOverlay, markDirty]);
 
-    // ── 图片信息/直方图可见性切换 ──
+    // ── 图片信息/直方图/分组高亮可见性切换 ──
     useEffect(() => {
       markDirty();
-    }, [showImageInfo, showHistogram, markDirty]);
+    }, [showImageInfo, showHistogram, groupHighlightEnabled, markDirty]);
 
     // ── 选中数量播报 ──
     const selectedCount = useSelectionStore((s) => s.selectedCount);
@@ -1454,6 +1486,76 @@ function getCurrentGroupIndex(
   }
 
   return lo;
+}
+
+/**
+ * 混合判定模式：确定当前"激活"的分组索引。
+ *
+ * - 默认：取视口中心所在分组（而非顶部），匹配用户注视屏幕中央的习惯
+ * - 一旦 hover 激活过某个分组 → 锁定 hover 驱动模式：
+ *   - hover 在图片上 → 激活该图片所属分组
+ *   - hover 在空白区 → 保持上次 hover 激活的分组不变
+ *
+ * @param scrollY 当前视口顶部 Y 坐标
+ * @param viewportHeight 视口高度（px）
+ * @param hoveredHash 当前悬停图片的 hash（可能为 null）
+ * @param canvasItems 可见的 CanvasImageItem 映射表
+ * @param pages 分组页面布局数组
+ * @param hoverHasActivatedRef hover 是否已激活过任一分组（会被函数修改）
+ * @param lastHoveredIdxRef 最近一次 hover 激活的分组索引（会被函数修改）
+ * @returns 激活的分组索引
+ */
+function determineActiveGroupIndex(
+  scrollY: number,
+  viewportHeight: number,
+  hoveredHash: string | null,
+  canvasItems: Map<string, { readonly groupIndex: number; readonly groupId: number }>,
+  pages: { offsetY: number; contentHeight: number; groupId: number }[],
+  hoverHasActivatedRef: { current: boolean },
+  lastHoveredIdxRef: { current: number | null },
+): number {
+  if (pages.length === 0) return 0;
+  if (viewportHeight <= 0) return 0;
+
+  // ── hover 驱动模式 ──
+  if (hoverHasActivatedRef.current) {
+    if (hoveredHash) {
+      const hoveredItem = canvasItems.get(hoveredHash);
+      if (hoveredItem !== undefined) {
+        // hoveredItem.groupId → page index
+        for (let i = 0; i < pages.length; i++) {
+          if (pages[i].groupId === hoveredItem.groupId) {
+            lastHoveredIdxRef.current = i;
+            return i;
+          }
+        }
+      }
+    }
+    // hover 在空白区 → 保持上次激活的分组
+    if (lastHoveredIdxRef.current !== null) {
+      return lastHoveredIdxRef.current;
+    }
+    // fallback（不应到达）
+    return getCurrentGroupIndex(scrollY + viewportHeight / 2, pages);
+  }
+
+  // ── 默认模式：视口中心 + 首次 hover 激活检测 ──
+  if (hoveredHash) {
+    const hoveredItem = canvasItems.get(hoveredHash);
+    if (hoveredItem !== undefined) {
+      for (let i = 0; i < pages.length; i++) {
+        if (pages[i].groupId === hoveredItem.groupId) {
+          hoverHasActivatedRef.current = true;
+          lastHoveredIdxRef.current = i;
+          return i;
+        }
+      }
+    }
+  }
+
+  // 默认：视口中心所在分组
+  const centerY = scrollY + viewportHeight / 2;
+  return getCurrentGroupIndex(centerY, pages);
 }
 
 export default InfiniteCanvas;

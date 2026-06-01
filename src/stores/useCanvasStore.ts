@@ -14,6 +14,9 @@ interface CanvasStoreState {
   /** 是否显示直方图 */
   showHistogram: boolean;
 
+  /** 是否启用分组高亮（非当前组压暗） */
+  groupHighlightEnabled: boolean;
+
   // 纵向滚动分组状态
   /** 当前分组索引 (0-based，由 InfiniteCanvas 根据 scrollY 自动更新) */
   currentGroupIndex: number;
@@ -27,6 +30,8 @@ interface CanvasStoreState {
   toggleDetectionOverlay: () => void;
   toggleImageInfo: () => void;
   toggleHistogram: () => void;
+
+  toggleGroupHighlight: () => void;
 
   // 分组导航 Actions
   setGroupCount: (count: number) => void;
@@ -45,6 +50,7 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
   showDetectionOverlay: false,
   showImageInfo: true,
   showHistogram: false,
+  groupHighlightEnabled: true,
 
   setViewport: (x, y) =>
     set({ viewportX: x, viewportY: y }),
@@ -60,6 +66,9 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
 
   toggleHistogram: () =>
     set((state) => ({ showHistogram: !state.showHistogram })),
+
+  toggleGroupHighlight: () =>
+    set((state) => ({ groupHighlightEnabled: !state.groupHighlightEnabled })),
 
   // ── 分组导航 ──
 
