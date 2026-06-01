@@ -1,0 +1,71 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   Scrollbar — InfiniteCanvas 纵向滚动条样式
+════════════════════════════════════════════════════════════════════════════ */
+
+.scrollbar {
+  position: absolute;
+  right: 2px;
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  z-index: 10;
+  /* 扩大点击/悬停区域的不可见内边距 */
+  padding: 0 4px;
+  box-sizing: border-box;
+}
+
+.track {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  cursor: pointer;
+  /* 轨道背景：极淡的线，仅在 hover 时可见 */
+  border-radius: 4px;
+}
+
+/* 滑块 */
+.thumb {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-radius: 4px;
+  background-color: var(--color-text-muted);
+  opacity: 0;
+  transition:
+    opacity var(--transition-fast),
+    background-color var(--transition-fast);
+  cursor: grab;
+  will-change: transform;
+  /* 最小可触摸区域 */
+  min-height: 32px;
+}
+
+/* 悬停/拖拽时滑块可见 */
+.thumbVisible {
+  opacity: 0.45;
+}
+
+.thumbVisible:hover {
+  opacity: 0.7;
+  background-color: var(--color-text-secondary);
+}
+
+/* 拖拽中 */
+.thumbDragging {
+  opacity: 0.8;
+  background-color: var(--color-text-secondary);
+  cursor: grabbing;
+}
+
+/* ── 暗色主题适配 ── */
+[data-theme='dark'] .thumbVisible {
+  opacity: 0.35;
+}
+
+[data-theme='dark'] .thumbVisible:hover {
+  opacity: 0.6;
+}
+
+[data-theme='dark'] .thumbDragging {
+  opacity: 0.7;
+}

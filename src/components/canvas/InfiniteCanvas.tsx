@@ -38,6 +38,7 @@ import { useSelectionStore } from '../../stores/useSelectionStore';
 import { useThemeStore } from '../../stores/useThemeStore';
 import { Loupe, type LoupeSourceRect } from './Loupe';
 import type { ItemRect } from './Loupe';
+import { Scrollbar } from './Scrollbar';
 import { getCssVarRgb } from '../../utils/cssVars';
 import { easeOutQuart, lerpColorNum } from '../../utils/easing';
 
@@ -1154,6 +1155,18 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
     syncSelectionVisualsRef.current?.();
   }, [selectedCount]);
 
+  // ── 滚动条驱动回调 ──
+  const handleScrollbarScroll = useCallback((y: number) => {
+    scrollYRef.current = clampScrollY(y);
+    // 中断正在进行的滚动动画
+    if (scrollAnimRef.current) {
+      scrollAnimRef.current = null;
+      navigatingToGroupRef.current = null;
+    }
+    updateViewport();
+    markDirty();
+  }, [clampScrollY, updateViewport, markDirty]);
+
   // ── 订阅主题变化（启动 Canvas 背景 + DotBackground 交叉淡入过渡） ──
   const prevThemeRef = useRef<'light' | 'dark' | null>(null);
   useEffect(() => {
@@ -1204,6 +1217,11 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
           width: '100%',
           height: '100%',
         }}
+      />
+      <Scrollbar
+        contentHeight={layout.totalHeight}
+        paddingTop={DEFAULT_LAYOUT_CONFIG.paddingTop}
+        onScrollToY={handleScrollbarScroll}
       />
       <Loupe
         visible={magnifierState.visible}
