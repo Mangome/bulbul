@@ -19,8 +19,10 @@ import { getCssVar } from '../../utils/cssVars';
 
 // ─── 常量 ─────────────────────────────────────────────
 
-/** 占位色块颜色 */
-const PLACEHOLDER_COLOR = '#E0E4EB';
+/** 占位色块颜色 — 从 CSS 变量读取，随主题自动切换 */
+function getPlaceholderColor(): string {
+  return getCssVar('--color-canvas-placeholder') || '#E0E4EB';
+}
 
 /**
  * 画布选中色 — 从 CSS 变量 --color-selection-canvas 读取，
@@ -62,7 +64,10 @@ const getHoverAnimDuration = (): number => {
 const INFO_FONT_SIZE = 11;
 const INFO_FONT_NAME = `600 ${INFO_FONT_SIZE}px system-ui, -apple-system, sans-serif`;
 const INFO_FONT_PARAMS = `400 ${INFO_FONT_SIZE}px system-ui, -apple-system, sans-serif`;
-const INFO_TEXT_COLOR = '#FFFFFF';
+const INFO_TEXT_COLOR_CSS = '--color-text-inverse';
+function getInfoTextColor(): string {
+  return getCssVar(INFO_TEXT_COLOR_CSS) || '#FFFFFF';
+}
 const INFO_TEXT_SECONDARY = 'rgba(255, 255, 255, 0.85)';
 /** 渐变背景高度占图片高度的比例 */
 const INFO_GRADIENT_RATIO = 0.30;
@@ -78,8 +83,14 @@ const STAR_EMPTY = '\u2606';  // ☆
 // ─── 分组角标常量 ─────────────────────────────────────
 
 const GROUP_BADGE_FONT = '700 10px system-ui, -apple-system, sans-serif';
-const GROUP_BADGE_BG = 'rgba(0, 0, 0, 0.55)';
-const GROUP_BADGE_TEXT_COLOR = '#FFFFFF';
+const GROUP_BADGE_BG_CSS = '--color-canvas-badge-bg';
+function getGroupBadgeBg(): string {
+  return getCssVar(GROUP_BADGE_BG_CSS) || 'rgba(0, 0, 0, 0.55)';
+}
+const GROUP_BADGE_TEXT_COLOR_CSS = '--color-text-inverse';
+function getGroupBadgeTextColor(): string {
+  return getCssVar(GROUP_BADGE_TEXT_COLOR_CSS) || '#FFFFFF';
+}
 const GROUP_BADGE_PADDING_X = 8;
 const GROUP_BADGE_PADDING_Y = 4;
 const GROUP_BADGE_OFFSET = 6;
@@ -385,7 +396,7 @@ export class CanvasImageItem {
 
     // 绘制圆角矩形背景
     const r = GROUP_BADGE_RADIUS;
-    ctx.fillStyle = GROUP_BADGE_BG;
+    ctx.fillStyle = getGroupBadgeBg();
     ctx.beginPath();
     ctx.moveTo(r, 0);
     ctx.lineTo(bgWidth - r, 0);
@@ -400,7 +411,7 @@ export class CanvasImageItem {
     ctx.fill();
 
     // 绘制文字（font 已在 measureText 前设置）
-    ctx.fillStyle = GROUP_BADGE_TEXT_COLOR;
+    ctx.fillStyle = getGroupBadgeTextColor();
     ctx.textBaseline = 'middle';
     ctx.fillText(text, GROUP_BADGE_PADDING_X, bgHeight / 2);
 
@@ -409,7 +420,7 @@ export class CanvasImageItem {
 
   /** 绘制占位色块 */
   private _drawPlaceholder(ctx: CanvasRenderingContext2D): void {
-    ctx.fillStyle = PLACEHOLDER_COLOR;
+    ctx.fillStyle = getPlaceholderColor();
     ctx.fillRect(0, 0, this.width, this.height);
   }
 
@@ -447,9 +458,9 @@ export class CanvasImageItem {
     // 绘制渐变背景
     const gradientY = h - gradientContentH;
     const gradient = ctx.createLinearGradient(0, gradientY, 0, h);
-    gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
-    gradient.addColorStop(0.4, 'rgba(0, 0, 0, 0.3)');
-    gradient.addColorStop(1, 'rgba(0, 0, 0, 0.6)');
+    gradient.addColorStop(0, getCssVar('--color-canvas-info-gradient-start') || 'rgba(0, 0, 0, 0)');
+    gradient.addColorStop(0.4, getCssVar('--color-canvas-info-gradient-mid') || 'rgba(0, 0, 0, 0.3)');
+    gradient.addColorStop(1, getCssVar('--color-canvas-info-gradient-end') || 'rgba(0, 0, 0, 0.6)');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, gradientY, w, gradientContentH);
 
@@ -504,14 +515,14 @@ export class CanvasImageItem {
       // 文件名 + 时间行（参数行上方）
       const nameY = paramsY - INFO_FONT_SIZE - INFO_LINE_GAP;
       ctx.font = INFO_FONT_NAME;
-      ctx.fillStyle = INFO_TEXT_COLOR;
+      ctx.fillStyle = getInfoTextColor();
       const truncatedName = CanvasImageItem._truncateText(nameWithTime, maxWidth);
       ctx.fillText(truncatedName, textX, nameY, maxWidth);
     } else {
       // 仅文件名 + 时间
       const nameY = -INFO_PADDING_BOTTOM;
       ctx.font = INFO_FONT_NAME;
-      ctx.fillStyle = INFO_TEXT_COLOR;
+      ctx.fillStyle = getInfoTextColor();
       ctx.textBaseline = 'bottom';
       const truncatedName = CanvasImageItem._truncateText(nameWithTime, maxWidth);
       ctx.fillText(truncatedName, textX, nameY, maxWidth);
@@ -718,7 +729,7 @@ export class CanvasImageItem {
     ctx.shadowOffsetY = 0;
 
     const r = badgeR * invZoom; // 角标半径（内容坐标）
-    ctx.strokeStyle = '#FFFFFF';
+    ctx.strokeStyle = getInfoTextColor();
     ctx.lineWidth = Math.max(1, 1.8 * invZoom);
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';

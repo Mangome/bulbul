@@ -8,7 +8,7 @@
 .overlay {
   position: fixed;
   inset: 0;
-  z-index: 600;
+  z-index: var(--z-index-dialog);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -17,15 +17,15 @@
 .backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(2px);
+  background: var(--overlay-medium);
+  backdrop-filter: blur(var(--blur-xs));
 }
 
 .dialog {
   position: relative;
   width: 300px;
   background: var(--color-bg-primary);
-  border-radius: 14px;
+  border-radius: var(--radius-3xl);
   border: 1px solid var(--color-border);
   box-shadow:
     0 8px 40px rgba(0, 0, 0, 0.12),
@@ -42,7 +42,7 @@
   border-color: var(--color-border);
   box-shadow:
     0 8px 40px rgba(0, 0, 0, 0.5),
-    0 0 0 0.5px rgba(255, 255, 255, 0.06);
+    0 0 0 0.5px var(--color-border-inverse);
 }
 
 /* ─── 交错入场容器 ──────────────────────────────────── */
@@ -66,7 +66,7 @@
 .icon {
   width: 72px;
   height: 72px;
-  border-radius: 16px;
+  border-radius: var(--radius-2xl);
   object-fit: contain;
   position: relative;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
@@ -117,7 +117,7 @@
   align-items: center;
   gap: 12px;
   padding: 10px 4px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
@@ -128,7 +128,7 @@
   justify-content: center;
   width: 30px;
   height: 30px;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--color-primary) 8%, transparent);
   color: var(--color-primary);
   flex-shrink: 0;
@@ -154,7 +154,7 @@
   align-items: center;
   gap: 12px;
   padding: 10px 4px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   background: transparent;

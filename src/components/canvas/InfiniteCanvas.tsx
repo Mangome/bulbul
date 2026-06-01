@@ -18,29 +18,36 @@
 // - W/S → 纵向滚动到上/下一组
 // ============================================================
 
-import { useEffect, useRef, useCallback, useImperativeHandle, forwardRef, useState } from 'react';
-import { DotBackground } from './DotBackground';
-import { CanvasImageItem } from './CanvasImageItem';
-import { ImageLoader } from '../../hooks/useImageLoader';
+import {
+  useEffect,
+  useRef,
+  useCallback,
+  useImperativeHandle,
+  forwardRef,
+  useState,
+} from "react";
+import { DotBackground } from "./DotBackground";
+import { CanvasImageItem } from "./CanvasImageItem";
+import { ImageLoader } from "../../hooks/useImageLoader";
 import {
   getVisibleItems,
   diffVisibleItems,
   type ViewportRect,
-} from '../../utils/viewport';
+} from "../../utils/viewport";
 import {
   DEFAULT_LAYOUT_CONFIG,
   type LayoutResult,
   type LayoutItem,
-} from '../../utils/layout';
-import type { ImageMetadata } from '../../types';
-import { useCanvasStore } from '../../stores/useCanvasStore';
-import { useSelectionStore } from '../../stores/useSelectionStore';
-import { useThemeStore } from '../../stores/useThemeStore';
-import { Loupe, type LoupeSourceRect } from './Loupe';
-import type { ItemRect } from './Loupe';
-import { Scrollbar } from './Scrollbar';
-import { getCssVarRgb } from '../../utils/cssVars';
-import { easeOutQuart, lerpColorNum } from '../../utils/easing';
+} from "../../utils/layout";
+import type { ImageMetadata } from "../../types";
+import { useCanvasStore } from "../../stores/useCanvasStore";
+import { useSelectionStore } from "../../stores/useSelectionStore";
+import { useThemeStore } from "../../stores/useThemeStore";
+import { Loupe, type LoupeSourceRect } from "./Loupe";
+import type { ItemRect } from "./Loupe";
+import { Scrollbar } from "./Scrollbar";
+import { getCssVar, getCssVarRgb } from "../../utils/cssVars";
+import { easeOutQuart, lerpColorNum } from "../../utils/easing";
 
 // ─── 常量 ─────────────────────────────────────────────
 
@@ -48,21 +55,39 @@ import { easeOutQuart, lerpColorNum } from '../../utils/easing';
 const LONG_PRESS_DELAY = 300;
 /** 长按期间允许的最大移动距离（px），超过则视为拖动 */
 const LONG_PRESS_MOVE_THRESHOLD = 10;
-const BG_COLOR_LIGHT = '#FFFFFF';
-const BG_COLOR_DARK = '#000000';
-const BG_COLOR_LIGHT_NUM = 0xFFFFFF;
+/** 画布背景色 — 从 CSS 变量读取，随主题自动切换 */
+const BG_COLOR_LIGHT = "#FFFFFF";
+const BG_COLOR_DARK = "#000000";
+const BG_COLOR_LIGHT_NUM = 0xffffff;
 const BG_COLOR_DARK_NUM = 0x000000;
+
+/** 从 CSS 变量获取画布背景色，带回退 */
+function getCanvasBgColor(theme: "light" | "dark"): string {
+  return (
+    getCssVar("--color-canvas-bg") ||
+    (theme === "light" ? BG_COLOR_LIGHT : BG_COLOR_DARK)
+  );
+}
+
+/** 从 CSS 变量获取画布背景色数值（用于颜色插值动画） */
+function getCanvasBgColorNum(theme: "light" | "dark"): number {
+  const hex = getCssVar("--color-canvas-bg");
+  if (hex && hex.startsWith("#") && hex.length === 7) {
+    return parseInt(hex.slice(1), 16);
+  }
+  return theme === "light" ? BG_COLOR_LIGHT_NUM : BG_COLOR_DARK_NUM;
+}
 /** 分组导航时，首图顶部预留的呼吸空间 (px) */
 const SCROLL_GROUP_PADDING = 50;
 const SCROLL_ANIMATION_MS =
-  typeof window !== 'undefined' &&
-  window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  typeof window !== "undefined" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches
     ? 0
     : 400;
 /** 主题切换过渡时长（ms），与 DOM 层 body transition 同步 */
 const THEME_TRANSITION_MS =
-  typeof window !== 'undefined' &&
-  window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  typeof window !== "undefined" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches
     ? 0
     : 300;
 
@@ -96,244 +121,265 @@ export interface InfiniteCanvasHandle {
 
 // ─── Component ────────────────────────────────────────
 
-const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({
-  layout,
-  fileNames,
-  metadataMap,
-}, ref) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
-  const bgLayerRef = useRef<DotBackground | null>(null);
-  const imageLoaderRef = useRef<ImageLoader | null>(null);
-  const visibleItemsRef = useRef<LayoutItem[]>([]);
-  const canvasItemsRef = useRef<Map<string, CanvasImageItem>>(new Map());
+const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
+  function InfiniteCanvas({ layout, fileNames, metadataMap }, ref) {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
+    const bgLayerRef = useRef<DotBackground | null>(null);
+    const imageLoaderRef = useRef<ImageLoader | null>(null);
+    const visibleItemsRef = useRef<LayoutItem[]>([]);
+    const canvasItemsRef = useRef<Map<string, CanvasImageItem>>(new Map());
 
-  // Canvas 尺寸（CSS 像素）
-  const screenWidthRef = useRef(0);
-  const screenHeightRef = useRef(0);
-  const dprRef = useRef(1);
+    // Canvas 尺寸（CSS 像素）
+    const screenWidthRef = useRef(0);
+    const screenHeightRef = useRef(0);
+    const dprRef = useRef(1);
 
-  // Dirty flag + rAF
-  const dirtyRef = useRef(true);
-  const rafIdRef = useRef(0);
-  const destroyedRef = useRef(false);
+    // Dirty flag + rAF
+    const dirtyRef = useRef(true);
+    const rafIdRef = useRef(0);
+    const destroyedRef = useRef(false);
 
-  // ── 选中状态同步 fn ref（在 effect 内赋值） ──
-  const syncSelectionVisualsRef = useRef<(() => void) | null>(null);
+    // ── 选中状态同步 fn ref（在 effect 内赋值） ──
+    const syncSelectionVisualsRef = useRef<(() => void) | null>(null);
 
-  // ── 用 ref 持有最新的 fileNames / metadataMap ──
-  const fileNamesRef = useRef(fileNames);
-  fileNamesRef.current = fileNames;
-  const metadataMapRef = useRef(metadataMap);
-  metadataMapRef.current = metadataMap;
+    // ── 用 ref 持有最新的 fileNames / metadataMap ──
+    const fileNamesRef = useRef(fileNames);
+    fileNamesRef.current = fileNames;
+    const metadataMapRef = useRef(metadataMap);
+    metadataMapRef.current = metadataMap;
 
-  // ── 用 ref 持有最新的 layout ──
-  const layoutRef = useRef(layout);
-  layoutRef.current = layout;
+    // ── 用 ref 持有最新的 layout ──
+    const layoutRef = useRef(layout);
+    layoutRef.current = layout;
 
-  // ── 纵向滚动状态 ──
-  const scrollYRef = useRef(0);
+    // ── 纵向滚动状态 ──
+    const scrollYRef = useRef(0);
 
-  // ── Pointer press state (用于区分点击 vs 图片上长按/拖拽放大镜) ──
-  const isPointerDownRef = useRef(false);
-  const pointerStartRef = useRef({ x: 0, y: 0 });
-  const hasDraggedRef = useRef(false);
-  /** 按下时是否命中了图片 */
-  const pressedOnImageRef = useRef<{ hash: string; itemRect: ItemRect } | null>(null);
-  /** 当前悬停的图片 hash（用于 hover 进/出判定） */
-  const hoveredHashRef = useRef<string | null>(null);
-  /** 长按定时器 ID */
-  const longPressTimerRef = useRef<number | null>(null);
-  /** 长按是否已激活（放大镜正在显示） */
-  const longPressActivatedRef = useRef(false);
+    // ── Pointer press state (用于区分点击 vs 图片上长按/拖拽放大镜) ──
+    const isPointerDownRef = useRef(false);
+    const pointerStartRef = useRef({ x: 0, y: 0 });
+    const hasDraggedRef = useRef(false);
+    /** 按下时是否命中了图片 */
+    const pressedOnImageRef = useRef<{
+      hash: string;
+      itemRect: ItemRect;
+    } | null>(null);
+    /** 当前悬停的图片 hash（用于 hover 进/出判定） */
+    const hoveredHashRef = useRef<string | null>(null);
+    /** 长按定时器 ID */
+    const longPressTimerRef = useRef<number | null>(null);
+    /** 长按是否已激活（放大镜正在显示） */
+    const longPressActivatedRef = useRef(false);
 
-  // ── 分组导航锁定（动画期间禁止 updateViewport 覆盖 currentGroupIndex） ──
-  const navigatingToGroupRef = useRef<number | null>(null);
+    // ── 分组导航锁定（动画期间禁止 updateViewport 覆盖 currentGroupIndex） ──
+    const navigatingToGroupRef = useRef<number | null>(null);
 
-  // ── 滚动动画状态 ──
-  const scrollAnimRef = useRef<{
-    startTime: number;
-    startScrollY: number;
-    targetScrollY: number;
-  } | null>(null);
+    // ── 滚动动画状态 ──
+    const scrollAnimRef = useRef<{
+      startTime: number;
+      startScrollY: number;
+      targetScrollY: number;
+    } | null>(null);
 
-  // ── 主题过渡动画状态（rAF 驱动，Canvas 背景色 + DotBackground 交叉淡入） ──
-  const themeTransitionRef = useRef<{
-    startTime: number;
-    fromTheme: 'light' | 'dark';
-    toTheme: 'light' | 'dark';
-  } | null>(null);
+    // ── 主题过渡动画状态（rAF 驱动，Canvas 背景色 + DotBackground 交叉淡入） ──
+    const themeTransitionRef = useRef<{
+      startTime: number;
+      fromTheme: "light" | "dark";
+      toTheme: "light" | "dark";
+    } | null>(null);
 
-  // ── Magnifier 状态 ──
-  const [magnifierState, setMagnifierState] = useState<{
-    visible: boolean;
-    hash: string | null;
-    mouseX: number;
-    mouseY: number;
-    itemRect: ItemRect | null;
-  }>({ visible: false, hash: null, mouseX: 0, mouseY: 0, itemRect: null });
+    // ── Magnifier 状态 ──
+    const [magnifierState, setMagnifierState] = useState<{
+      visible: boolean;
+      hash: string | null;
+      mouseX: number;
+      mouseY: number;
+      itemRect: ItemRect | null;
+    }>({ visible: false, hash: null, mouseX: 0, mouseY: 0, itemRect: null });
 
-  // ── 放大镜区域方框（由 Loupe 回调设置，renderFrame 中绘制） ──
-  const loupeSourceRectRef = useRef<LoupeSourceRect | null>(null);
+    // ── 放大镜区域方框（由 Loupe 回调设置，renderFrame 中绘制） ──
+    const loupeSourceRectRef = useRef<LoupeSourceRect | null>(null);
 
-  // ── 放大镜首次使用提示 ──
-  const LOUPE_HINT_KEY = 'bulbul-loupe-hint-dismissed';
-  const [loupeHintVisible, setLoupeHintVisible] = useState(() => !localStorage.getItem(LOUPE_HINT_KEY));
-  const loupeHintPosRef = useRef<{ x: number; y: number } | null>(null);
-  const loupeHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // ── wheel 事件 throttle ──
-  const lastWheelUpdateTimeRef = useRef<number>(0);
-  const WHEEL_THROTTLE_MS = 16;
-
-  // Store sync
-  const showDetectionOverlay = useCanvasStore((s) => s.showDetectionOverlay);
-  const showImageInfo = useCanvasStore((s) => s.showImageInfo);
-  const showHistogram = useCanvasStore((s) => s.showHistogram);
-  const currentGroupIndex = useCanvasStore((s) => s.currentGroupIndex);
-  const setViewport = useCanvasStore((s) => s.setViewport);
-  const setViewportRect = useCanvasStore((s) => s.setViewportRect);
-
-  // ─── Canvas 初始化与 DPR ──────────────────────────────
-
-  /** 设置 Canvas 物理分辨率 + DPR */
-  const setupCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    const container = containerRef.current;
-    if (!canvas || !container) return null;
-
-    const dpr = window.devicePixelRatio || 1;
-    const rect = container.getBoundingClientRect();
-    const w = rect.width;
-    const h = rect.height;
-
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
-    canvas.style.width = w + 'px';
-    canvas.style.height = h + 'px';
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-    ctx.scale(dpr, dpr);
-
-    screenWidthRef.current = w;
-    screenHeightRef.current = h;
-    dprRef.current = dpr;
-    ctxRef.current = ctx;
-
-    return ctx;
-  }, []);
-
-  // ─── Dirty Flag 机制 ──────────────────────────────────
-
-  const markDirty = useCallback(() => {
-    if (destroyedRef.current) return;
-    if (dirtyRef.current) return;
-    dirtyRef.current = true;
-    cancelAnimationFrame(rafIdRef.current);
-    rafIdRef.current = requestAnimationFrame(renderFrame);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // ─── 坐标计算辅助 ────────────────────────────────────
-
-  const getMaxScrollY = useCallback((): number => {
-    const currentLayout = layoutRef.current;
-    const screenHeight = screenHeightRef.current;
-    // offsetY = -scrollY + paddingTop，所以可见底边 = scrollY + screenHeight - paddingTop
-    // 滚到底时 scrollY + screenHeight - paddingTop = totalHeight
-    return Math.max(0, currentLayout.totalHeight + DEFAULT_LAYOUT_CONFIG.paddingTop - screenHeight);
-  }, []);
-
-  const clampScrollY = useCallback((y: number): number => {
-    return Math.max(0, Math.min(y, getMaxScrollY()));
-  }, [getMaxScrollY]);
-
-  // ─── 视口更新 ────────────────────────────────────────
-
-  const updateViewport = useCallback(() => {
-    const scrollY = scrollYRef.current;
-    const screenWidth = screenWidthRef.current;
-    const screenHeight = screenHeightRef.current;
-
-    const viewport: ViewportRect = {
-      x: 0,
-      y: scrollY,
-      width: screenWidth,
-      height: screenHeight,
-    };
-
-    setViewport(0, scrollY);
-    setViewportRect(viewport);
-
-    const currentLayout = layoutRef.current;
-    if (!currentLayout.pages || currentLayout.pages.length === 0) return;
-
-    const newVisible = getVisibleItems(
-      currentLayout.pages,
-      0, // pageWidth 在纵向模式下不使用
-      viewport,
+    // ── 放大镜首次使用提示 ──
+    const LOUPE_HINT_KEY = "bulbul-loupe-hint-dismissed";
+    const [loupeHintVisible, setLoupeHintVisible] = useState(
+      () => !localStorage.getItem(LOUPE_HINT_KEY),
     );
-    const prevVisible = visibleItemsRef.current;
-    const diff = diffVisibleItems(prevVisible, newVisible);
+    const loupeHintPosRef = useRef<{ x: number; y: number } | null>(null);
+    const loupeHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+      null,
+    );
 
-    // 处理离开视口的元素
-    for (const item of diff.leave) {
-      const canvasItem = canvasItemsRef.current.get(item.hash);
-      if (canvasItem) {
-        canvasItem.destroy();
-        canvasItemsRef.current.delete(item.hash);
-        imageLoaderRef.current?.unpinImage(item.hash);
+    // ── wheel 事件 throttle ──
+    const lastWheelUpdateTimeRef = useRef<number>(0);
+    const WHEEL_THROTTLE_MS = 16;
+
+    // Store sync
+    const showDetectionOverlay = useCanvasStore((s) => s.showDetectionOverlay);
+    const showImageInfo = useCanvasStore((s) => s.showImageInfo);
+    const showHistogram = useCanvasStore((s) => s.showHistogram);
+    const currentGroupIndex = useCanvasStore((s) => s.currentGroupIndex);
+    const setViewport = useCanvasStore((s) => s.setViewport);
+    const setViewportRect = useCanvasStore((s) => s.setViewportRect);
+
+    // ─── Canvas 初始化与 DPR ──────────────────────────────
+
+    /** 设置 Canvas 物理分辨率 + DPR */
+    const setupCanvas = useCallback(() => {
+      const canvas = canvasRef.current;
+      const container = containerRef.current;
+      if (!canvas || !container) return null;
+
+      const dpr = window.devicePixelRatio || 1;
+      const rect = container.getBoundingClientRect();
+      const w = rect.width;
+      const h = rect.height;
+
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = w + "px";
+      canvas.style.height = h + "px";
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+      ctx.scale(dpr, dpr);
+
+      screenWidthRef.current = w;
+      screenHeightRef.current = h;
+      dprRef.current = dpr;
+      ctxRef.current = ctx;
+
+      return ctx;
+    }, []);
+
+    // ─── Dirty Flag 机制 ──────────────────────────────────
+
+    const markDirty = useCallback(() => {
+      if (destroyedRef.current) return;
+      if (dirtyRef.current) return;
+      dirtyRef.current = true;
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = requestAnimationFrame(renderFrame);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // ─── 坐标计算辅助 ────────────────────────────────────
+
+    const getMaxScrollY = useCallback((): number => {
+      const currentLayout = layoutRef.current;
+      const screenHeight = screenHeightRef.current;
+      // offsetY = -scrollY + paddingTop，所以可见底边 = scrollY + screenHeight - paddingTop
+      // 滚到底时 scrollY + screenHeight - paddingTop = totalHeight
+      return Math.max(
+        0,
+        currentLayout.totalHeight +
+          DEFAULT_LAYOUT_CONFIG.paddingTop -
+          screenHeight,
+      );
+    }, []);
+
+    const clampScrollY = useCallback(
+      (y: number): number => {
+        return Math.max(0, Math.min(y, getMaxScrollY()));
+      },
+      [getMaxScrollY],
+    );
+
+    // ─── 视口更新 ────────────────────────────────────────
+
+    const updateViewport = useCallback(() => {
+      const scrollY = scrollYRef.current;
+      const screenWidth = screenWidthRef.current;
+      const screenHeight = screenHeightRef.current;
+
+      const viewport: ViewportRect = {
+        x: 0,
+        y: scrollY,
+        width: screenWidth,
+        height: screenHeight,
+      };
+
+      setViewport(0, scrollY);
+      setViewportRect(viewport);
+
+      const currentLayout = layoutRef.current;
+      if (!currentLayout.pages || currentLayout.pages.length === 0) return;
+
+      const newVisible = getVisibleItems(
+        currentLayout.pages,
+        0, // pageWidth 在纵向模式下不使用
+        viewport,
+      );
+      const prevVisible = visibleItemsRef.current;
+      const diff = diffVisibleItems(prevVisible, newVisible);
+
+      // 处理离开视口的元素
+      for (const item of diff.leave) {
+        const canvasItem = canvasItemsRef.current.get(item.hash);
+        if (canvasItem) {
+          canvasItem.destroy();
+          canvasItemsRef.current.delete(item.hash);
+          imageLoaderRef.current?.unpinImage(item.hash);
+        }
+        // 被销毁的项若是当前悬停项，清除悬停引用
+        if (hoveredHashRef.current === item.hash) {
+          hoveredHashRef.current = null;
+        }
       }
-      // 被销毁的项若是当前悬停项，清除悬停引用
-      if (hoveredHashRef.current === item.hash) {
-        hoveredHashRef.current = null;
-      }
-    }
 
-    // 处理进入视口的元素
-    const imageLoader = imageLoaderRef.current;
+      // 处理进入视口的元素
+      const imageLoader = imageLoaderRef.current;
 
-    for (const item of diff.enter) {
-      if (canvasItemsRef.current.has(item.hash)) continue;
+      for (const item of diff.enter) {
+        if (canvasItemsRef.current.has(item.hash)) continue;
 
-      const canvasItem = new CanvasImageItem(item);
-      const fileName = fileNamesRef.current.get(item.hash) ?? item.hash;
-      const meta = metadataMapRef.current.get(item.hash);
-      canvasItem.setImageInfo(fileName, meta);
+        const canvasItem = new CanvasImageItem(item);
+        const fileName = fileNamesRef.current.get(item.hash) ?? item.hash;
+        const meta = metadataMapRef.current.get(item.hash);
+        canvasItem.setImageInfo(fileName, meta);
 
-      // 同步选中 + 检测框状态
-      const { selectedHashes } = useSelectionStore.getState();
-      const { showDetectionOverlay: showOverlay } = useCanvasStore.getState();
-      if (showOverlay) {
-        const bboxes = meta?.detectionBboxes ?? [];
-        canvasItem.setDetectionBoxes(bboxes);
-        canvasItem.setDetectionVisible(bboxes.length > 0);
-      }
+        // 同步选中 + 检测框状态
+        const { selectedHashes } = useSelectionStore.getState();
+        const { showDetectionOverlay: showOverlay } = useCanvasStore.getState();
+        if (showOverlay) {
+          const bboxes = meta?.detectionBboxes ?? [];
+          canvasItem.setDetectionBoxes(bboxes);
+          canvasItem.setDetectionVisible(bboxes.length > 0);
+        }
 
-      // 同步直方图数据
-      if (meta?.histogramR && meta.histogramR.length > 0) {
-        canvasItem.setHistogram(meta.histogramR, meta.histogramG, meta.histogramB);
-      }
+        // 同步直方图数据
+        if (meta?.histogramR && meta.histogramR.length > 0) {
+          canvasItem.setHistogram(
+            meta.histogramR,
+            meta.histogramG,
+            meta.histogramB,
+          );
+        }
 
-      canvasItem.setSelected(selectedHashes.has(item.hash));
-      canvasItem.alpha = 1;
+        canvasItem.setSelected(selectedHashes.has(item.hash));
+        canvasItem.alpha = 1;
 
-      canvasItemsRef.current.set(item.hash, canvasItem);
-      imageLoader?.pinImage(item.hash);
+        canvasItemsRef.current.set(item.hash, canvasItem);
+        imageLoader?.pinImage(item.hash);
 
-      if (imageLoader) {
-        imageLoader
-          .loadImage(item.hash, item.width)
-          .then((result) => {
-            if (!result || destroyedRef.current || !imageLoaderRef.current) return;
-            if (!imageLoaderRef.current.getCache().isImageValid(result.key, result.version)) return;
+        if (imageLoader) {
+          imageLoader.loadImage(item.hash, item.width).then((result) => {
+            if (!result || destroyedRef.current || !imageLoaderRef.current)
+              return;
+            if (
+              !imageLoaderRef.current
+                .getCache()
+                .isImageValid(result.key, result.version)
+            )
+              return;
             const ci = canvasItemsRef.current.get(item.hash);
             if (ci) {
               const itemMeta = metadataMapRef.current.get(item.hash);
               ci.setImage(result.image, itemMeta?.orientation ?? 1);
-              const { showDetectionOverlay: showOverlay } = useCanvasStore.getState();
+              const { showDetectionOverlay: showOverlay } =
+                useCanvasStore.getState();
               if (showOverlay) {
                 const bboxes = itemMeta?.detectionBboxes ?? [];
                 ci.setDetectionBoxes(bboxes);
@@ -342,209 +388,229 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
               markDirty();
             }
           });
+        }
       }
-    }
 
-    visibleItemsRef.current = newVisible;
+      visibleItemsRef.current = newVisible;
 
-    // 更新当前分组索引：仅当当前分组完全离开视口时才切换
-    if (navigatingToGroupRef.current === null) {
-      const storeState = useCanvasStore.getState();
-      const currentPage = currentLayout.pages[storeState.currentGroupIndex];
+      // 更新当前分组索引：仅当当前分组完全离开视口时才切换
+      if (navigatingToGroupRef.current === null) {
+        const storeState = useCanvasStore.getState();
+        const currentPage = currentLayout.pages[storeState.currentGroupIndex];
 
-      // 当前分组仍有图片在视口内 → 保持不变
-      if (currentPage && currentPage.items.length > 0) {
-        const pageTop = currentPage.offsetY;
-        const pageBottom = currentPage.offsetY + currentPage.contentHeight;
-        const viewTop = scrollY;
-        const viewBottom = scrollY + screenHeightRef.current;
-        const stillVisible = pageBottom > viewTop && pageTop < viewBottom;
-        if (stillVisible) {
-          // 当前分组仍可见，不切换
+        // 当前分组仍有图片在视口内 → 保持不变
+        if (currentPage && currentPage.items.length > 0) {
+          const pageTop = currentPage.offsetY;
+          const pageBottom = currentPage.offsetY + currentPage.contentHeight;
+          const viewTop = scrollY;
+          const viewBottom = scrollY + screenHeightRef.current;
+          const stillVisible = pageBottom > viewTop && pageTop < viewBottom;
+          if (stillVisible) {
+            // 当前分组仍可见，不切换
+          } else {
+            // 当前分组已完全滚出视口，用二分查找定位新分组
+            const newGroupIdx = getCurrentGroupIndex(
+              scrollY,
+              currentLayout.pages,
+            );
+            if (storeState.currentGroupIndex !== newGroupIdx) {
+              internalGroupUpdateRef.current = true;
+              useCanvasStore.setState({ currentGroupIndex: newGroupIdx });
+            }
+          }
         } else {
-          // 当前分组已完全滚出视口，用二分查找定位新分组
-          const newGroupIdx = getCurrentGroupIndex(scrollY, currentLayout.pages);
+          // 当前分组为空或无效，直接二分查找
+          const newGroupIdx = getCurrentGroupIndex(
+            scrollY,
+            currentLayout.pages,
+          );
           if (storeState.currentGroupIndex !== newGroupIdx) {
             internalGroupUpdateRef.current = true;
             useCanvasStore.setState({ currentGroupIndex: newGroupIdx });
           }
         }
+      }
+    }, [setViewport, setViewportRect, markDirty]);
+
+    // ─── 选中同步 ──────────────────────────────────────────
+
+    const syncSelectionVisuals = useCallback(() => {
+      const { selectedHashes } = useSelectionStore.getState();
+      for (const [hash, item] of canvasItemsRef.current) {
+        item.setSelected(selectedHashes.has(hash));
+      }
+      markDirty();
+    }, [markDirty]);
+
+    // ─── 渲染帧 ──────────────────────────────────────────
+
+    // renderFrame 作为闭包定义，通过 ref 引用
+    function renderFrame() {
+      if (destroyedRef.current) return;
+      if (!dirtyRef.current) return;
+      dirtyRef.current = false;
+
+      const ctx = ctxRef.current;
+      if (!ctx) return;
+
+      const screenW = screenWidthRef.current;
+      const screenH = screenHeightRef.current;
+      const dpr = dprRef.current;
+      const now = performance.now();
+
+      // ── 处理滚动动画 ──
+      const scrollAnim = scrollAnimRef.current;
+      if (scrollAnim) {
+        const elapsed = now - scrollAnim.startTime;
+        const duration = SCROLL_ANIMATION_MS;
+        const progress = Math.min(elapsed / duration, 1);
+        const eased = easeOutQuart(progress);
+
+        scrollYRef.current =
+          scrollAnim.startScrollY +
+          (scrollAnim.targetScrollY - scrollAnim.startScrollY) * eased;
+
+        if (progress >= 1) {
+          scrollAnimRef.current = null;
+          scrollYRef.current = scrollAnim.targetScrollY;
+          // 导航动画结束，解锁分组索引自动检测
+          navigatingToGroupRef.current = null;
+        }
+
+        updateViewport();
+      }
+
+      // 重置变换（DPR scale 已在 setupCanvas 中设置）
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      // 1. 清空 Canvas + 背景色（支持主题过渡）
+      const themeTransition = themeTransitionRef.current;
+      let bgColorStr: string;
+      let dotProgress = 1;
+      let themeTransitionActive = false;
+
+      if (themeTransition && THEME_TRANSITION_MS > 0) {
+        const elapsed = now - themeTransition.startTime;
+        const progress = Math.min(elapsed / THEME_TRANSITION_MS, 1);
+        const eased = easeOutQuart(progress);
+        const fromNum = getCanvasBgColorNum(themeTransition.fromTheme);
+        const toNum = getCanvasBgColorNum(themeTransition.toTheme);
+        const interp = lerpColorNum(fromNum, toNum, eased);
+        bgColorStr = "#" + interp.toString(16).padStart(6, "0");
+        dotProgress = eased;
+
+        if (progress >= 1) {
+          // 过渡结束：清理旧 pattern，重置状态
+          themeTransitionRef.current = null;
+          bgLayerRef.current?.clearPrevious();
+        } else {
+          themeTransitionActive = true;
+        }
       } else {
-        // 当前分组为空或无效，直接二分查找
-        const newGroupIdx = getCurrentGroupIndex(scrollY, currentLayout.pages);
-        if (storeState.currentGroupIndex !== newGroupIdx) {
-          internalGroupUpdateRef.current = true;
-          useCanvasStore.setState({ currentGroupIndex: newGroupIdx });
+        const theme = useThemeStore.getState().theme;
+        bgColorStr = getCanvasBgColor(theme);
+      }
+
+      ctx.fillStyle = bgColorStr;
+      ctx.fillRect(0, 0, screenW, screenH);
+
+      // 2. 绘制波点背景（固定视口坐标）
+      const bgLayer = bgLayerRef.current;
+      if (bgLayer) {
+        bgLayer.draw(ctx, screenW, screenH, dotProgress);
+      }
+
+      // 主题过渡期间持续请求下一帧（即使无其他动画）
+      if (themeTransitionActive) {
+        // renderFrame 末尾 needsNextFrame 会处理，此处标记
+      }
+
+      // 3. 应用内容坐标变换
+      const scrollY = scrollYRef.current;
+      const offsetY = -scrollY + DEFAULT_LAYOUT_CONFIG.paddingTop;
+
+      ctx.save();
+      ctx.translate(0, offsetY);
+
+      // 3a. 绘制所有可见 CanvasImageItem（含分组角标）
+      let needsNextFrame = false;
+      const itemsToReload: CanvasImageItem[] = [];
+      for (const item of canvasItemsRef.current.values()) {
+        const { showImageInfo: curShowInfo, showHistogram: curShowHist } =
+          useCanvasStore.getState();
+        const itemNeedsFrame = item.draw(ctx, 1, now, curShowInfo, curShowHist);
+        needsNextFrame = needsNextFrame || itemNeedsFrame;
+        if (item.needsReload) {
+          itemsToReload.push(item);
         }
       }
-    }
-  }, [setViewport, setViewportRect, markDirty]);
 
-  // ─── 选中同步 ──────────────────────────────────────────
-
-  const syncSelectionVisuals = useCallback(() => {
-    const { selectedHashes } = useSelectionStore.getState();
-    for (const [hash, item] of canvasItemsRef.current) {
-      item.setSelected(selectedHashes.has(hash));
-    }
-    markDirty();
-  }, [markDirty]);
-
-  // ─── 渲染帧 ──────────────────────────────────────────
-
-  // renderFrame 作为闭包定义，通过 ref 引用
-  function renderFrame() {
-    if (destroyedRef.current) return;
-    if (!dirtyRef.current) return;
-    dirtyRef.current = false;
-
-    const ctx = ctxRef.current;
-    if (!ctx) return;
-
-    const screenW = screenWidthRef.current;
-    const screenH = screenHeightRef.current;
-    const dpr = dprRef.current;
-    const now = performance.now();
-
-    // ── 处理滚动动画 ──
-    const scrollAnim = scrollAnimRef.current;
-    if (scrollAnim) {
-      const elapsed = now - scrollAnim.startTime;
-      const duration = SCROLL_ANIMATION_MS;
-      const progress = Math.min(elapsed / duration, 1);
-      const eased = easeOutQuart(progress);
-
-      scrollYRef.current = scrollAnim.startScrollY + (scrollAnim.targetScrollY - scrollAnim.startScrollY) * eased;
-
-      if (progress >= 1) {
-        scrollAnimRef.current = null;
-        scrollYRef.current = scrollAnim.targetScrollY;
-        // 导航动画结束，解锁分组索引自动检测
-        navigatingToGroupRef.current = null;
+      // 3c. 绘制放大镜区域方框（在缩略图上标识放大区域）
+      const sourceRect = loupeSourceRectRef.current;
+      if (sourceRect) {
+        ctx.save();
+        // 外框：画布选中色半透明填充 + 粗边框
+        const [sr, sg, sb] = getCssVarRgb("--color-selection-canvas-rgb");
+        ctx.fillStyle = `rgba(${sr}, ${sg}, ${sb}, 0.08)`;
+        ctx.fillRect(sourceRect.x, sourceRect.y, sourceRect.w, sourceRect.h);
+        ctx.strokeStyle = `rgba(${sr}, ${sg}, ${sb}, 0.7)`;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(sourceRect.x, sourceRect.y, sourceRect.w, sourceRect.h);
+        // 四角高亮标记（L 形角标）
+        const cornerLen = Math.min(12, sourceRect.w / 4, sourceRect.h / 4);
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        // 左上
+        ctx.moveTo(sourceRect.x, sourceRect.y + cornerLen);
+        ctx.lineTo(sourceRect.x, sourceRect.y);
+        ctx.lineTo(sourceRect.x + cornerLen, sourceRect.y);
+        // 右上
+        ctx.moveTo(sourceRect.x + sourceRect.w - cornerLen, sourceRect.y);
+        ctx.lineTo(sourceRect.x + sourceRect.w, sourceRect.y);
+        ctx.lineTo(sourceRect.x + sourceRect.w, sourceRect.y + cornerLen);
+        // 右下
+        ctx.moveTo(
+          sourceRect.x + sourceRect.w,
+          sourceRect.y + sourceRect.h - cornerLen,
+        );
+        ctx.lineTo(sourceRect.x + sourceRect.w, sourceRect.y + sourceRect.h);
+        ctx.lineTo(
+          sourceRect.x + sourceRect.w - cornerLen,
+          sourceRect.y + sourceRect.h,
+        );
+        // 左下
+        ctx.moveTo(sourceRect.x + cornerLen, sourceRect.y + sourceRect.h);
+        ctx.lineTo(sourceRect.x, sourceRect.y + sourceRect.h);
+        ctx.lineTo(sourceRect.x, sourceRect.y + sourceRect.h - cornerLen);
+        ctx.stroke();
+        ctx.restore();
       }
 
-      updateViewport();
-    }
-
-    // 重置变换（DPR scale 已在 setupCanvas 中设置）
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    // 1. 清空 Canvas + 背景色（支持主题过渡）
-    const themeTransition = themeTransitionRef.current;
-    let bgColorStr: string;
-    let dotProgress = 1;
-    let themeTransitionActive = false;
-
-    if (themeTransition && THEME_TRANSITION_MS > 0) {
-      const elapsed = now - themeTransition.startTime;
-      const progress = Math.min(elapsed / THEME_TRANSITION_MS, 1);
-      const eased = easeOutQuart(progress);
-      const fromNum = themeTransition.fromTheme === 'light' ? BG_COLOR_LIGHT_NUM : BG_COLOR_DARK_NUM;
-      const toNum = themeTransition.toTheme === 'light' ? BG_COLOR_LIGHT_NUM : BG_COLOR_DARK_NUM;
-      const interp = lerpColorNum(fromNum, toNum, eased);
-      bgColorStr = '#' + interp.toString(16).padStart(6, '0');
-      dotProgress = eased;
-
-      if (progress >= 1) {
-        // 过渡结束：清理旧 pattern，重置状态
-        themeTransitionRef.current = null;
-        bgLayerRef.current?.clearPrevious();
-      } else {
-        themeTransitionActive = true;
-      }
-    } else {
-      const theme = useThemeStore.getState().theme;
-      bgColorStr = theme === 'light' ? BG_COLOR_LIGHT : BG_COLOR_DARK;
-    }
-
-    ctx.fillStyle = bgColorStr;
-    ctx.fillRect(0, 0, screenW, screenH);
-
-    // 2. 绘制波点背景（固定视口坐标）
-    const bgLayer = bgLayerRef.current;
-    if (bgLayer) {
-      bgLayer.draw(ctx, screenW, screenH, dotProgress);
-    }
-
-    // 主题过渡期间持续请求下一帧（即使无其他动画）
-    if (themeTransitionActive) {
-      // renderFrame 末尾 needsNextFrame 会处理，此处标记
-    }
-
-    // 3. 应用内容坐标变换
-    const scrollY = scrollYRef.current;
-    const offsetY = -scrollY + DEFAULT_LAYOUT_CONFIG.paddingTop;
-
-    ctx.save();
-    ctx.translate(0, offsetY);
-
-    // 3a. 绘制所有可见 CanvasImageItem（含分组角标）
-    let needsNextFrame = false;
-    const itemsToReload: CanvasImageItem[] = [];
-    for (const item of canvasItemsRef.current.values()) {
-      const { showImageInfo: curShowInfo, showHistogram: curShowHist } = useCanvasStore.getState();
-      const itemNeedsFrame = item.draw(ctx, 1, now, curShowInfo, curShowHist);
-      needsNextFrame = needsNextFrame || itemNeedsFrame;
-      if (item.needsReload) {
-        itemsToReload.push(item);
-      }
-    }
-
-    // 3c. 绘制放大镜区域方框（在缩略图上标识放大区域）
-    const sourceRect = loupeSourceRectRef.current;
-    if (sourceRect) {
-      ctx.save();
-      // 外框：画布选中色半透明填充 + 粗边框
-      const [sr, sg, sb] = getCssVarRgb('--color-selection-canvas-rgb');
-      ctx.fillStyle = `rgba(${sr}, ${sg}, ${sb}, 0.08)`;
-      ctx.fillRect(sourceRect.x, sourceRect.y, sourceRect.w, sourceRect.h);
-      ctx.strokeStyle = `rgba(${sr}, ${sg}, ${sb}, 0.7)`;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(sourceRect.x, sourceRect.y, sourceRect.w, sourceRect.h);
-      // 四角高亮标记（L 形角标）
-      const cornerLen = Math.min(12, sourceRect.w / 4, sourceRect.h / 4);
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      // 左上
-      ctx.moveTo(sourceRect.x, sourceRect.y + cornerLen);
-      ctx.lineTo(sourceRect.x, sourceRect.y);
-      ctx.lineTo(sourceRect.x + cornerLen, sourceRect.y);
-      // 右上
-      ctx.moveTo(sourceRect.x + sourceRect.w - cornerLen, sourceRect.y);
-      ctx.lineTo(sourceRect.x + sourceRect.w, sourceRect.y);
-      ctx.lineTo(sourceRect.x + sourceRect.w, sourceRect.y + cornerLen);
-      // 右下
-      ctx.moveTo(sourceRect.x + sourceRect.w, sourceRect.y + sourceRect.h - cornerLen);
-      ctx.lineTo(sourceRect.x + sourceRect.w, sourceRect.y + sourceRect.h);
-      ctx.lineTo(sourceRect.x + sourceRect.w - cornerLen, sourceRect.y + sourceRect.h);
-      // 左下
-      ctx.moveTo(sourceRect.x + cornerLen, sourceRect.y + sourceRect.h);
-      ctx.lineTo(sourceRect.x, sourceRect.y + sourceRect.h);
-      ctx.lineTo(sourceRect.x, sourceRect.y + sourceRect.h - cornerLen);
-      ctx.stroke();
+      // 4. 恢复坐标系
       ctx.restore();
-    }
 
-    // 4. 恢复坐标系
-    ctx.restore();
-
-    // 5. 重新加载被 LRU 淘汰的图片
-    if (itemsToReload.length > 0) {
-      const imageLoader = imageLoaderRef.current;
-      if (imageLoader) {
-        for (const item of itemsToReload) {
-          item.needsReload = false;
-          imageLoader
-            .loadImage(item.hash, item.getWidth())
-            .then((result) => {
-              if (!result || destroyedRef.current || !imageLoaderRef.current) return;
-              if (!imageLoaderRef.current.getCache().isImageValid(result.key, result.version)) return;
+      // 5. 重新加载被 LRU 淘汰的图片
+      if (itemsToReload.length > 0) {
+        const imageLoader = imageLoaderRef.current;
+        if (imageLoader) {
+          for (const item of itemsToReload) {
+            item.needsReload = false;
+            imageLoader.loadImage(item.hash, item.getWidth()).then((result) => {
+              if (!result || destroyedRef.current || !imageLoaderRef.current)
+                return;
+              if (
+                !imageLoaderRef.current
+                  .getCache()
+                  .isImageValid(result.key, result.version)
+              )
+                return;
               const ci = canvasItemsRef.current.get(item.hash);
               if (ci) {
                 const itemMeta = metadataMapRef.current.get(item.hash);
                 ci.setImage(result.image, itemMeta?.orientation ?? 1);
-                const { showDetectionOverlay: showOverlay } = useCanvasStore.getState();
+                const { showDetectionOverlay: showOverlay } =
+                  useCanvasStore.getState();
                 if (showOverlay) {
                   const bboxes = itemMeta?.detectionBboxes ?? [];
                   ci.setDetectionBoxes(bboxes);
@@ -553,183 +619,173 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
                 markDirty();
               }
             });
-        }
-      }
-    }
-
-    // 如果有动画进行中，继续请求下一帧
-    if (scrollAnimRef.current || needsNextFrame || themeTransitionActive) {
-      dirtyRef.current = true;
-      rafIdRef.current = requestAnimationFrame(renderFrame);
-    }
-  }
-
-  // ─── 初始化 useEffect ──────────────────────────────────
-
-  useEffect(() => {
-    const container = containerRef.current;
-    const canvas = canvasRef.current;
-    if (!container || !canvas) return;
-
-    destroyedRef.current = false;
-
-    // 初始化 Canvas 上下文
-    const ctx = setupCanvas();
-    if (!ctx) return;
-
-    // 背景层
-    const bgLayer = new DotBackground();
-    const theme = useThemeStore.getState().theme;
-    bgLayer.updateTheme(theme, ctx);
-    bgLayerRef.current = bgLayer;
-
-    // 图片加载器
-    imageLoaderRef.current = new ImageLoader(50);
-
-    // 设置分组总数
-    useCanvasStore.getState().setGroupCount(layoutRef.current.pages.length);
-
-    // 同步函数 ref
-    syncSelectionVisualsRef.current = syncSelectionVisuals;
-
-    // ── 事件处理器 ──
-
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      if (destroyedRef.current) return;
-
-      // 中断正在进行的滚动动画，解锁分组索引自动检测
-      if (scrollAnimRef.current) {
-        scrollAnimRef.current = null;
-        navigatingToGroupRef.current = null;
-      }
-
-      // 纵向滚动
-      scrollYRef.current = clampScrollY(scrollYRef.current + e.deltaY);
-
-      const now = performance.now();
-      if (now - lastWheelUpdateTimeRef.current >= WHEEL_THROTTLE_MS) {
-        updateViewport();
-        lastWheelUpdateTimeRef.current = now;
-      }
-      markDirty();
-    };
-
-    const handlePointerDown = (e: PointerEvent) => {
-      if (e.button !== 0) return;
-      isPointerDownRef.current = true;
-      hasDraggedRef.current = false;
-      longPressActivatedRef.current = false;
-      pointerStartRef.current = { x: e.clientX, y: e.clientY };
-
-      // 清除旧的长按定时器
-      if (longPressTimerRef.current !== null) {
-        clearTimeout(longPressTimerRef.current);
-        longPressTimerRef.current = null;
-      }
-
-      // hitTest：判断是否按在图片上
-      const rect = canvas.getBoundingClientRect();
-      const screenX = e.clientX - rect.left;
-      const screenY = e.clientY - rect.top;
-      const offsetY = -scrollYRef.current + DEFAULT_LAYOUT_CONFIG.paddingTop;
-      const contentX = screenX;
-      const contentY = screenY - offsetY;
-
-      let hitImage: { hash: string; itemRect: ItemRect } | null = null;
-      for (const [hash, item] of canvasItemsRef.current) {
-        if (item.alpha <= 0) continue;
-        if (item.hitTest(contentX, contentY)) {
-          hitImage = {
-            hash,
-            itemRect: { x: item.x, y: item.y, width: item.getWidth(), height: item.getHeight() },
-          };
-          break;
-        }
-      }
-      pressedOnImageRef.current = hitImage;
-
-      // 按在图片上 → 启动长按定时器
-      if (hitImage) {
-        longPressTimerRef.current = window.setTimeout(() => {
-          longPressTimerRef.current = null;
-          longPressActivatedRef.current = true;
-
-          // 放大镜首次激活 → 关闭提示并永久记录
-          if (loupeHintVisible) {
-            setLoupeHintVisible(false);
-            localStorage.setItem(LOUPE_HINT_KEY, '1');
-            if (loupeHintTimerRef.current) {
-              clearTimeout(loupeHintTimerRef.current);
-              loupeHintTimerRef.current = null;
-            }
           }
-
-          // 用当前图片位置刷新 itemRect（可能因滚动变化）
-          const ci = canvasItemsRef.current.get(hitImage.hash);
-          const itemRect = ci
-            ? { x: ci.x, y: ci.y, width: ci.getWidth(), height: ci.getHeight() }
-            : hitImage.itemRect;
-
-          const currentRect = canvas.getBoundingClientRect();
-          setMagnifierState({
-            visible: true,
-            hash: hitImage.hash,
-            mouseX: pointerStartRef.current.x - currentRect.left,
-            mouseY: pointerStartRef.current.y - currentRect.top,
-            itemRect,
-          });
-        }, LONG_PRESS_DELAY);
+        }
       }
-    };
 
-    const handlePointerMove = (e: PointerEvent) => {
-      if (destroyedRef.current) return;
+      // 如果有动画进行中，继续请求下一帧
+      if (scrollAnimRef.current || needsNextFrame || themeTransitionActive) {
+        dirtyRef.current = true;
+        rafIdRef.current = requestAnimationFrame(renderFrame);
+      }
+    }
 
-      if (isPointerDownRef.current && pressedOnImageRef.current) {
-        const dx = e.clientX - pointerStartRef.current.x;
-        const dy = e.clientY - pointerStartRef.current.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+    // ─── 初始化 useEffect ──────────────────────────────────
 
-        if (longPressActivatedRef.current || hasDraggedRef.current) {
-          // 放大镜已激活（长按或拖动）→ 跟随鼠标
-          const rect = canvas.getBoundingClientRect();
-          const screenX = e.clientX - rect.left;
-          const screenY = e.clientY - rect.top;
-          const offsetY = -scrollYRef.current + DEFAULT_LAYOUT_CONFIG.paddingTop;
-          const contentX = screenX;
-          const contentY = screenY - offsetY;
+    useEffect(() => {
+      const container = containerRef.current;
+      const canvas = canvasRef.current;
+      if (!container || !canvas) return;
 
-          const pressedHash = pressedOnImageRef.current.hash;
-          const ci = canvasItemsRef.current.get(pressedHash);
-          if (ci && ci.hitTest(contentX, contentY)) {
-            const itemRect = { x: ci.x, y: ci.y, width: ci.getWidth(), height: ci.getHeight() };
+      destroyedRef.current = false;
+
+      // 初始化 Canvas 上下文
+      const ctx = setupCanvas();
+      if (!ctx) return;
+
+      // 背景层
+      const bgLayer = new DotBackground();
+      const theme = useThemeStore.getState().theme;
+      bgLayer.updateTheme(theme, ctx);
+      bgLayerRef.current = bgLayer;
+
+      // 图片加载器
+      imageLoaderRef.current = new ImageLoader(50);
+
+      // 设置分组总数
+      useCanvasStore.getState().setGroupCount(layoutRef.current.pages.length);
+
+      // 同步函数 ref
+      syncSelectionVisualsRef.current = syncSelectionVisuals;
+
+      // ── 事件处理器 ──
+
+      const handleWheel = (e: WheelEvent) => {
+        e.preventDefault();
+        if (destroyedRef.current) return;
+
+        // 中断正在进行的滚动动画，解锁分组索引自动检测
+        if (scrollAnimRef.current) {
+          scrollAnimRef.current = null;
+          navigatingToGroupRef.current = null;
+        }
+
+        // 纵向滚动
+        scrollYRef.current = clampScrollY(scrollYRef.current + e.deltaY);
+
+        const now = performance.now();
+        if (now - lastWheelUpdateTimeRef.current >= WHEEL_THROTTLE_MS) {
+          updateViewport();
+          lastWheelUpdateTimeRef.current = now;
+        }
+        markDirty();
+      };
+
+      const handlePointerDown = (e: PointerEvent) => {
+        if (e.button !== 0) return;
+        isPointerDownRef.current = true;
+        hasDraggedRef.current = false;
+        longPressActivatedRef.current = false;
+        pointerStartRef.current = { x: e.clientX, y: e.clientY };
+
+        // 清除旧的长按定时器
+        if (longPressTimerRef.current !== null) {
+          clearTimeout(longPressTimerRef.current);
+          longPressTimerRef.current = null;
+        }
+
+        // hitTest：判断是否按在图片上
+        const rect = canvas.getBoundingClientRect();
+        const screenX = e.clientX - rect.left;
+        const screenY = e.clientY - rect.top;
+        const offsetY = -scrollYRef.current + DEFAULT_LAYOUT_CONFIG.paddingTop;
+        const contentX = screenX;
+        const contentY = screenY - offsetY;
+
+        let hitImage: { hash: string; itemRect: ItemRect } | null = null;
+        for (const [hash, item] of canvasItemsRef.current) {
+          if (item.alpha <= 0) continue;
+          if (item.hitTest(contentX, contentY)) {
+            hitImage = {
+              hash,
+              itemRect: {
+                x: item.x,
+                y: item.y,
+                width: item.getWidth(),
+                height: item.getHeight(),
+              },
+            };
+            break;
+          }
+        }
+        pressedOnImageRef.current = hitImage;
+
+        // 按在图片上 → 启动长按定时器
+        if (hitImage) {
+          longPressTimerRef.current = window.setTimeout(() => {
+            longPressTimerRef.current = null;
+            longPressActivatedRef.current = true;
+
+            // 放大镜首次激活 → 关闭提示并永久记录
+            if (loupeHintVisible) {
+              setLoupeHintVisible(false);
+              localStorage.setItem(LOUPE_HINT_KEY, "1");
+              if (loupeHintTimerRef.current) {
+                clearTimeout(loupeHintTimerRef.current);
+                loupeHintTimerRef.current = null;
+              }
+            }
+
+            // 用当前图片位置刷新 itemRect（可能因滚动变化）
+            const ci = canvasItemsRef.current.get(hitImage.hash);
+            const itemRect = ci
+              ? {
+                  x: ci.x,
+                  y: ci.y,
+                  width: ci.getWidth(),
+                  height: ci.getHeight(),
+                }
+              : hitImage.itemRect;
+
+            const currentRect = canvas.getBoundingClientRect();
             setMagnifierState({
               visible: true,
-              hash: pressedHash,
-              mouseX: screenX,
-              mouseY: screenY,
+              hash: hitImage.hash,
+              mouseX: pointerStartRef.current.x - currentRect.left,
+              mouseY: pointerStartRef.current.y - currentRect.top,
               itemRect,
             });
-          } else {
-            setMagnifierState(prev => prev.visible ? { ...prev, visible: false } : prev);
-            loupeSourceRectRef.current = null;
-            markDirty();
-          }
-        } else if (longPressTimerRef.current !== null) {
-          // 长按等待中 → 移动超过阈值则改为拖动激活
-          if (dist > LONG_PRESS_MOVE_THRESHOLD) {
-            clearTimeout(longPressTimerRef.current);
-            longPressTimerRef.current = null;
-            hasDraggedRef.current = true;
-            // 立即显示放大镜
+          }, LONG_PRESS_DELAY);
+        }
+      };
+
+      const handlePointerMove = (e: PointerEvent) => {
+        if (destroyedRef.current) return;
+
+        if (isPointerDownRef.current && pressedOnImageRef.current) {
+          const dx = e.clientX - pointerStartRef.current.x;
+          const dy = e.clientY - pointerStartRef.current.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          if (longPressActivatedRef.current || hasDraggedRef.current) {
+            // 放大镜已激活（长按或拖动）→ 跟随鼠标
             const rect = canvas.getBoundingClientRect();
             const screenX = e.clientX - rect.left;
             const screenY = e.clientY - rect.top;
+            const offsetY =
+              -scrollYRef.current + DEFAULT_LAYOUT_CONFIG.paddingTop;
+            const contentX = screenX;
+            const contentY = screenY - offsetY;
+
             const pressedHash = pressedOnImageRef.current.hash;
             const ci = canvasItemsRef.current.get(pressedHash);
-            if (ci) {
-              const itemRect = { x: ci.x, y: ci.y, width: ci.getWidth(), height: ci.getHeight() };
+            if (ci && ci.hitTest(contentX, contentY)) {
+              const itemRect = {
+                x: ci.x,
+                y: ci.y,
+                width: ci.getWidth(),
+                height: ci.getHeight(),
+              };
               setMagnifierState({
                 visible: true,
                 hash: pressedHash,
@@ -737,546 +793,639 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(fun
                 mouseY: screenY,
                 itemRect,
               });
+            } else {
+              setMagnifierState((prev) =>
+                prev.visible ? { ...prev, visible: false } : prev,
+              );
+              loupeSourceRectRef.current = null;
+              markDirty();
             }
-          }
-        }
-      } else {
-        // 非拖拽模式：鼠标移出画布时清理放大镜方框
-        const target = e.target as Node | null;
-        if (!target || !container.contains(target)) {
-          if (loupeSourceRectRef.current !== null) {
-            loupeSourceRectRef.current = null;
-            markDirty();
-          }
-          // 画布外：清除悬停
-          if (hoveredHashRef.current) {
-            const prev = canvasItemsRef.current.get(hoveredHashRef.current);
-            if (prev) prev.setHovered(false);
-            hoveredHashRef.current = null;
-            markDirty();
+          } else if (longPressTimerRef.current !== null) {
+            // 长按等待中 → 移动超过阈值则改为拖动激活
+            if (dist > LONG_PRESS_MOVE_THRESHOLD) {
+              clearTimeout(longPressTimerRef.current);
+              longPressTimerRef.current = null;
+              hasDraggedRef.current = true;
+              // 立即显示放大镜
+              const rect = canvas.getBoundingClientRect();
+              const screenX = e.clientX - rect.left;
+              const screenY = e.clientY - rect.top;
+              const pressedHash = pressedOnImageRef.current.hash;
+              const ci = canvasItemsRef.current.get(pressedHash);
+              if (ci) {
+                const itemRect = {
+                  x: ci.x,
+                  y: ci.y,
+                  width: ci.getWidth(),
+                  height: ci.getHeight(),
+                };
+                setMagnifierState({
+                  visible: true,
+                  hash: pressedHash,
+                  mouseX: screenX,
+                  mouseY: screenY,
+                  itemRect,
+                });
+              }
+            }
           }
         } else {
-          // 画布内：hitTest 维护悬停状态
-          const rect = canvas.getBoundingClientRect();
-          const screenX = e.clientX - rect.left;
-          const screenY = e.clientY - rect.top;
-          const offsetY = -scrollYRef.current + DEFAULT_LAYOUT_CONFIG.paddingTop;
-          const contentX = screenX;
-          const contentY = screenY - offsetY;
-
-          let newHoveredHash: string | null = null;
-          for (const [hash, item] of canvasItemsRef.current) {
-            if (item.alpha <= 0) continue;
-            if (item.hitTest(contentX, contentY)) {
-              newHoveredHash = hash;
-              break;
+          // 非拖拽模式：鼠标移出画布时清理放大镜方框
+          const target = e.target as Node | null;
+          if (!target || !container.contains(target)) {
+            if (loupeSourceRectRef.current !== null) {
+              loupeSourceRectRef.current = null;
+              markDirty();
             }
-          }
-
-          if (newHoveredHash !== hoveredHashRef.current) {
-            // 旧悬停项退出
+            // 画布外：清除悬停
             if (hoveredHashRef.current) {
               const prev = canvasItemsRef.current.get(hoveredHashRef.current);
               if (prev) prev.setHovered(false);
+              hoveredHashRef.current = null;
+              markDirty();
             }
-            // 新悬停项进入
-            if (newHoveredHash) {
-              const next = canvasItemsRef.current.get(newHoveredHash);
-              if (next) next.setHovered(true);
+          } else {
+            // 画布内：hitTest 维护悬停状态
+            const rect = canvas.getBoundingClientRect();
+            const screenX = e.clientX - rect.left;
+            const screenY = e.clientY - rect.top;
+            const offsetY =
+              -scrollYRef.current + DEFAULT_LAYOUT_CONFIG.paddingTop;
+            const contentX = screenX;
+            const contentY = screenY - offsetY;
 
-              // 首次悬停 → 显示放大镜提示
-              if (loupeHintVisible && !localStorage.getItem(LOUPE_HINT_KEY)) {
-                loupeHintPosRef.current = { x: screenX, y: screenY };
-                setLoupeHintVisible(true);
-                if (loupeHintTimerRef.current) clearTimeout(loupeHintTimerRef.current);
-                loupeHintTimerRef.current = setTimeout(() => {
-                  setLoupeHintVisible(false);
-                  localStorage.setItem(LOUPE_HINT_KEY, '1');
-                }, 3500);
+            let newHoveredHash: string | null = null;
+            for (const [hash, item] of canvasItemsRef.current) {
+              if (item.alpha <= 0) continue;
+              if (item.hitTest(contentX, contentY)) {
+                newHoveredHash = hash;
+                break;
               }
             }
-            hoveredHashRef.current = newHoveredHash;
-            markDirty();
-          }
-        }
-      }
-    };
 
-    const handlePointerUp = (e: PointerEvent) => {
-      const wasDown = isPointerDownRef.current;
-      isPointerDownRef.current = false;
+            if (newHoveredHash !== hoveredHashRef.current) {
+              // 旧悬停项退出
+              if (hoveredHashRef.current) {
+                const prev = canvasItemsRef.current.get(hoveredHashRef.current);
+                if (prev) prev.setHovered(false);
+              }
+              // 新悬停项进入
+              if (newHoveredHash) {
+                const next = canvasItemsRef.current.get(newHoveredHash);
+                if (next) next.setHovered(true);
 
-      // 清除长按定时器
-      if (longPressTimerRef.current !== null) {
-        clearTimeout(longPressTimerRef.current);
-        longPressTimerRef.current = null;
-      }
-
-      // 隐藏放大镜（长按激活或拖动激活时）
-      if (longPressActivatedRef.current || hasDraggedRef.current) {
-        setMagnifierState(prev => prev.visible ? { ...prev, visible: false } : prev);
-        loupeSourceRectRef.current = null;
-        markDirty();
-      }
-
-      // 未拖动且未长按激活 → 按点击处理
-      if (wasDown && !hasDraggedRef.current && !longPressActivatedRef.current) {
-        handleCanvasClick(e);
-      }
-
-      pressedOnImageRef.current = null;
-      longPressActivatedRef.current = false;
-    };
-
-    const handleCanvasClick = (e: PointerEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      const screenX = e.clientX - rect.left;
-      const screenY = e.clientY - rect.top;
-      const offsetY = -scrollYRef.current + DEFAULT_LAYOUT_CONFIG.paddingTop;
-      const contentX = screenX;
-      const contentY = screenY - offsetY;
-
-      for (const [hash, item] of canvasItemsRef.current) {
-        if (item.alpha <= 0) continue;
-        if (item.hitTest(contentX, contentY)) {
-          useSelectionStore.getState().toggleSelection(hash);
-          syncSelectionVisuals();
-          return;
-        }
-      }
-    };
-
-    // ── 键盘事件 ──
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (destroyedRef.current) return;
-
-      // 忽略输入框中的按键
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
-        return;
-      }
-
-      switch (e.key.toLowerCase()) {
-        case 'w':
-          scrollToAdjacentGroup(-1);
-          break;
-        case 's':
-          scrollToAdjacentGroup(1);
-          break;
-        case 'q':
-          useSelectionStore.getState().clearSelection();
-          syncSelectionVisuals();
-          break;
-        case 'a':
-          if (e.ctrlKey || e.metaKey) {
-            e.preventDefault();
-            // 全选当前分组
-            const currentLayout = layoutRef.current;
-            const idx = useCanvasStore.getState().currentGroupIndex;
-            const page = currentLayout.pages[idx];
-            if (page) {
-              const hashes = page.items.map(item => item.hash);
-              useSelectionStore.getState().selectAllInGroup(hashes);
-              syncSelectionVisuals();
+                // 首次悬停 → 显示放大镜提示
+                if (loupeHintVisible && !localStorage.getItem(LOUPE_HINT_KEY)) {
+                  loupeHintPosRef.current = { x: screenX, y: screenY };
+                  setLoupeHintVisible(true);
+                  if (loupeHintTimerRef.current)
+                    clearTimeout(loupeHintTimerRef.current);
+                  loupeHintTimerRef.current = setTimeout(() => {
+                    setLoupeHintVisible(false);
+                    localStorage.setItem(LOUPE_HINT_KEY, "1");
+                  }, 3500);
+                }
+              }
+              hoveredHashRef.current = newHoveredHash;
+              markDirty();
             }
           }
-          break;
-      }
-    };
-
-    /** 滚动到上/下一组 */
-    function scrollToAdjacentGroup(direction: 1 | -1) {
-      const currentLayout = layoutRef.current;
-      const pages = currentLayout.pages;
-      if (pages.length === 0) return;
-
-      // 中断当前动画
-      scrollAnimRef.current = null;
-      navigatingToGroupRef.current = null;
-
-      const currentIdx = useCanvasStore.getState().currentGroupIndex;
-      let targetIdx = currentIdx + direction;
-
-      // 循环
-      if (targetIdx < 0) targetIdx = pages.length - 1;
-      if (targetIdx >= pages.length) targetIdx = 0;
-
-      scrollToGroupIndex(targetIdx);
-    }
-
-    /** 滚动到指定分组（带动画），定位到该组首图 */
-    function scrollToGroupIndex(groupIndex: number) {
-      const currentLayout = layoutRef.current;
-      const page = currentLayout.pages[groupIndex];
-      if (!page || page.items.length === 0) return;
-
-      // 定位到首图 Y 坐标，首图上方预留呼吸空间
-      const firstItemY = page.items[0].y;
-      const targetY = groupIndex === 0
-        ? firstItemY
-        : Math.max(0, firstItemY - SCROLL_GROUP_PADDING);
-
-      // 锁定分组索引，防止动画期间 updateViewport 覆盖
-      navigatingToGroupRef.current = groupIndex;
-
-      if (SCROLL_ANIMATION_MS === 0) {
-        scrollYRef.current = targetY;
-        navigatingToGroupRef.current = null; // 即时跳转，立即解锁
-        updateViewport();
-        markDirty();
-        return;
-      }
-
-      scrollAnimRef.current = {
-        startTime: performance.now(),
-        startScrollY: scrollYRef.current,
-        targetScrollY: targetY,
-      };
-      markDirty();
-    }
-
-    // ── 绑定事件 ──
-    canvas.addEventListener('wheel', handleWheel, { passive: false });
-    canvas.addEventListener('pointerdown', handlePointerDown);
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
-    window.addEventListener('keydown', handleKeyDown);
-
-    // ── Resize / DPR 统一处理 ──
-    let reinitRafId = 0;
-    const scheduleReinit = () => {
-      if (destroyedRef.current) return;
-      if (reinitRafId) return;
-      reinitRafId = requestAnimationFrame(() => {
-        reinitRafId = 0;
-        if (destroyedRef.current) return;
-        setupCanvas();
-        const newCtx = ctxRef.current;
-        if (newCtx && bgLayerRef.current) {
-          bgLayerRef.current.updateTheme(useThemeStore.getState().theme, newCtx);
         }
-        updateViewport();
+      };
+
+      const handlePointerUp = (e: PointerEvent) => {
+        const wasDown = isPointerDownRef.current;
+        isPointerDownRef.current = false;
+
+        // 清除长按定时器
+        if (longPressTimerRef.current !== null) {
+          clearTimeout(longPressTimerRef.current);
+          longPressTimerRef.current = null;
+        }
+
+        // 隐藏放大镜（长按激活或拖动激活时）
+        if (longPressActivatedRef.current || hasDraggedRef.current) {
+          setMagnifierState((prev) =>
+            prev.visible ? { ...prev, visible: false } : prev,
+          );
+          loupeSourceRectRef.current = null;
+          markDirty();
+        }
+
+        // 未拖动且未长按激活 → 按点击处理
+        if (
+          wasDown &&
+          !hasDraggedRef.current &&
+          !longPressActivatedRef.current
+        ) {
+          handleCanvasClick(e);
+        }
+
+        pressedOnImageRef.current = null;
+        longPressActivatedRef.current = false;
+      };
+
+      const handleCanvasClick = (e: PointerEvent) => {
+        const rect = canvas.getBoundingClientRect();
+        const screenX = e.clientX - rect.left;
+        const screenY = e.clientY - rect.top;
+        const offsetY = -scrollYRef.current + DEFAULT_LAYOUT_CONFIG.paddingTop;
+        const contentX = screenX;
+        const contentY = screenY - offsetY;
+
+        for (const [hash, item] of canvasItemsRef.current) {
+          if (item.alpha <= 0) continue;
+          if (item.hitTest(contentX, contentY)) {
+            useSelectionStore.getState().toggleSelection(hash);
+            syncSelectionVisuals();
+            return;
+          }
+        }
+      };
+
+      // ── 键盘事件 ──
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (destroyedRef.current) return;
+
+        // 忽略输入框中的按键
+        const target = e.target as HTMLElement;
+        if (
+          target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable
+        ) {
+          return;
+        }
+
+        switch (e.key.toLowerCase()) {
+          case "w":
+            scrollToAdjacentGroup(-1);
+            break;
+          case "s":
+            scrollToAdjacentGroup(1);
+            break;
+          case "q":
+            useSelectionStore.getState().clearSelection();
+            syncSelectionVisuals();
+            break;
+          case "a":
+            if (e.ctrlKey || e.metaKey) {
+              e.preventDefault();
+              // 全选当前分组
+              const currentLayout = layoutRef.current;
+              const idx = useCanvasStore.getState().currentGroupIndex;
+              const page = currentLayout.pages[idx];
+              if (page) {
+                const hashes = page.items.map((item) => item.hash);
+                useSelectionStore.getState().selectAllInGroup(hashes);
+                syncSelectionVisuals();
+              }
+            }
+            break;
+        }
+      };
+
+      /** 滚动到上/下一组 */
+      function scrollToAdjacentGroup(direction: 1 | -1) {
+        const currentLayout = layoutRef.current;
+        const pages = currentLayout.pages;
+        if (pages.length === 0) return;
+
+        // 中断当前动画
+        scrollAnimRef.current = null;
+        navigatingToGroupRef.current = null;
+
+        const currentIdx = useCanvasStore.getState().currentGroupIndex;
+        let targetIdx = currentIdx + direction;
+
+        // 循环
+        if (targetIdx < 0) targetIdx = pages.length - 1;
+        if (targetIdx >= pages.length) targetIdx = 0;
+
+        scrollToGroupIndex(targetIdx);
+      }
+
+      /** 滚动到指定分组（带动画），定位到该组首图 */
+      function scrollToGroupIndex(groupIndex: number) {
+        const currentLayout = layoutRef.current;
+        const page = currentLayout.pages[groupIndex];
+        if (!page || page.items.length === 0) return;
+
+        // 定位到首图 Y 坐标，首图上方预留呼吸空间
+        const firstItemY = page.items[0].y;
+        const targetY =
+          groupIndex === 0
+            ? firstItemY
+            : Math.max(0, firstItemY - SCROLL_GROUP_PADDING);
+
+        // 锁定分组索引，防止动画期间 updateViewport 覆盖
+        navigatingToGroupRef.current = groupIndex;
+
+        if (SCROLL_ANIMATION_MS === 0) {
+          scrollYRef.current = targetY;
+          navigatingToGroupRef.current = null; // 即时跳转，立即解锁
+          updateViewport();
+          markDirty();
+          return;
+        }
+
+        scrollAnimRef.current = {
+          startTime: performance.now(),
+          startScrollY: scrollYRef.current,
+          targetScrollY: targetY,
+        };
         markDirty();
+      }
+
+      // ── 绑定事件 ──
+      canvas.addEventListener("wheel", handleWheel, { passive: false });
+      canvas.addEventListener("pointerdown", handlePointerDown);
+      window.addEventListener("pointermove", handlePointerMove);
+      window.addEventListener("pointerup", handlePointerUp);
+      window.addEventListener("keydown", handleKeyDown);
+
+      // ── Resize / DPR 统一处理 ──
+      let reinitRafId = 0;
+      const scheduleReinit = () => {
+        if (destroyedRef.current) return;
+        if (reinitRafId) return;
+        reinitRafId = requestAnimationFrame(() => {
+          reinitRafId = 0;
+          if (destroyedRef.current) return;
+          setupCanvas();
+          const newCtx = ctxRef.current;
+          if (newCtx && bgLayerRef.current) {
+            bgLayerRef.current.updateTheme(
+              useThemeStore.getState().theme,
+              newCtx,
+            );
+          }
+          updateViewport();
+          markDirty();
+        });
+      };
+
+      // ── ResizeObserver ──
+      const resizeObserver = new ResizeObserver(() => {
+        scheduleReinit();
       });
-    };
+      resizeObserver.observe(container);
 
-    // ── ResizeObserver ──
-    const resizeObserver = new ResizeObserver(() => {
-      scheduleReinit();
-    });
-    resizeObserver.observe(container);
+      // ── DPR 变化监听 ──
+      let dprMediaQuery: MediaQueryList | null = null;
+      const handleDprChange = () => {
+        scheduleReinit();
+        dprMediaQuery?.removeEventListener("change", handleDprChange);
+        dprMediaQuery = window.matchMedia(
+          `(resolution: ${window.devicePixelRatio}dppx)`,
+        );
+        dprMediaQuery.addEventListener("change", handleDprChange);
+      };
+      dprMediaQuery = window.matchMedia(
+        `(resolution: ${window.devicePixelRatio}dppx)`,
+      );
+      dprMediaQuery.addEventListener("change", handleDprChange);
 
-    // ── DPR 变化监听 ──
-    let dprMediaQuery: MediaQueryList | null = null;
-    const handleDprChange = () => {
-      scheduleReinit();
-      dprMediaQuery?.removeEventListener('change', handleDprChange);
-      dprMediaQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
-      dprMediaQuery.addEventListener('change', handleDprChange);
-    };
-    dprMediaQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
-    dprMediaQuery.addEventListener('change', handleDprChange);
+      // ── 首帧渲染 ──
+      scrollYRef.current = 0;
+      updateViewport();
+      dirtyRef.current = true;
+      rafIdRef.current = requestAnimationFrame(renderFrame);
 
-    // ── 首帧渲染 ──
-    scrollYRef.current = 0;
-    updateViewport();
-    dirtyRef.current = true;
-    rafIdRef.current = requestAnimationFrame(renderFrame);
+      // ── Cleanup ──
+      return () => {
+        destroyedRef.current = true;
 
-    // ── Cleanup ──
-    return () => {
-      destroyedRef.current = true;
+        scrollAnimRef.current = null;
+        cancelAnimationFrame(rafIdRef.current);
+        cancelAnimationFrame(reinitRafId);
 
-      scrollAnimRef.current = null;
-      cancelAnimationFrame(rafIdRef.current);
-      cancelAnimationFrame(reinitRafId);
+        canvas.removeEventListener("wheel", handleWheel);
+        canvas.removeEventListener("pointerdown", handlePointerDown);
+        window.removeEventListener("pointermove", handlePointerMove);
+        window.removeEventListener("pointerup", handlePointerUp);
+        window.removeEventListener("keydown", handleKeyDown);
 
-      canvas.removeEventListener('wheel', handleWheel);
-      canvas.removeEventListener('pointerdown', handlePointerDown);
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-      window.removeEventListener('keydown', handleKeyDown);
+        resizeObserver.disconnect();
+        dprMediaQuery?.removeEventListener("change", handleDprChange);
 
-      resizeObserver.disconnect();
-      dprMediaQuery?.removeEventListener('change', handleDprChange);
+        for (const item of canvasItemsRef.current.values()) {
+          item.destroy();
+        }
+        canvasItemsRef.current.clear();
+        visibleItemsRef.current = [];
 
-      for (const item of canvasItemsRef.current.values()) {
+        imageLoaderRef.current?.destroy();
+        imageLoaderRef.current = null;
+
+        bgLayerRef.current?.destroy();
+        bgLayerRef.current = null;
+        ctxRef.current = null;
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // ── layout 变化时：清除旧 item + 重置到顶部 ──
+    useEffect(() => {
+      const currentLayout = layoutRef.current;
+      if (!currentLayout.pages || currentLayout.pages.length === 0) return;
+
+      // 销毁所有旧的 CanvasImageItem，强制用新布局坐标重建
+      const imageLoader = imageLoaderRef.current;
+      for (const [hash, item] of canvasItemsRef.current) {
         item.destroy();
+        imageLoader?.unpinImage(hash);
       }
       canvasItemsRef.current.clear();
       visibleItemsRef.current = [];
 
-      imageLoaderRef.current?.destroy();
-      imageLoaderRef.current = null;
-
-      bgLayerRef.current?.destroy();
-      bgLayerRef.current = null;
-      ctxRef.current = null;
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // ── layout 变化时：清除旧 item + 重置到顶部 ──
-  useEffect(() => {
-    const currentLayout = layoutRef.current;
-    if (!currentLayout.pages || currentLayout.pages.length === 0) return;
-
-    // 销毁所有旧的 CanvasImageItem，强制用新布局坐标重建
-    const imageLoader = imageLoaderRef.current;
-    for (const [hash, item] of canvasItemsRef.current) {
-      item.destroy();
-      imageLoader?.unpinImage(hash);
-    }
-    canvasItemsRef.current.clear();
-    visibleItemsRef.current = [];
-
-    useCanvasStore.getState().setGroupCount(currentLayout.pages.length);
-    scrollYRef.current = 0;
-    scrollAnimRef.current = null;
-    internalGroupUpdateRef.current = true;
-    useCanvasStore.setState({ currentGroupIndex: 0 });
-    updateViewport();
-    markDirty();
-  }, [layout, updateViewport, markDirty]);
-
-  // ── 外部分组导航（胶片条点击、A/D 键触发）→ 纵向滚动到目标分组首图 ──
-  const internalGroupUpdateRef = useRef(false);
-  useEffect(() => {
-    if (internalGroupUpdateRef.current) {
-      internalGroupUpdateRef.current = false;
-      return;
-    }
-    const currentLayout = layoutRef.current;
-    const page = currentLayout.pages[currentGroupIndex];
-    if (!page || page.items.length === 0) return;
-
-    // 定位到首图 Y 坐标，首图上方留呼吸空间
-    const firstItemY = page.items[0].y;
-    const targetY = currentGroupIndex === 0
-      ? firstItemY
-      : Math.max(0, firstItemY - SCROLL_GROUP_PADDING);
-
-    // 锁定分组索引，防止动画期间 updateViewport 覆盖
-    navigatingToGroupRef.current = currentGroupIndex;
-
-    if (SCROLL_ANIMATION_MS === 0) {
-      scrollYRef.current = targetY;
-      navigatingToGroupRef.current = null;
+      useCanvasStore.getState().setGroupCount(currentLayout.pages.length);
+      scrollYRef.current = 0;
+      scrollAnimRef.current = null;
+      internalGroupUpdateRef.current = true;
+      useCanvasStore.setState({ currentGroupIndex: 0 });
       updateViewport();
       markDirty();
-    } else {
-      scrollAnimRef.current = {
+    }, [layout, updateViewport, markDirty]);
+
+    // ── 外部分组导航（胶片条点击、A/D 键触发）→ 纵向滚动到目标分组首图 ──
+    const internalGroupUpdateRef = useRef(false);
+    useEffect(() => {
+      if (internalGroupUpdateRef.current) {
+        internalGroupUpdateRef.current = false;
+        return;
+      }
+      const currentLayout = layoutRef.current;
+      const page = currentLayout.pages[currentGroupIndex];
+      if (!page || page.items.length === 0) return;
+
+      // 定位到首图 Y 坐标，首图上方留呼吸空间
+      const firstItemY = page.items[0].y;
+      const targetY =
+        currentGroupIndex === 0
+          ? firstItemY
+          : Math.max(0, firstItemY - SCROLL_GROUP_PADDING);
+
+      // 锁定分组索引，防止动画期间 updateViewport 覆盖
+      navigatingToGroupRef.current = currentGroupIndex;
+
+      if (SCROLL_ANIMATION_MS === 0) {
+        scrollYRef.current = targetY;
+        navigatingToGroupRef.current = null;
+        updateViewport();
+        markDirty();
+      } else {
+        scrollAnimRef.current = {
+          startTime: performance.now(),
+          startScrollY: scrollYRef.current,
+          targetScrollY: targetY,
+        };
+        markDirty();
+      }
+    }, [currentGroupIndex, updateViewport, markDirty]);
+
+    // ── 暴露 handle ──
+    useImperativeHandle(
+      ref,
+      () => ({
+        syncSelectionVisuals: () => {
+          syncSelectionVisualsRef.current?.();
+        },
+        scrollToY: (y: number) => {
+          scrollYRef.current = clampScrollY(y);
+          updateViewport();
+          markDirty();
+        },
+        scrollToGroup: (groupIndex: number) => {
+          const currentLayout = layoutRef.current;
+          const page = currentLayout.pages[groupIndex];
+          if (!page || page.items.length === 0) return;
+          const firstItemY = page.items[0].y;
+          const targetY =
+            groupIndex === 0
+              ? firstItemY
+              : Math.max(0, firstItemY - SCROLL_GROUP_PADDING);
+          scrollYRef.current = targetY;
+          scrollAnimRef.current = null;
+          navigatingToGroupRef.current = null;
+          updateViewport();
+          markDirty();
+        },
+        updateItemMetadata: (hash: string) => {
+          const canvasItem = canvasItemsRef.current.get(hash);
+          if (!canvasItem) return;
+          const meta = metadataMapRef.current.get(hash);
+          const fileName = fileNamesRef.current.get(hash) ?? hash;
+          canvasItem.setImageInfo(fileName, meta);
+          const bboxes = meta?.detectionBboxes ?? [];
+          canvasItem.setDetectionBoxes(bboxes);
+          const { showDetectionOverlay } = useCanvasStore.getState();
+          canvasItem.setDetectionVisible(
+            showDetectionOverlay && bboxes.length > 0,
+          );
+          // 同步直方图数据
+          if (meta?.histogramR && meta.histogramR.length > 0) {
+            canvasItem.setHistogram(
+              meta.histogramR,
+              meta.histogramG,
+              meta.histogramB,
+            );
+          }
+          markDirty();
+        },
+        clearMemoryCache: () => {
+          // 销毁当前可见的 CanvasImageItem 的图片引用
+          for (const [, item] of canvasItemsRef.current) {
+            item.setImageInfo("", undefined);
+          }
+          // 清空 ImageLRUCache 中所有 ImageBitmap
+          imageLoaderRef.current?.getCache().clear();
+          markDirty();
+        },
+      }),
+      [updateViewport, clampScrollY, markDirty],
+    );
+
+    // ── 检测框可见性切换：批量回填/清除 ──
+    useEffect(() => {
+      const items = canvasItemsRef.current;
+      const metaMap = metadataMapRef.current;
+      for (const item of items.values()) {
+        if (showDetectionOverlay) {
+          const bboxes = metaMap.get(item.hash)?.detectionBboxes ?? [];
+          item.setDetectionBoxes(bboxes);
+          item.setDetectionVisible(bboxes.length > 0);
+        } else {
+          item.setDetectionVisible(false);
+        }
+      }
+      markDirty();
+    }, [showDetectionOverlay, markDirty]);
+
+    // ── 图片信息/直方图可见性切换 ──
+    useEffect(() => {
+      markDirty();
+    }, [showImageInfo, showHistogram, markDirty]);
+
+    // ── 选中数量播报 ──
+    const selectedCount = useSelectionStore((s) => s.selectedCount);
+    const themeValue = useThemeStore((s) => s.theme);
+
+    // ── 订阅选中状态变化 ──
+    useEffect(() => {
+      syncSelectionVisualsRef.current?.();
+    }, [selectedCount]);
+
+    // ── 滚动条驱动回调 ──
+    const handleScrollbarScroll = useCallback(
+      (y: number) => {
+        scrollYRef.current = clampScrollY(y);
+        // 中断正在进行的滚动动画
+        if (scrollAnimRef.current) {
+          scrollAnimRef.current = null;
+          navigatingToGroupRef.current = null;
+        }
+        updateViewport();
+        markDirty();
+      },
+      [clampScrollY, updateViewport, markDirty],
+    );
+
+    // ── 订阅主题变化（启动 Canvas 背景 + DotBackground 交叉淡入过渡） ──
+    const prevThemeRef = useRef<"light" | "dark" | null>(null);
+    useEffect(() => {
+      const ctx = ctxRef.current;
+      const bgLayer = bgLayerRef.current;
+      if (!ctx || !bgLayer) return;
+
+      const fromTheme = prevThemeRef.current;
+      prevThemeRef.current = themeValue;
+
+      // 首次挂载或过渡时长为 0 时直接切换
+      if (
+        fromTheme === null ||
+        fromTheme === themeValue ||
+        THEME_TRANSITION_MS === 0
+      ) {
+        bgLayer.updateTheme(themeValue, ctx);
+        bgLayer.clearPrevious();
+        themeTransitionRef.current = null;
+        markDirty();
+        return;
+      }
+
+      // 启动过渡：旧 pattern 保留，新 pattern 生成，通过 progress 交叉淡入
+      bgLayer.updateTheme(themeValue, ctx);
+      themeTransitionRef.current = {
         startTime: performance.now(),
-        startScrollY: scrollYRef.current,
-        targetScrollY: targetY,
+        fromTheme,
+        toTheme: themeValue,
       };
       markDirty();
-    }
-  }, [currentGroupIndex, updateViewport, markDirty]);
+    }, [themeValue, markDirty]);
 
-  // ── 暴露 handle ──
-  useImperativeHandle(ref, () => ({
-    syncSelectionVisuals: () => {
-      syncSelectionVisualsRef.current?.();
-    },
-    scrollToY: (y: number) => {
-      scrollYRef.current = clampScrollY(y);
-      updateViewport();
-      markDirty();
-    },
-    scrollToGroup: (groupIndex: number) => {
-      const currentLayout = layoutRef.current;
-      const page = currentLayout.pages[groupIndex];
-      if (!page || page.items.length === 0) return;
-      const firstItemY = page.items[0].y;
-      const targetY = groupIndex === 0
-        ? firstItemY
-        : Math.max(0, firstItemY - SCROLL_GROUP_PADDING);
-      scrollYRef.current = targetY;
-      scrollAnimRef.current = null;
-      navigatingToGroupRef.current = null;
-      updateViewport();
-      markDirty();
-    },
-    updateItemMetadata: (hash: string) => {
-      const canvasItem = canvasItemsRef.current.get(hash);
-      if (!canvasItem) return;
-      const meta = metadataMapRef.current.get(hash);
-      const fileName = fileNamesRef.current.get(hash) ?? hash;
-      canvasItem.setImageInfo(fileName, meta);
-      const bboxes = meta?.detectionBboxes ?? [];
-      canvasItem.setDetectionBoxes(bboxes);
-      const { showDetectionOverlay } = useCanvasStore.getState();
-      canvasItem.setDetectionVisible(showDetectionOverlay && bboxes.length > 0);
-      // 同步直方图数据
-      if (meta?.histogramR && meta.histogramR.length > 0) {
-        canvasItem.setHistogram(meta.histogramR, meta.histogramG, meta.histogramB);
-      }
-      markDirty();
-    },
-    clearMemoryCache: () => {
-      // 销毁当前可见的 CanvasImageItem 的图片引用
-      for (const [, item] of canvasItemsRef.current) {
-        item.setImageInfo('', undefined);
-      }
-      // 清空 ImageLRUCache 中所有 ImageBitmap
-      imageLoaderRef.current?.getCache().clear();
-      markDirty();
-    },
-  }), [updateViewport, clampScrollY, markDirty]);
-
-  // ── 检测框可见性切换：批量回填/清除 ──
-  useEffect(() => {
-    const items = canvasItemsRef.current;
-    const metaMap = metadataMapRef.current;
-    for (const item of items.values()) {
-      if (showDetectionOverlay) {
-        const bboxes = metaMap.get(item.hash)?.detectionBboxes ?? [];
-        item.setDetectionBoxes(bboxes);
-        item.setDetectionVisible(bboxes.length > 0);
-      } else {
-        item.setDetectionVisible(false);
-      }
-    }
-    markDirty();
-  }, [showDetectionOverlay, markDirty]);
-
-  // ── 图片信息/直方图可见性切换 ──
-  useEffect(() => {
-    markDirty();
-  }, [showImageInfo, showHistogram, markDirty]);
-
-  // ── 选中数量播报 ──
-  const selectedCount = useSelectionStore((s) => s.selectedCount);
-  const themeValue = useThemeStore((s) => s.theme);
-
-  // ── 订阅选中状态变化 ──
-  useEffect(() => {
-    syncSelectionVisualsRef.current?.();
-  }, [selectedCount]);
-
-  // ── 滚动条驱动回调 ──
-  const handleScrollbarScroll = useCallback((y: number) => {
-    scrollYRef.current = clampScrollY(y);
-    // 中断正在进行的滚动动画
-    if (scrollAnimRef.current) {
-      scrollAnimRef.current = null;
-      navigatingToGroupRef.current = null;
-    }
-    updateViewport();
-    markDirty();
-  }, [clampScrollY, updateViewport, markDirty]);
-
-  // ── 订阅主题变化（启动 Canvas 背景 + DotBackground 交叉淡入过渡） ──
-  const prevThemeRef = useRef<'light' | 'dark' | null>(null);
-  useEffect(() => {
-    const ctx = ctxRef.current;
-    const bgLayer = bgLayerRef.current;
-    if (!ctx || !bgLayer) return;
-
-    const fromTheme = prevThemeRef.current;
-    prevThemeRef.current = themeValue;
-
-    // 首次挂载或过渡时长为 0 时直接切换
-    if (fromTheme === null || fromTheme === themeValue || THEME_TRANSITION_MS === 0) {
-      bgLayer.updateTheme(themeValue, ctx);
-      bgLayer.clearPrevious();
-      themeTransitionRef.current = null;
-      markDirty();
-      return;
-    }
-
-    // 启动过渡：旧 pattern 保留，新 pattern 生成，通过 progress 交叉淡入
-    bgLayer.updateTheme(themeValue, ctx);
-    themeTransitionRef.current = {
-      startTime: performance.now(),
-      fromTheme,
-      toTheme: themeValue,
-    };
-    markDirty();
-  }, [themeValue, markDirty]);
-
-  return (
-    <div
-      ref={containerRef}
-      role="region"
-      aria-label="图片分组展示画布"
-      aria-roledescription="无限画布"
-      tabIndex={0}
-      style={{
-        width: '100%',
-        height: '100%',
-        overflow: 'hidden',
-        position: 'relative',
-      }}
-    >
-      <canvas
-        ref={canvasRef}
+    return (
+      <div
+        ref={containerRef}
+        role="region"
+        aria-label="图片分组展示画布"
+        aria-roledescription="无限画布"
+        tabIndex={0}
         style={{
-          display: 'block',
-          width: '100%',
-          height: '100%',
+          width: "100%",
+          height: "100%",
+          overflow: "hidden",
+          position: "relative",
         }}
-      />
-      <Scrollbar
-        contentHeight={layout.totalHeight}
-        paddingTop={DEFAULT_LAYOUT_CONFIG.paddingTop}
-        onScrollToY={handleScrollbarScroll}
-      />
-      <Loupe
-        visible={magnifierState.visible}
-        hash={magnifierState.hash}
-        mouseX={magnifierState.mouseX}
-        mouseY={magnifierState.mouseY}
-        itemRect={magnifierState.itemRect}
-        scrollY={scrollYRef.current}
-        onSourceRectChange={(rect) => { loupeSourceRectRef.current = rect; markDirty(); }}
-        metadataMap={metadataMap}
-        viewportWidth={screenWidthRef.current}
-        viewportHeight={screenHeightRef.current}
-      />
-      {/* 放大镜首次使用提示 */}
-      {loupeHintVisible && loupeHintPosRef.current && (
-        <div
+      >
+        <canvas
+          ref={canvasRef}
           style={{
-            position: 'absolute',
-            left: loupeHintPosRef.current.x,
-            top: loupeHintPosRef.current.y - 36,
-            transform: 'translateX(-50%)',
-            pointerEvents: 'none',
-            zIndex: 20,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-            padding: '4px 10px',
-            borderRadius: 6,
-            background: 'rgba(0, 0, 0, 0.72)',
-            backdropFilter: 'blur(8px)',
-            color: '#fff',
-            fontSize: 11,
-            fontWeight: 500,
-            whiteSpace: 'nowrap',
-            animation: 'loupe-hint-pulse 2s ease-in-out infinite',
+            display: "block",
+            width: "100%",
+            height: "100%",
+          }}
+        />
+        <Scrollbar
+          contentHeight={layout.totalHeight}
+          paddingTop={DEFAULT_LAYOUT_CONFIG.paddingTop}
+          onScrollToY={handleScrollbarScroll}
+        />
+        <Loupe
+          visible={magnifierState.visible}
+          hash={magnifierState.hash}
+          mouseX={magnifierState.mouseX}
+          mouseY={magnifierState.mouseY}
+          itemRect={magnifierState.itemRect}
+          scrollY={scrollYRef.current}
+          onSourceRectChange={(rect) => {
+            loupeSourceRectRef.current = rect;
+            markDirty();
+          }}
+          metadataMap={metadataMap}
+          viewportWidth={screenWidthRef.current}
+          viewportHeight={screenHeightRef.current}
+        />
+        {/* 放大镜首次使用提示 */}
+        {loupeHintVisible && loupeHintPosRef.current && (
+          <div
+            style={{
+              position: "absolute",
+              left: loupeHintPosRef.current.x,
+              top: loupeHintPosRef.current.y - 36,
+              transform: "translateX(-50%)",
+              pointerEvents: "none",
+              zIndex: parseInt(getCssVar("--z-index-loupe-hint")) || 92,
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              padding: "4px 10px",
+              borderRadius: 6,
+              background: "rgba(0, 0, 0, 0.72)",
+              backdropFilter: `blur(${getCssVar("--blur-md") || "8px"})`,
+              color: getCssVar("--color-text-inverse") || "#fff",
+              fontSize: 11,
+              fontWeight: 500,
+              whiteSpace: "nowrap",
+              animation: "loupe-hint-pulse 2s ease-in-out infinite",
+            }}
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 15 15"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="6" cy="6" r="4" />
+              <line x1="9" y1="9" x2="13" y2="13" />
+            </svg>
+            长按查看细节
+          </div>
+        )}
+        {/* 屏幕阅读器播报区：选中变化 */}
+        <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          style={{
+            position: "absolute",
+            width: 1,
+            height: 1,
+            overflow: "hidden",
+            clip: "rect(0 0 0 0)",
+            whiteSpace: "nowrap",
           }}
         >
-          <svg width="12" height="12" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="6" r="4" /><line x1="9" y1="9" x2="13" y2="13" /></svg>
-          长按查看细节
+          {selectedCount > 0 ? `已选中 ${selectedCount} 张图片` : "未选中图片"}
         </div>
-      )}
-      {/* 屏幕阅读器播报区：选中变化 */}
-      <div
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-        style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}
-      >
-        {selectedCount > 0
-          ? `已选中 ${selectedCount} 张图片`
-          : '未选中图片'}
       </div>
-    </div>
-  );
-});
+    );
+  },
+);
 
 // ─── 辅助函数 ─────────────────────────────────────────
 

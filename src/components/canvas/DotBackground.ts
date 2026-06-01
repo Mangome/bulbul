@@ -7,16 +7,16 @@
 // 支持主题切换交叉淡入：保留旧 pattern 并以 alpha 渐变过渡到新 pattern。
 // ============================================================
 
+import { getCssVar } from '../../utils/cssVars';
+
 // ─── 配置 ─────────────────────────────────────────────
 
 /** 波点间距（单位 px） */
 const DOT_SPACING = 40;
 /** 波点半径（单位 px） */
 const DOT_RADIUS = 1.0;
-/** 亮色主题波点颜色 */
-const DOT_COLOR_LIGHT = '#D2D2D7';
-/** 暗色主题波点颜色 */
-const DOT_COLOR_DARK = '#38383A';
+/** 波点颜色 — 从 CSS 变量读取，随主题自动切换 */
+const DOT_COLOR_CSS_VAR = '--color-canvas-dot';
 /** 波点透明度 */
 const DOT_ALPHA = 0.5;
 
@@ -43,7 +43,7 @@ export class DotBackground {
     const offscreen = new OffscreenCanvas(size, size);
     const octx = offscreen.getContext('2d')!;
     octx.clearRect(0, 0, size, size);
-    octx.fillStyle = theme === 'light' ? DOT_COLOR_LIGHT : DOT_COLOR_DARK;
+    octx.fillStyle = getCssVar(DOT_COLOR_CSS_VAR) || (theme === 'light' ? '#D2D2D7' : '#38383A');
     octx.globalAlpha = DOT_ALPHA;
     octx.beginPath();
     octx.arc(size / 2, size / 2, DOT_RADIUS, 0, Math.PI * 2);
