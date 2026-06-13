@@ -12,7 +12,7 @@
 // ============================================================
 
 import type { LayoutItem } from '../../utils/layout';
-import type { ImageMetadata, DetectionBox } from '../../types';
+import type { ImageMetadata, DetectionBox, InfoSegment } from '../../types';
 import { drawDetectionOverlay } from './drawDetectionOverlay';
 import { easeOutQuart } from '../../utils/easing';
 import { getCssVar } from '../../utils/cssVars';
@@ -64,6 +64,22 @@ const getHoverAnimDuration = (): number => {
 const INFO_FONT_SIZE = 11;
 const INFO_FONT_NAME = `600 ${INFO_FONT_SIZE}px system-ui, -apple-system, sans-serif`;
 const INFO_FONT_PARAMS = `400 ${INFO_FONT_SIZE}px system-ui, -apple-system, sans-serif`;
+const FA_ICON_SIZE = INFO_FONT_SIZE - 1;
+const FA_FONT = `900 ${FA_ICON_SIZE}px 'FA Solid'`;
+const FA_ICON_COLOR = 'rgba(255, 255, 255, 0.45)';
+/** 图标相对文字基线的 Y 偏移（像素），向上为负 */
+const FA_ICON_Y_OFFSET = -1;
+const SCORE_COLOR_GREEN = '#4ade80';
+const SCORE_COLOR_YELLOW = '#fbbf24';
+const SCORE_COLOR_RED = '#ef4444';
+const CROWN_ICON_COLOR = 'rgba(251, 191, 36, 0.65)';
+
+// FA Solid 图标 Unicode 码位
+const FA_CIRCLE_DOT = '\uf192';       // 光圈
+const FA_CLOCK = '\uf017';            // 快门速度
+const FA_FILM = '\uf008';             // ISO
+const FA_ARROWS_LR = '\uf07e';        // 焦距
+const FA_CROWN = '\uf521';            // 合焦(最优)
 const INFO_TEXT_COLOR_CSS = '--color-text-inverse';
 function getInfoTextColor(): string {
   return getCssVar(INFO_TEXT_COLOR_CSS) || '#FFFFFF';
@@ -77,8 +93,6 @@ const INFO_PADDING_BOTTOM = 6;
 const INFO_LINE_GAP = 3;
 /** 估算字符宽度（用于截断，避免 measureText） */
 const INFO_CHAR_WIDTH = 6.5;
-const STAR_FILLED = '\u2605'; // ★
-const STAR_EMPTY = '\u2606';  // ☆
 
 // ─── 分组角标常量 ─────────────────────────────────────
 
@@ -165,11 +179,14 @@ export class CanvasImageItem {
   private histogramG: number[] | null = null;
   private histogramB: number[] | null = null;
 
-  // 信息覆盖层数据（预计算字符串，避免每帧格式化）
+  // 信息覆盖层数据（预计算渲染段，避免每帧格式化）
   private infoFileName: string = '';
   private infoCaptureTime: string = '';
-  private infoParams: string = '';
+  private infoSegments: InfoSegment[] = [];
   private infoVisible: boolean = false;
+
+  // 组内合焦最优标记
+  private _isBestInGroup: boolean = false;
 
   // 分组角标
   private _isFirstInGroup: boolean = false;
@@ -192,6 +209,16 @@ export class CanvasImageItem {
   }
 
   // ── 公共方法 ────────────────────────────────────────
+
+  /** 设置组内合焦最优标记 */
+  setIsBestInGroup(value: boolean): void {
+    this._isBestInGroup = value;
+  }
+
+  /** 获取组内合焦最优标记 */
+  get isBestInGroup(): boolean {
+    return this._isBestInGroup;
+  }
 
   /**
    * 设置图片内容
@@ -216,12 +243,12 @@ export class CanvasImageItem {
 
   /**
    * 设置图片信息（文件名 + 拍摄参数）
-   * 预格式化参数字符串，避免 draw() 中每帧重复计算
+   * 预计算渲染段，避免 draw() 中每帧重复计算
    */
   setImageInfo(fileName: string, metadata?: ImageMetadata | null): void {
     this.infoFileName = fileName;
     this.infoCaptureTime = CanvasImageItem._formatCaptureTime(metadata?.captureTime);
-    this.infoParams = CanvasImageItem._formatParams(metadata);
+    this.infoSegments = CanvasImageItem._buildSegments(metadata, this._isBestInGroup);
     this.infoVisible = fileName.length > 0;
   }
 
@@ -471,7 +498,7 @@ export class CanvasImageItem {
    * @param showHistogram 是否显示直方图（需同时有直方图数据）
    */
   private _drawInfoOverlay(ctx: CanvasRenderingContext2D, zoom: number, showImageInfo: boolean, showHistogram: boolean): void {
-    const hasInfo = showImageInfo && this.infoVisible && (this.infoFileName || this.infoParams);
+    const hasInfo = showImageInfo && this.infoVisible && (this.infoFileName || this.infoSegments.length > 0);
     const hasHistogram = showHistogram && this.histogramR !== null;
 
     // 两者均不可见时不绘制
@@ -483,7 +510,7 @@ export class CanvasImageItem {
 
     // 计算各区域高度（屏幕像素）
     const infoTextH = hasInfo
-      ? (this.infoParams.length > 0 ? 2 : 1) * INFO_FONT_SIZE + (this.infoParams.length > 0 ? INFO_LINE_GAP : 0)
+      ? (this.infoSegments.length > 0 ? 2 : 1) * INFO_FONT_SIZE + (this.infoSegments.length > 0 ? INFO_LINE_GAP : 0)
       : 0;
     const histH = hasHistogram ? HISTOGRAM_HEIGHT : 0;
 
@@ -538,19 +565,24 @@ export class CanvasImageItem {
   /** 绘制信息文字（文件名 + 拍摄参数） */
   private _drawInfoText(ctx: CanvasRenderingContext2D, textX: number, maxWidth: number): void {
     if (!this.infoVisible) return;
-    const hasParams = this.infoParams.length > 0;
+    const hasParams = this.infoSegments.length > 0;
 
     const nameWithTime = this.infoCaptureTime
       ? `${this.infoFileName}  ${this.infoCaptureTime}`
       : this.infoFileName;
 
     if (hasParams) {
-      // 参数行（底部）
+      // 参数行（底部）—— 分段渲染
       const paramsY = -INFO_PADDING_BOTTOM;
-      ctx.font = INFO_FONT_PARAMS;
-      ctx.fillStyle = INFO_TEXT_SECONDARY;
       ctx.textBaseline = 'bottom';
-      ctx.fillText(this.infoParams, textX, paramsY, maxWidth);
+      let x = textX;
+      for (const seg of this.infoSegments) {
+        ctx.font = seg.font;
+        ctx.fillStyle = seg.color;
+        const y = paramsY + (seg.yOffset ?? 0);
+        ctx.fillText(seg.text, x, y);
+        x += ctx.measureText(seg.text).width;
+      }
 
       // 文件名 + 时间行（参数行上方）
       const nameY = paramsY - INFO_FONT_SIZE - INFO_LINE_GAP;
@@ -853,25 +885,48 @@ export class CanvasImageItem {
     ctx.restore();
   }
 
-  /** 格式化拍摄参数为显示字符串 */
-  private static _formatParams(meta?: ImageMetadata | null): string {
-    if (!meta) return '';
-    const parts: string[] = [];
+  /** 构建拍摄参数渲染段 */
+  private static _buildSegments(meta?: ImageMetadata | null, isBestInGroup?: boolean): InfoSegment[] {
+    if (!meta) return [];
+    const segs: InfoSegment[] = [];
+    const icon = (code: string): InfoSegment => ({ text: code, font: FA_FONT, color: FA_ICON_COLOR, yOffset: FA_ICON_Y_OFFSET });
+    const text = (s: string, color = INFO_TEXT_SECONDARY): InfoSegment => ({ text: s, font: INFO_FONT_PARAMS, color });
+    const space = (): InfoSegment => ({ text: ' ', font: INFO_FONT_PARAMS, color: INFO_TEXT_SECONDARY });
 
-    if (meta.fNumber != null) parts.push(`f/${meta.fNumber}`);
-    if (meta.exposureTime != null) parts.push(`${meta.exposureTime}s`);
-    if (meta.isoSpeed != null) parts.push(`ISO ${meta.isoSpeed}`);
-    if (meta.focalLength35mm != null && meta.focalLength35mm !== meta.focalLength) {
-      parts.push(`${meta.focalLength35mm}mm`);
-    } else if (meta.focalLength != null) {
-      parts.push(`${meta.focalLength}mm`);
+    if (meta.fNumber != null) {
+      segs.push(icon(FA_CIRCLE_DOT), space(), text(`f/${meta.fNumber}`));
+    }
+    if (meta.exposureTime != null) {
+      if (segs.length > 0) segs.push(space());
+      segs.push(icon(FA_CLOCK), space(), text(`${meta.exposureTime}s`));
+    }
+    if (meta.isoSpeed != null) {
+      if (segs.length > 0) segs.push(space());
+      segs.push(icon(FA_FILM), space(), text(`ISO ${meta.isoSpeed}`));
+    }
+    const focal = (meta.focalLength35mm != null && meta.focalLength35mm !== meta.focalLength)
+      ? `${meta.focalLength35mm}mm`
+      : meta.focalLength != null ? `${meta.focalLength}mm` : null;
+    if (focal != null) {
+      if (segs.length > 0) segs.push(space());
+      segs.push(icon(FA_ARROWS_LR), space(), text(focal));
     }
     if (meta.focusScore != null) {
       const score = Math.max(0, Math.min(100, Math.round(meta.focusScore)));
-      parts.push(`\u2605${score}`);  // ★73
+      const scoreColor = score >= 85 ? SCORE_COLOR_GREEN
+        : score >= 50 ? SCORE_COLOR_YELLOW
+        : SCORE_COLOR_RED;
+      if (segs.length > 0) segs.push(space());
+      if (isBestInGroup) {
+        segs.push({ text: FA_CROWN, font: FA_FONT, color: CROWN_ICON_COLOR, yOffset: FA_ICON_Y_OFFSET });
+        segs.push(space());
+      } else {
+        segs.push({ text: '\u2605', font: INFO_FONT_PARAMS, color: 'rgba(255, 255, 255, 0.6)' });
+      }
+      segs.push(text(String(score), scoreColor));
     }
 
-    return parts.join(' \u00B7 ');
+    return segs;
   }
 
   /** 格式化拍摄时间：ISO 字符串 → YYYY-MM-DD HH:mm:ss */

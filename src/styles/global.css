@@ -1,5 +1,16 @@
 @import './variables.css';
 
+/* ────────────────────────────────────────────────────────
+   Font Awesome Solid 900 (Canvas 2D 图标渲染用)
+──────────────────────────────────────────────────────── */
+@font-face {
+  font-family: 'FA Solid';
+  src: url('@fortawesome/fontawesome-free/webfonts/fa-solid-900.woff2') format('woff2');
+  font-weight: 900;
+  font-style: normal;
+  font-display: block;
+}
+
 /* ════════════════════════════════════════════════════════════════════════════
    全局重置和基础样式
    

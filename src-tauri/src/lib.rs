@@ -89,6 +89,7 @@ pub fn run() {
             commands::image_commands::get_image_url,
             commands::image_commands::get_metadata,
             commands::image_commands::get_batch_metadata,
+            commands::image_commands::open_original,
             commands::export_commands::select_export_dir,
             commands::export_commands::export_images,
             commands::cache_commands::get_cache_size,

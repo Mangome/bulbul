@@ -45,6 +45,7 @@ import { useSelectionStore } from "../../stores/useSelectionStore";
 import { useThemeStore } from "../../stores/useThemeStore";
 import { Loupe, type LoupeSourceRect } from "./Loupe";
 import type { ItemRect } from "./Loupe";
+import { ContextMenu } from "./ContextMenu";
 import { Scrollbar } from "./Scrollbar";
 import { getCssVar, getCssVarRgb } from "../../utils/cssVars";
 import { easeOutQuart, lerpColorNum } from "../../utils/easing";
@@ -130,6 +131,58 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
     const imageLoaderRef = useRef<ImageLoader | null>(null);
     const visibleItemsRef = useRef<LayoutItem[]>([]);
     const canvasItemsRef = useRef<Map<string, CanvasImageItem>>(new Map());
+    /** 组内合焦最优映射: groupId → bestHash */
+    const bestInGroupMapRef = useRef<Map<number, string>>(new Map());
+
+    /** 重新计算指定分组的合焦最优，返回是否有变化 */
+    const recomputeBestInGroup = useCallback((groupId: number): boolean => {
+      const metaMap = metadataMapRef.current;
+      const pages = layoutRef.current.pages;
+
+      // 从 layout.pages 找到该分组所有 hash（不依赖可见 item）
+      let groupHashes: string[] = [];
+      for (const page of pages) {
+        if (page.groupId === groupId) {
+          groupHashes = page.items.map(i => i.hash);
+          break;
+        }
+      }
+
+      // 遍历该分组所有 hash，找最高 focusScore
+      let bestHash: string | null = null;
+      let bestScore = -1;
+      for (const hash of groupHashes) {
+        const score = metaMap.get(hash)?.focusScore;
+        if (score != null && score > bestScore) {
+          bestScore = score;
+          bestHash = hash;
+        }
+      }
+
+      const prevBest = bestInGroupMapRef.current.get(groupId) ?? null;
+      if (prevBest === bestHash) return false;
+
+      if (bestHash != null) {
+        bestInGroupMapRef.current.set(groupId, bestHash);
+      } else {
+        bestInGroupMapRef.current.delete(groupId);
+      }
+
+      // 更新同组可见 item 的 isBestInGroup + 刷新 segments
+      const items = canvasItemsRef.current;
+      for (const item of items.values()) {
+        if (item.groupId !== groupId) continue;
+        const isBest = item.hash === bestHash;
+        if (item.isBestInGroup !== isBest) {
+          item.setIsBestInGroup(isBest);
+          const meta = metaMap.get(item.hash);
+          const fileName = fileNamesRef.current.get(item.hash) ?? item.hash;
+          item.setImageInfo(fileName, meta);
+        }
+      }
+
+      return true;
+    }, []);
 
     // Canvas 尺寸（CSS 像素）
     const screenWidthRef = useRef(0);
@@ -217,6 +270,14 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
     const loupeHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
       null,
     );
+
+    // ── 右键菜单状态 ──
+    const [contextMenuState, setContextMenuState] = useState<{
+      visible: boolean;
+      x: number;
+      y: number;
+      hash: string | null;
+    }>({ visible: false, x: 0, y: 0, hash: null });
 
     // ── wheel 事件 throttle ──
     const lastWheelUpdateTimeRef = useRef<number>(0);
@@ -345,6 +406,9 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
         const canvasItem = new CanvasImageItem(item);
         const fileName = fileNamesRef.current.get(item.hash) ?? item.hash;
         const meta = metadataMapRef.current.get(item.hash);
+        // 先设置 isBestInGroup（从已有缓存中查找），再 setImageInfo 避免二次刷新
+        const existingBest = bestInGroupMapRef.current.get(item.groupId);
+        canvasItem.setIsBestInGroup(item.hash === existingBest);
         canvasItem.setImageInfo(fileName, meta);
 
         // 同步选中 + 检测框状态
@@ -370,6 +434,9 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
 
         canvasItemsRef.current.set(item.hash, canvasItem);
         imageLoader?.pinImage(item.hash);
+
+        // 新 item 进入视口时，计算其分组的合焦最优
+        recomputeBestInGroup(item.groupId);
 
         if (imageLoader) {
           imageLoader.loadImage(item.hash, item.width).then((result) => {
@@ -681,6 +748,11 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
       // 图片加载器
       imageLoaderRef.current = new ImageLoader(50);
 
+      // FA 字体就绪后触发重绘，确保首帧不缺字
+      document.fonts?.ready.then(() => {
+        if (!destroyedRef.current) markDirty();
+      });
+
       // 设置分组总数
       useCanvasStore.getState().setGroupCount(layoutRef.current.pages.length);
 
@@ -972,6 +1044,32 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
         }
       };
 
+      // ── 右键上下文菜单 ──
+      const handleContextMenu = (e: MouseEvent) => {
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const screenX = e.clientX - rect.left;
+        const screenY = e.clientY - rect.top;
+        const offsetY = -scrollYRef.current + DEFAULT_LAYOUT_CONFIG.paddingTop;
+        const contentX = screenX;
+        const contentY = screenY - offsetY;
+
+        for (const [hash, item] of canvasItemsRef.current) {
+          if (item.alpha <= 0) continue;
+          if (item.hitTest(contentX, contentY)) {
+            setContextMenuState({
+              visible: true,
+              x: e.clientX,
+              y: e.clientY,
+              hash,
+            });
+            return;
+          }
+        }
+        // 点击空白区域，关闭菜单
+        setContextMenuState((prev) => ({ ...prev, visible: false }));
+      };
+
       // ── 键盘事件 ──
       const handleKeyDown = (e: KeyboardEvent) => {
         if (destroyedRef.current) return;
@@ -1069,6 +1167,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
       // ── 绑定事件 ──
       canvas.addEventListener("wheel", handleWheel, { passive: false });
       canvas.addEventListener("pointerdown", handlePointerDown);
+      canvas.addEventListener("contextmenu", handleContextMenu);
       window.addEventListener("pointermove", handlePointerMove);
       window.addEventListener("pointerup", handlePointerUp);
       window.addEventListener("keydown", handleKeyDown);
@@ -1131,6 +1230,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
 
         canvas.removeEventListener("wheel", handleWheel);
         canvas.removeEventListener("pointerdown", handlePointerDown);
+        canvas.removeEventListener("contextmenu", handleContextMenu);
         window.removeEventListener("pointermove", handlePointerMove);
         window.removeEventListener("pointerup", handlePointerUp);
         window.removeEventListener("keydown", handleKeyDown);
@@ -1262,6 +1362,10 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
               meta.histogramG,
               meta.histogramB,
             );
+          }
+          // 合焦评分变化时，重新计算组内最优
+          if (meta?.focusScore != null) {
+            recomputeBestInGroup(canvasItem.groupId);
           }
           markDirty();
         },
@@ -1454,6 +1558,14 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
         >
           {selectedCount > 0 ? `已选中 ${selectedCount} 张图片` : "未选中图片"}
         </div>
+        {contextMenuState.visible && contextMenuState.hash && (
+          <ContextMenu
+            x={contextMenuState.x}
+            y={contextMenuState.y}
+            hash={contextMenuState.hash}
+            onClose={() => setContextMenuState((prev) => ({ ...prev, visible: false }))}
+          />
+        )}
       </div>
     );
   },

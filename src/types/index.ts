@@ -136,6 +136,15 @@ export interface ProcessingProgress {
   estimatedRemainingMs: number | null;
 }
 
+/** 信息覆盖层渲染段 */
+export interface InfoSegment {
+  text: string;
+  font: string;
+  color: string;
+  /** 渲染时的 Y 偏移（像素），用于图标与文字基线对齐 */
+  yOffset?: number;
+}
+
 /** 鸟种统计条目 */
 export interface SpeciesStat {
   /** 鸟种名称 */

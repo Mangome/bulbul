@@ -9,7 +9,7 @@
 //! - 图像处理使用 spawn_blocking 避免阻塞 tokio 异步运行时
 
 use std::io::{BufReader, Cursor};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use image::imageops::FilterType;
 use image::GenericImageView;
@@ -274,6 +274,48 @@ fn apply_actual_dimensions(metadata: &mut ImageMetadata, stored_width: u32, stor
     };
     metadata.image_width = Some(display_w);
     metadata.image_height = Some(display_h);
+}
+
+/// 从图片文件提取原尺寸嵌入 JPEG 并写入缓存
+///
+/// 按需提取：先检查 original/ 缓存是否已存在，存在则直接返回路径；
+/// 不存在则从源文件提取嵌入 JPEG（RAW 格式）或直接复制（非 RAW 格式），
+/// 写入 `{cache_base_dir}/original/{hash}.jpg`。
+pub async fn extract_original_jpeg(
+    file_path: &Path,
+    hash: &str,
+    cache_base_dir: &Path,
+) -> Result<PathBuf, AppError> {
+    let original_path = crate::utils::paths::get_cache_file_path(cache_base_dir, hash, "original");
+
+    // 缓存命中：直接返回
+    if original_path.exists() {
+        return Ok(original_path);
+    }
+
+    // 从源文件提取嵌入 JPEG 数据
+    let extension = file_path
+        .extension()
+        .map(|e| e.to_string_lossy().to_string())
+        .unwrap_or_default();
+
+    let original_data = if raw_parser::is_raw_extension(&extension) {
+        // RAW 格式：从容器中提取最大嵌入 JPEG
+        let data = tokio::fs::read(file_path)
+            .await
+            .map_err(|e| AppError::FileNotFound(format!("{}: {}", file_path.display(), e)))?;
+        let extractor = raw_parser::get_extractor(&extension)?;
+        extractor.get_image_data(&data)?
+    } else {
+        // 非 RAW 格式（JPEG/PNG 等）：直接使用原始文件
+        tokio::fs::read(file_path)
+            .await
+            .map_err(|e| AppError::FileNotFound(format!("{}: {}", file_path.display(), e)))?
+    };
+
+    // 写入缓存
+    let path = cache::write_original(cache_base_dir, hash, &original_data).await?;
+    Ok(path)
 }
 
 /// 生成 200px 宽缩略图

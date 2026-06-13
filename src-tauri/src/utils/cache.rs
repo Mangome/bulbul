@@ -7,9 +7,9 @@ use std::path::{Path, PathBuf};
 use crate::models::AppError;
 use crate::utils::paths::get_cache_file_path;
 
-/// 确保缓存子目录存在：`{cache_base_dir}/medium/`、`{cache_base_dir}/thumbnail/`、`{cache_base_dir}/result/` 和 `{cache_base_dir}/groups/`
+/// 确保缓存子目录存在：`{cache_base_dir}/medium/`、`{cache_base_dir}/thumbnail/`、`{cache_base_dir}/original/`、`{cache_base_dir}/result/` 和 `{cache_base_dir}/groups/`
 pub async fn ensure_cache_dirs(cache_base_dir: &Path) -> Result<(), AppError> {
-    for subdir in &["medium", "thumbnail", "result", "groups"] {
+    for subdir in &["medium", "thumbnail", "original", "result", "groups"] {
         let dir_path = cache_base_dir.join(subdir);
         tokio::fs::create_dir_all(&dir_path).await.map_err(|e| {
             AppError::CacheError(format!(
@@ -61,14 +61,37 @@ pub async fn write_thumbnail(
     Ok(path)
 }
 
-/// 遍历 medium/ + thumbnail/ + result/ + groups/ 子目录，返回 (总字节数, 文件数量)
+/// 异步写入 original JPEG 数据到缓存
+pub async fn write_original(
+    cache_base_dir: &Path,
+    hash: &str,
+    data: &[u8],
+) -> Result<PathBuf, AppError> {
+    let path = get_cache_file_path(cache_base_dir, hash, "original");
+    // 确保 original 目录存在（按需缓存时可能尚未创建）
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent).await.map_err(|e| {
+            AppError::CacheError(format!(
+                "无法创建 original 缓存目录 '{}': {}",
+                parent.display(),
+                e
+            ))
+        })?;
+    }
+    tokio::fs::write(&path, data).await.map_err(|e| {
+        AppError::CacheError(format!("写入 original 缓存失败 '{}': {}", path.display(), e))
+    })?;
+    Ok(path)
+}
+
+/// 遍历 medium/ + thumbnail/ + original/ + result/ + groups/ 子目录，返回 (总字节数, 文件数量)
 ///
 /// 子目录不存在时视为 0 大小，不报错。
 pub async fn get_cache_size(cache_base_dir: &Path) -> (u64, u64) {
     let mut total_size: u64 = 0;
     let mut file_count: u64 = 0;
 
-    for subdir in &["medium", "thumbnail", "result", "groups"] {
+    for subdir in &["medium", "thumbnail", "original", "result", "groups"] {
         let dir_path = cache_base_dir.join(subdir);
         let mut entries = match tokio::fs::read_dir(&dir_path).await {
             Ok(entries) => entries,
@@ -88,11 +111,11 @@ pub async fn get_cache_size(cache_base_dir: &Path) -> (u64, u64) {
     (total_size, file_count)
 }
 
-/// 删除 medium/ + thumbnail/ + result/ + groups/ 子目录下所有文件，保留目录结构
+/// 删除 medium/ + thumbnail/ + original/ + result/ + groups/ 子目录下所有文件，保留目录结构
 ///
 /// 忽略 NotFound 错误，其他 IO 错误返回 `AppError::CacheError`。
 pub async fn clear_all_cache(cache_base_dir: &Path) -> Result<(), AppError> {
-    for subdir in &["medium", "thumbnail", "result", "groups"] {
+    for subdir in &["medium", "thumbnail", "original", "result", "groups"] {
         let dir_path = cache_base_dir.join(subdir);
         let mut entries = match tokio::fs::read_dir(&dir_path).await {
             Ok(entries) => entries,
@@ -133,6 +156,7 @@ mod tests {
 
         assert!(cache_base.join("medium").exists());
         assert!(cache_base.join("thumbnail").exists());
+        assert!(cache_base.join("original").exists());
         assert!(cache_base.join("result").exists());
         assert!(cache_base.join("groups").exists());
     }
@@ -143,11 +167,11 @@ mod tests {
         let cache_base = dir.path().join("bulbul");
 
         ensure_cache_dirs(&cache_base).await.unwrap();
-        // 二次调用不应报错
         ensure_cache_dirs(&cache_base).await.unwrap();
 
         assert!(cache_base.join("medium").exists());
         assert!(cache_base.join("thumbnail").exists());
+        assert!(cache_base.join("original").exists());
         assert!(cache_base.join("result").exists());
         assert!(cache_base.join("groups").exists());
     }
@@ -178,7 +202,6 @@ mod tests {
         let cache_base = dir.path().join("bulbul");
         ensure_cache_dirs(&cache_base).await.unwrap();
 
-        // 仅写入 medium，缺少 thumbnail
         tokio::fs::write(cache_base.join("medium").join("partial.jpg"), b"data")
             .await
             .unwrap();
@@ -225,6 +248,23 @@ mod tests {
         assert_eq!(content, data);
     }
 
+    #[tokio::test]
+    async fn test_write_original_creates_dir() {
+        let dir = tempdir().unwrap();
+        let cache_base = dir.path().join("bulbul");
+        // 不调用 ensure_cache_dirs，验证 write_original 自动创建目录
+
+        let data = b"fake jpeg original data";
+        let path = write_original(&cache_base, "test_hash", data)
+            .await
+            .unwrap();
+
+        assert!(path.exists());
+        assert!(cache_base.join("original").is_dir());
+        let content = tokio::fs::read(&path).await.unwrap();
+        assert_eq!(content, data);
+    }
+
     // ── get_cache_size 测试 ──
 
     #[tokio::test]
@@ -233,16 +273,14 @@ mod tests {
         let cache_base = dir.path().join("bulbul");
         ensure_cache_dirs(&cache_base).await.unwrap();
 
-        // medium: 3 files, 1MB each
         for i in 0..3u8 {
-            let data = vec![i; 1_048_576]; // 1MB
+            let data = vec![i; 1_048_576];
             tokio::fs::write(cache_base.join("medium").join(format!("h{i}.jpg")), &data)
                 .await
                 .unwrap();
         }
-        // thumbnail: 3 files, 100KB each
         for i in 0..3u8 {
-            let data = vec![i; 102_400]; // 100KB
+            let data = vec![i; 102_400];
             tokio::fs::write(
                 cache_base.join("thumbnail").join(format!("h{i}.jpg")),
                 &data,
@@ -271,11 +309,25 @@ mod tests {
     async fn test_get_cache_size_nonexistent_dirs() {
         let dir = tempdir().unwrap();
         let cache_base = dir.path().join("bulbul");
-        // 不创建目录
 
         let (total_size, file_count) = get_cache_size(&cache_base).await;
         assert_eq!(total_size, 0);
         assert_eq!(file_count, 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_cache_size_includes_original() {
+        let dir = tempdir().unwrap();
+        let cache_base = dir.path().join("bulbul");
+        ensure_cache_dirs(&cache_base).await.unwrap();
+
+        tokio::fs::write(cache_base.join("original").join("h1.jpg"), vec![0u8; 2048])
+            .await
+            .unwrap();
+
+        let (total_size, file_count) = get_cache_size(&cache_base).await;
+        assert_eq!(file_count, 1);
+        assert_eq!(total_size, 2048);
     }
 
     // ── clear_all_cache 测试 ──
@@ -286,7 +338,6 @@ mod tests {
         let cache_base = dir.path().join("bulbul");
         ensure_cache_dirs(&cache_base).await.unwrap();
 
-        // 创建缓存文件
         tokio::fs::write(cache_base.join("medium").join("a.jpg"), b"medium_a")
             .await
             .unwrap();
@@ -296,10 +347,8 @@ mod tests {
 
         clear_all_cache(&cache_base).await.unwrap();
 
-        // 文件应被删除
         assert!(!cache_base.join("medium/a.jpg").exists());
         assert!(!cache_base.join("thumbnail/a.jpg").exists());
-        // 目录应保留
         assert!(cache_base.join("medium").is_dir());
         assert!(cache_base.join("thumbnail").is_dir());
     }
@@ -310,7 +359,6 @@ mod tests {
         let cache_base = dir.path().join("bulbul");
         ensure_cache_dirs(&cache_base).await.unwrap();
 
-        // 空目录不应报错
         clear_all_cache(&cache_base).await.unwrap();
     }
 
@@ -319,8 +367,23 @@ mod tests {
         let dir = tempdir().unwrap();
         let cache_base = dir.path().join("bulbul");
 
-        // 目录不存在不应报错
         clear_all_cache(&cache_base).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_clear_all_cache_includes_original() {
+        let dir = tempdir().unwrap();
+        let cache_base = dir.path().join("bulbul");
+        ensure_cache_dirs(&cache_base).await.unwrap();
+
+        tokio::fs::write(cache_base.join("original").join("a.jpg"), b"original_a")
+            .await
+            .unwrap();
+
+        clear_all_cache(&cache_base).await.unwrap();
+
+        assert!(!cache_base.join("original/a.jpg").exists());
+        assert!(cache_base.join("original").is_dir());
     }
 
     // ── result/groups 目录测试 ──
@@ -342,18 +405,15 @@ mod tests {
         let cache_base = dir.path().join("bulbul");
         ensure_cache_dirs(&cache_base).await.unwrap();
 
-        // medium: 1MB
         tokio::fs::write(
             cache_base.join("medium").join("h1.jpg"),
             vec![0u8; 1_048_576],
         )
         .await
         .unwrap();
-        // result: 2KB
         tokio::fs::write(cache_base.join("result").join("abc.json"), vec![0u8; 2048])
             .await
             .unwrap();
-        // groups: 1KB
         tokio::fs::write(cache_base.join("groups").join("def.json"), vec![0u8; 1024])
             .await
             .unwrap();
