@@ -66,7 +66,7 @@ export interface ImageMetadata {
   fileSize: number | null;
   compression: string | null;
 
-  // 合焦程度评分（1-5 星）
+  // 合焦程度评分（0-100 百分制）
   focusScore: number | null;
 
   // 鸟类检测框（相对坐标 [0, 1]）

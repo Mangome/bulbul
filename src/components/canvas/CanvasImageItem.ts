@@ -867,8 +867,8 @@ export class CanvasImageItem {
       parts.push(`${meta.focalLength}mm`);
     }
     if (meta.focusScore != null) {
-      const score = Math.round(Math.max(1, Math.min(5, meta.focusScore)));
-      parts.push(STAR_FILLED.repeat(score) + STAR_EMPTY.repeat(5 - score));
+      const score = Math.max(0, Math.min(100, Math.round(meta.focusScore)));
+      parts.push(`\u2605${score}`);  // ★73
     }
 
     return parts.join(' \u00B7 ');

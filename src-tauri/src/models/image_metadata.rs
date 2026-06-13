@@ -54,7 +54,7 @@ pub struct ImageMetadata {
     pub file_size: Option<u64>,
     pub compression: Option<String>,
 
-    // 合焦程度评分（1-5 星）
+    // 合焦程度评分（0-100 百分制）
     pub focus_score: Option<u32>,
 
     // 鸟类检测框（相对坐标 [0, 1]）
@@ -155,11 +155,11 @@ mod tests {
     #[test]
     fn test_old_json_without_new_fields_deserializes() {
         // 4.7: 旧 JSON 无 detectionBboxes/focusScoringMethod 时反序列化成功
-        let json = r#"{"cameraMake": "Nikon", "isoSpeed": 400, "focusScore": 4}"#;
+        let json = r#"{"cameraMake": "Nikon", "isoSpeed": 400, "focusScore": 53}"#;
         let meta: ImageMetadata = serde_json::from_str(json).unwrap();
 
         assert_eq!(meta.camera_make, Some("Nikon".to_string()));
-        assert_eq!(meta.focus_score, Some(4));
+        assert_eq!(meta.focus_score, Some(53));
         assert!(meta.detection_bboxes.is_empty());
         assert!(meta.focus_score_method.is_none());
     }
@@ -169,7 +169,7 @@ mod tests {
         // 4.8: 新 JSON 含完整字段时反序列化正确
         let json = r#"{
             "cameraMake": "Nikon",
-            "focusScore": 5,
+            "focusScore": 96,
             "detectionBboxes": [
                 {"x1": 0.2, "y1": 0.1, "x2": 0.8, "y2": 0.9, "confidence": 0.95}
             ],
@@ -177,7 +177,7 @@ mod tests {
         }"#;
         let meta: ImageMetadata = serde_json::from_str(json).unwrap();
 
-        assert_eq!(meta.focus_score, Some(5));
+        assert_eq!(meta.focus_score, Some(96));
         assert_eq!(meta.detection_bboxes.len(), 1);
         assert!((meta.detection_bboxes[0].confidence - 0.95).abs() < 0.001);
         assert_eq!(

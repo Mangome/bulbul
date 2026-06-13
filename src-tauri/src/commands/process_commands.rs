@@ -1755,7 +1755,7 @@ mod tests {
     fn test_focus_score_update_payload_format() {
         // 模拟 emit 事件的 JSON payload（完整版本包含 detectionBboxes）
         let hash = "abc123def456789".to_string();
-        let score = Some(5u32);
+        let score = Some(96u32);
         let method = FocusScoringMethod::BirdRegion;
         let bboxes = vec![crate::core::bird_detection::DetectionBox::new(
             0.1, 0.2, 0.8, 0.9, 0.95,
@@ -1771,7 +1771,7 @@ mod tests {
         // 验证 payload 结构（包含所有必需字段）
         assert!(payload.is_object());
         assert_eq!(payload["hash"], "abc123def456789");
-        assert_eq!(payload["score"], 5);
+        assert_eq!(payload["score"].as_u64().unwrap(), 96);
         assert_eq!(payload["method"], "BirdRegion");
         assert!(payload["detectionBboxes"].is_array());
         assert_eq!(payload["detectionBboxes"].as_array().unwrap().len(), 1);
@@ -1890,7 +1890,7 @@ mod tests {
 
         // 写入
         let entry = DetectionCacheEntry {
-            score: Some(4),
+            score: Some(53),
             method: FocusScoringMethod::BirdRegion,
             bboxes: vec![DetectionBox::new(0.1, 0.2, 0.8, 0.9, 0.95)],
         };
@@ -1900,7 +1900,7 @@ mod tests {
 
         // 读取
         let read_entry = state.detection_cache.get("hash_abc").unwrap();
-        assert_eq!(read_entry.score, Some(4));
+        assert_eq!(read_entry.score, Some(53));
         assert_eq!(read_entry.method, FocusScoringMethod::BirdRegion);
         assert_eq!(read_entry.bboxes.len(), 1);
 
@@ -1925,7 +1925,7 @@ mod tests {
         state.detection_cache.insert(
             "hash_abc".to_string(),
             DetectionCacheEntry {
-                score: Some(4),
+                score: Some(53),
                 method: FocusScoringMethod::BirdRegion,
                 bboxes: vec![],
             },

@@ -21,7 +21,7 @@ mod tests {
     #[test]
     fn test_detection_cache_entry_serialize_deserialize() {
         let entry = DetectionCacheEntry {
-            score: Some(4),
+            score: Some(53),
             method: FocusScoringMethod::BirdRegion,
             bboxes: vec![DetectionBox::new(0.1, 0.2, 0.8, 0.9, 0.95)],
         };
@@ -29,7 +29,7 @@ mod tests {
         let json = serde_json::to_string(&entry).unwrap();
         let deserialized: DetectionCacheEntry = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(deserialized.score, Some(4));
+        assert_eq!(deserialized.score, Some(53));
         assert_eq!(deserialized.method, FocusScoringMethod::BirdRegion);
         assert_eq!(deserialized.bboxes.len(), 1);
         assert!((deserialized.bboxes[0].x1 - 0.1).abs() < f32::EPSILON);
@@ -42,7 +42,7 @@ mod tests {
         bbox.species_confidence = Some(0.85);
 
         let entry = DetectionCacheEntry {
-            score: Some(5),
+            score: Some(88),
             method: FocusScoringMethod::BirdRegion,
             bboxes: vec![bbox],
         };
@@ -80,7 +80,7 @@ mod tests {
         cache.insert(
             "hash_a".to_string(),
             DetectionCacheEntry {
-                score: Some(3),
+                score: Some(40),
                 method: FocusScoringMethod::FullImage,
                 bboxes: vec![],
             },
@@ -88,15 +88,15 @@ mod tests {
         cache.insert(
             "hash_b".to_string(),
             DetectionCacheEntry {
-                score: Some(5),
+                score: Some(96),
                 method: FocusScoringMethod::BirdRegion,
                 bboxes: vec![DetectionBox::new(0.2, 0.3, 0.7, 0.8, 0.88)],
             },
         );
 
         assert_eq!(cache.len(), 2);
-        assert_eq!(cache.get("hash_a").unwrap().score, Some(3));
-        assert_eq!(cache.get("hash_b").unwrap().score, Some(5));
+        assert_eq!(cache.get("hash_a").unwrap().score, Some(40));
+        assert_eq!(cache.get("hash_b").unwrap().score, Some(96));
         assert!(cache.get("hash_c").is_none());
     }
 }

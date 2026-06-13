@@ -1,14 +1,15 @@
 //! 合焦程度评分模块
 //!
-//! 基于 Laplacian 方差 + 分块检测，计算图像的合焦程度（1-5 星）。
+//! 基于 Laplacian 方差 + 分块检测，计算图像的合焦程度（0-100 百分制）。
 //!
 //! 算法流程：
 //! 1. 加载 JPEG 图像
 //! 2. 转灰度 + 等比下采样到长边 512px
 //! 3. 应用 Laplacian 卷积（二阶梯度检测）
-//! 4. 分块评估（5×4 = 20 块）
-//! 5. 取 Top-3 块方差的中位数作为合焦指标（抗噪更鲁棒）
-//! 6. 映射到 1-5 星评级
+//! 4. 在检测框区域内计算方差
+//! 5. 分段线性映射到 0-100 百分制
+//!
+//! 阈值校准基于 Nikon Z5 + 70-200mm f/2.8 鸟类区域评分实拍数据。
 //!
 //! 性能：单张 medium JPEG ~100-150ms
 
@@ -51,7 +52,7 @@ const TOP_K_BLOCKS: usize = 3;
 
 /// 从 JPEG 路径计算合焦评分（支持全画面和区域评分）
 ///
-/// 返回 (Some(1-5 星), 评分方法) 或 (None, Undetected)
+/// 返回 (Some(0-100 分), 评分方法) 或 (None, Undetected)
 pub fn calculate_focus_score_with_bbox(
     jpeg_path: &Path,
     bbox: Option<&DetectionBox>,
@@ -86,7 +87,7 @@ fn score_from_image_with_bbox(
     // 在 bbox 区域内计算方差
     let robust_variance = evaluate_blocks_in_bbox(&laplacian, bbox)?;
 
-    // 映射到 1-5 星
+    // 映射到 0-100 百分制
     Ok(variance_to_score(robust_variance))
 }
 
@@ -288,28 +289,33 @@ fn calculate_block_variance(rows: &[Vec<f32>], x_start: usize, x_end: usize) -> 
     (sum_sq / count as f64) - mean * mean
 }
 
-/// 将方差映射到 1-5 星评级
+/// 将方差映射到 0-100 百分制评分
 ///
-/// 阈值基于 Nikon NEF 嵌入 JPEG（全尺寸预览）经 512px 下采样后的
-/// Laplacian 方差分布调优。相机内 JPEG 经过锐化处理，方差值普遍偏高。
-///
-/// 参考值（Nikon D750, 85mm f/1.4）：
-/// - 精准合焦：800-2000+
-/// - 略微失焦：300-800
-/// - 明显失焦：50-300
-/// - 严重失焦：< 50
+/// 分段线性插值，阈值校准基于 Nikon Z5 + 70-200mm f/2.8 鸟类区域评分实拍数据：
+/// - [0, 100)     → [0, 15)    严重失焦，画面全糊
+/// - [100, 400)   → [15, 30)   明显失焦，轮廓可见但无细节
+/// - [400, 1000)  → [30, 50)   略微失焦，细节不清晰
+/// - [1000, 2000) → [50, 70)   合焦一般，部分细节可辨
+/// - [2000, 3000) → [70, 85)   合焦良好，细节清晰
+/// - [3000, 4000) → [85, 100]  精准合焦，细节锐利
+/// - [4000, ∞)    → 100        物理极限
 fn variance_to_score(variance: f64) -> u32 {
-    if variance >= 1200.0 {
-        5
-    } else if variance >= 600.0 {
-        4
-    } else if variance >= 200.0 {
-        3
-    } else if variance >= 50.0 {
-        2
+    let score = if variance >= 4000.0 {
+        100.0
+    } else if variance >= 3000.0 {
+        85.0 + (variance - 3000.0) / 1000.0 * 15.0
+    } else if variance >= 2000.0 {
+        70.0 + (variance - 2000.0) / 1000.0 * 15.0
+    } else if variance >= 1000.0 {
+        50.0 + (variance - 1000.0) / 1000.0 * 20.0
+    } else if variance >= 400.0 {
+        30.0 + (variance - 400.0) / 600.0 * 20.0
+    } else if variance >= 100.0 {
+        15.0 + (variance - 100.0) / 300.0 * 15.0
     } else {
-        1
-    }
+        variance / 100.0 * 15.0
+    };
+    score.round() as u32
 }
 
 #[cfg(test)]
@@ -347,34 +353,42 @@ mod tests {
     fn test_sharp_image_high_score() {
         let sharp_data = create_sharp_test_image(800, 600);
         let score = calculate_focus_score_from_memory(&sharp_data).unwrap();
-        assert!(score >= 4, "Sharp image should score high, got {}", score);
+        assert!(score >= 70, "Sharp image should score high, got {}", score);
     }
 
     #[test]
     fn test_blurred_image_low_score() {
         let blurred_data = create_blurred_test_image(800, 600);
         let score = calculate_focus_score_from_memory(&blurred_data).unwrap();
-        assert!(score <= 2, "Blurred image should score low, got {}", score);
+        assert!(score <= 30, "Blurred image should score low, got {}", score);
     }
 
     #[test]
     fn test_score_range() {
         let sharp_data = create_sharp_test_image(800, 600);
         let score = calculate_focus_score_from_memory(&sharp_data).unwrap();
-        assert!(score >= 1 && score <= 5, "Score must be 1-5, got {}", score);
+        assert!(score <= 100, "Score must be 0-100, got {}", score);
     }
 
     #[test]
     fn test_variance_to_score_boundaries() {
-        assert_eq!(variance_to_score(2000.0), 5);
-        assert_eq!(variance_to_score(1200.0), 5);
-        assert_eq!(variance_to_score(800.0), 4);
-        assert_eq!(variance_to_score(600.0), 4);
-        assert_eq!(variance_to_score(400.0), 3);
-        assert_eq!(variance_to_score(200.0), 3);
-        assert_eq!(variance_to_score(100.0), 2);
-        assert_eq!(variance_to_score(50.0), 2);
-        assert_eq!(variance_to_score(30.0), 1);
+        // 区间边界
+        assert_eq!(variance_to_score(0.0), 0);
+        assert_eq!(variance_to_score(100.0), 15);
+        assert_eq!(variance_to_score(400.0), 30);
+        assert_eq!(variance_to_score(1000.0), 50);
+        assert_eq!(variance_to_score(2000.0), 70);
+        assert_eq!(variance_to_score(3000.0), 85);
+        assert_eq!(variance_to_score(4000.0), 100);
+        assert_eq!(variance_to_score(5000.0), 100);
+
+        // 区间内部插值
+        assert_eq!(variance_to_score(50.0), 8);    // [0,100) 中点 → 7.5 ≈ 8
+        assert_eq!(variance_to_score(250.0), 23);  // [100,400) 中点 → 22.5 ≈ 23
+        assert_eq!(variance_to_score(700.0), 40);  // [400,1000) 中点 → 40
+        assert_eq!(variance_to_score(1500.0), 60); // [1000,2000) 中点 → 60
+        assert_eq!(variance_to_score(2500.0), 78); // [2000,3000) 中点 → 77.5 ≈ 78
+        assert_eq!(variance_to_score(3500.0), 93); // [3000,4000) 中点 → 92.5 ≈ 93
     }
 
     #[test]
@@ -469,10 +483,10 @@ mod tests {
             ..Default::default()
         };
         let region_score = score_image_with_bbox(&img, &bbox).unwrap();
-        // 算法不完全相同（分块 vs 整体方差），但评分应在 ±1 星以内
+        // 算法不完全相同（分块 vs 整体方差），但评分应在 ±20 分以内
         let diff = (full_score as i32 - region_score as i32).unsigned_abs();
         assert!(
-            diff <= 1,
+            diff <= 20,
             "Full image score {} vs bbox full score {}, diff too large",
             full_score,
             region_score
@@ -492,7 +506,7 @@ mod tests {
             ..Default::default()
         };
         let score = score_image_with_bbox(&img, &bbox).unwrap();
-        assert!(score >= 4, "Sharp region should score >= 4, got {}", score);
+        assert!(score >= 70, "Sharp region should score >= 70, got {}", score);
     }
 
     #[test]
@@ -509,8 +523,8 @@ mod tests {
         };
         let score = score_image_with_bbox(&img, &bbox).unwrap();
         assert!(
-            score <= 2,
-            "Blurred region should score <= 2, got {}",
+            score <= 30,
+            "Blurred region should score <= 30, got {}",
             score
         );
     }
@@ -543,8 +557,8 @@ mod tests {
         // 应该不 panic，返回低评分（区域太小，方差为 0）
         let score = score_image_with_bbox(&img, &bbox).unwrap();
         assert!(
-            score >= 1 && score <= 5,
-            "Score must be valid 1-5, got {}",
+            score <= 100,
+            "Score must be valid 0-100, got {}",
             score
         );
     }

@@ -103,7 +103,7 @@ describe('CanvasImageItem', () => {
         orientation: 6,
         fileSize: null,
         compression: null,
-        focusScore: 5,
+        focusScore: 96,
         detectionBboxes: [],
         focusScoreMethod: null,
         histogramR: [],

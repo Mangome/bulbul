@@ -71,7 +71,7 @@ mod tests {
             capture_time: Some("2024:01:15 10:30:00".to_string()),
             camera_make: Some("Nikon".to_string()),
             camera_model: Some("Z9".to_string()),
-            focus_score: Some(4),
+            focus_score: Some(53),
             ..Default::default()
         }
     }
