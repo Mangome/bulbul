@@ -44,7 +44,7 @@
 }
 
 .title {
-  font-size: var(--font-size-xl);
+  font-size: var(--font-size-title);
   font-weight: var(--font-weight-bold);
   color: var(--color-text-primary);
   user-select: none;
@@ -113,7 +113,7 @@
 }
 
 .groupTitle {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-label);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
   user-select: none;
@@ -121,7 +121,7 @@
 }
 
 .groupHeaderMeta {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-meta);
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
   user-select: none;
@@ -144,14 +144,14 @@
 }
 
 .rowLabel {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-label);
   color: var(--color-text-primary);
   user-select: none;
   white-space: nowrap;
 }
 
 .rowValue {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-label);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
   font-variant-numeric: tabular-nums;
@@ -160,7 +160,7 @@
 }
 
 .rowMuted {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-meta);
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }
@@ -188,7 +188,7 @@
 }
 
 .sliderHint {
-  font-size: var(--font-size-2xs);
+  font-size: var(--font-size-micro);
   color: var(--color-text-muted);
   white-space: nowrap;
   user-select: none;
@@ -244,7 +244,7 @@
 }
 
 .cacheSize {
-  font-size: 22px;
+  font-size: var(--font-size-headline);
   font-weight: var(--font-weight-bold);
   color: var(--color-text-primary);
   font-variant-numeric: tabular-nums;
@@ -253,12 +253,12 @@
 }
 
 .cacheFileCount {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-meta);
   color: var(--color-text-muted);
 }
 
 .cachePath {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-caption);
   color: var(--color-text-muted);
   word-break: break-all;
   line-height: 1.4;
@@ -267,7 +267,7 @@
 }
 
 .cacheError {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-meta);
   color: var(--color-danger);
   padding: 4px 0;
 }
@@ -282,7 +282,7 @@
   height: 28px;
   padding: 0 10px;
   border-radius: var(--radius-md);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-meta);
   font-weight: var(--font-weight-medium);
   cursor: pointer;
   border: none;
@@ -390,7 +390,7 @@
   margin: 0 var(--spacing-base) 10px;
   padding: 10px 12px;
   border-radius: var(--radius-lg);
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-meta);
   line-height: 1.5;
   color: var(--color-text-secondary);
   background: var(--color-bg-tertiary);
@@ -408,7 +408,7 @@
 
 .updateProgress {
   margin: 4px var(--spacing-base) 8px;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-caption);
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }
@@ -422,7 +422,7 @@
 
 .updateNotesTitle {
   margin-bottom: 4px;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-caption);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-muted);
   text-transform: uppercase;
@@ -430,7 +430,7 @@
 }
 
 .updateNotesBody {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-meta);
   line-height: 1.5;
   color: var(--color-text-secondary);
   white-space: pre-wrap;
@@ -455,7 +455,7 @@
 }
 
 .footerVersion {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-caption);
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }
@@ -464,7 +464,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-meta);
   font-weight: var(--font-weight-medium);
   color: var(--color-text-secondary);
   background: none;

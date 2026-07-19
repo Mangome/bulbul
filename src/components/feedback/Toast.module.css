@@ -64,7 +64,7 @@
 }
 
 .message {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-label);
   color: var(--color-text-primary);
   line-height: 1.5;
   word-break: break-word;
@@ -101,7 +101,7 @@
   background: transparent;
   border: none;
   padding: 0;
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body);
   transition:
     color var(--transition-fast),
     background-color var(--transition-fast),

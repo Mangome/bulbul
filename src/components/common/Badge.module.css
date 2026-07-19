@@ -10,7 +10,7 @@
   align-items: center;
   justify-content: center;
   padding: 2px 8px;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-caption);
   font-weight: var(--font-weight-semibold);
   font-family: inherit;
   border-radius: var(--radius-full);

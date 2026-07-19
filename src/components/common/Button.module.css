@@ -37,7 +37,7 @@
 /* 按下状态 - 收缩反馈 */
 .btn:active:not(.disabled) {
   transform: scale(0.98);
-  transition: transform 80ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 80ms var(--ease-bounce);
 }
 
 /* 焦点状态 - 通过全局 :focus-visible 处理 */
@@ -117,7 +117,7 @@
 
 .sm {
   padding: 6px 12px;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-caption);
   min-height: 32px;
   gap: var(--spacing-xs);
 }
@@ -128,7 +128,7 @@
 
 .md {
   padding: 8px 16px;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-label);
   min-height: 36px;
   gap: var(--spacing-sm);
 }

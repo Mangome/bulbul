@@ -40,7 +40,7 @@
 }
 
 .placeholderText {
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body);
   color: var(--color-text-muted);
   font-weight: var(--font-weight-normal);
   text-align: center;

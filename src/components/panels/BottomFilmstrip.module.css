@@ -28,36 +28,20 @@
     border-color var(--transition-normal);
 }
 
-/* 左右滚动渐变提示 */
-.container::before,
-.container::after {
-  content: '';
-  position: absolute;
-  top: 1px;
-  bottom: 0;
-  width: 32px;
-  z-index: 1;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 200ms ease;
+/* 左右滚动渐变提示：对滚动区施 mask，让缩略图自身淡出，毛玻璃保持连续 */
+.scrollLeft .scrollArea {
+  mask-image: linear-gradient(to right, transparent 0, black 32px);
+  -webkit-mask-image: linear-gradient(to right, transparent 0, black 32px);
 }
 
-.container::before {
-  left: 0;
-  background: linear-gradient(to right, var(--filmstrip-bg, var(--panel-bg)), transparent);
+.scrollRight .scrollArea {
+  mask-image: linear-gradient(to left, transparent 0, black 32px);
+  -webkit-mask-image: linear-gradient(to left, transparent 0, black 32px);
 }
 
-.container::after {
-  right: 0;
-  background: linear-gradient(to left, var(--filmstrip-bg, var(--panel-bg)), transparent);
-}
-
-.scrollLeft::before {
-  opacity: 1;
-}
-
-.scrollRight::after {
-  opacity: 1;
+.scrollLeft.scrollRight .scrollArea {
+  mask-image: linear-gradient(to right, transparent 0, black 32px, black calc(100% - 32px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0, black 32px, black calc(100% - 32px), transparent 100%);
 }
 
 .scrollArea {

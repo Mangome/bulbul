@@ -14,7 +14,7 @@ colors:
   sky-canvas: "#4A90E2"
   fog-white: "#F5F5F7"
   slate-mist: "#6E6E73"
-  ash-whisper: "#AEAEB2"
+  ash-whisper: "#7C7C82"
   ink-black: "#1D1D1F"
   paper: "#FFFFFF"
   parchment: "#E8E8ED"
@@ -66,11 +66,14 @@ typography:
     fontWeight: 600
     lineHeight: 1.4
 rounded:
+  xs: "2px"
   sm: "4px"
   md: "6px"
   lg: "8px"
-  xl: "14px"
-  pill: "999px"
+  xl: "10px"
+  2xl: "12px"
+  3xl: "14px"
+  full: "999px"
 spacing:
   xs: "3px"
   sm: "6px"
@@ -181,7 +184,7 @@ The palette is organized around a single blue family that shifts character betwe
 - **Fog White** (#F5F5F7): Secondary surface. Sidebar backgrounds, setting panels, grouped cards. The faint blue undertone becomes visible when placed next to Paper.
 - **Parchment** (#E8E8ED): Tertiary surface and light borders. Hover states on secondary buttons, divider backgrounds, inactive track fills.
 - **Slate Mist** (#6E6E73): Secondary text. Descriptions, metadata labels, de-emphasized content.
-- **Ash Whisper** (#AEAEB2): Muted text and scrollbar thumbs. The lowest-contrast text role; never used for interactive elements.
+- **Ash Whisper** (#7C7C82): Muted text and scrollbar thumbs. The lowest-contrast text role; never used for interactive elements. Deepened from the original #AEAEB2, which failed 3:1 contrast on Paper; the current value stays legible while remaining clearly subordinate.
 - **Charcoal Depth** (#1C1C1E) / **Shadow Stone** (#2C2C2E): Dark-mode secondary and tertiary surfaces. Warmer than they appear; the context of pure-black backgrounds makes them read as elevated.
 - **Border Silver** (#D2D2D7) / **Border Dusk** (#38383A): Structural borders in light and dark modes respectively. Used on inputs, card edges, and separators.
 
@@ -213,6 +216,12 @@ The palette is organized around a single blue family that shifts character betwe
 - **Label** (medium 500, 13px, 1.4): UI controls, setting row labels, button text, filmstrip metadata. The workhorse size for interactive surfaces. Tabular-nums variant for numeric values (file counts, percentages, dimensions).
 - **Caption** (semibold 600, 11px, 1.4): Badges, star ratings, tiny indicators, progress percentages. Always semibold to maintain legibility at small sizes.
 
+### CSS Token Mapping
+
+Hierarchy roles map to tokens in `variables.css`: Display → `--font-size-display` (28px), Headline → `--font-size-headline` (24px), Title → `--font-size-title` (20px), Body → `--font-size-body` (15px), Label → `--font-size-label` (13px), Caption → `--font-size-caption` (11px). Three extension steps exist for product density, to be used sparingly: `--font-size-subtitle` (17px, between Body and Title), `--font-size-meta` (12px, auxiliary metadata), `--font-size-micro` (10px, badge counts and tiny indicators).
+
+**The Stat Exemption.** The SpeciesDashboard summary numerals (36px bold, tabular-nums) are the single sanctioned off-scale size in the system. They function as a glanceable tally at the top of a data panel, not a SaaS hero metric; no other surface may exceed Display (28px).
+
 ### Named Rules
 
 **The Compact Scale Rule.** The type scale ratio is 1.15-1.2 between steps, not 1.25+. Product UI favors density over dramatic contrast. A 28px heading next to a 13px label creates enough hierarchy; exaggerating the gap would waste vertical space without improving comprehension.
@@ -234,7 +243,7 @@ Settings cards and dialog surfaces use tonal layering: they differ from their pa
 - **Elevated** (`0 4px 8px rgba(0,0,0,0.1), 0 8px 16px rgba(0,0,0,0.14)`): Hover state for toasts, resting state for province popovers and dialogs. The highest shadow used in normal interaction.
 - **Deep** (`0 8px 16px rgba(0,0,0,0.14), 0 16px 32px rgba(0,0,0,0.18)`): Reserved for critical overlays. Currently unused in production; available for future modal stacking.
 
-Dark mode multiplies shadow opacity by approximately 5x to maintain visibility against dark surfaces. The shadow shapes remain identical; only opacity changes.
+Dark mode re-tunes shadows instead of merely scaling opacity: blur radii grow while opacity stays restrained (0.35–0.5), avoiding the muddy edges that heavy shadows produce on dark surfaces.
 
 ### Named Rules
 
@@ -242,7 +251,14 @@ Dark mode multiplies shadow opacity by approximately 5x to maintain visibility a
 
 ## 5. Components
 
-Every interactive component is tactile and responsive: hover states brighten surfaces, active presses trigger a scale-down with bounce easing, and focus rings follow the global 2px primary-color outline. Transitions are fast (120ms standard, 200ms for larger state changes). The bounce easing (cubic-bezier(0.34, 1.56, 0.64, 1)) is used sparingly for active press feedback only; all other transitions use the standard ease (cubic-bezier(0.4, 0, 0.2, 1)).
+Every interactive component is tactile and responsive: hover states brighten surfaces, active presses trigger a scale-down with bounce easing, and focus rings follow the global 2px primary-color outline. Transitions are fast (120ms standard, 200ms for larger state changes).
+
+Easing is tokenized; choose by scenario, never improvise:
+
+- **--ease-standard** (`cubic-bezier(0.4, 0, 0.2, 1)`): default state transitions (hover, focus, color shifts)
+- **--ease-out-quint** (`cubic-bezier(0.22, 1, 0.36, 1)`): entrances and reveals (dialogs, progress advance, staggered appearances)
+- **--ease-swift** (`cubic-bezier(0.25, 1, 0.5, 1)`): micro-interactions (thumbnails, filmstrip feedback, small icon states)
+- **--ease-bounce** (`cubic-bezier(0.34, 1.56, 0.64, 1)`): active press feedback only
 
 ### Buttons
 

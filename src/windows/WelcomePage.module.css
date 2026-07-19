@@ -5,6 +5,9 @@
    - 窗口即 Logo —— 无边框、圆角、全出血品牌图
    - 沉浸式入口 —— 极致减法，只有关闭按钮和操作按钮
    - 毛玻璃胶囊 —— 操作按钮悬浮于 Logo 之上，融入而非侵入
+
+   入场编排（stagger 延迟在此集中调整）：
+   logo 0ms → 按钮 380ms → 关闭按钮 500ms
 ════════════════════════════════════════════════════════════════════════════ */
 
 .window {
@@ -14,6 +17,10 @@
   border-radius: var(--radius-2xl);
   overflow: hidden;
   background: var(--color-bg-primary);
+
+  /* 入场编排延迟（stagger） */
+  --stagger-btn: 380ms;
+  --stagger-close: 500ms;
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -29,8 +36,8 @@
   user-select: none;
   pointer-events: none;
   will-change: transform;
-  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
-  animation: logoEnter 500ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transition: transform 200ms var(--ease-out-quint);
+  animation: logoEnter 500ms var(--ease-out-quint) both;
 }
 
 @keyframes logoEnter {
@@ -83,7 +90,7 @@
     background var(--transition-fast),
     color var(--transition-fast),
     transform var(--transition-fast);
-  animation: closeBtnEnter 300ms cubic-bezier(0.22, 1, 0.36, 1) 500ms both;
+  animation: closeBtnEnter 300ms var(--ease-out-quint) var(--stagger-close) both;
 }
 
 @keyframes closeBtnEnter {
@@ -137,7 +144,7 @@
   justify-content: center;
   gap: var(--spacing-sm);
   padding: 11px 28px;
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-body);
   font-weight: var(--font-weight-semibold);
   font-family: inherit;
   color: var(--color-text-inverse);
@@ -145,7 +152,7 @@
   backdrop-filter: blur(var(--blur-xl));
   -webkit-backdrop-filter: blur(var(--blur-xl));
   border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-full);
   cursor: pointer;
   letter-spacing: 0.3px;
   box-shadow:
@@ -157,7 +164,7 @@
     box-shadow var(--transition-normal),
     transform var(--transition-normal);
   white-space: nowrap;
-  animation: btnEnter 400ms cubic-bezier(0.22, 1, 0.36, 1) 380ms both;
+  animation: btnEnter 400ms var(--ease-out-quint) var(--stagger-btn) both;
 }
 
 @keyframes btnEnter {
@@ -229,7 +236,7 @@
 
 .hintLine {
   margin-top: 10px;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-caption);
   font-weight: var(--font-weight-medium);
   color: rgba(255, 255, 255, 0.6);
   letter-spacing: 0.4px;
@@ -240,8 +247,8 @@
   opacity: 0;
   transform: translateY(4px);
   transition:
-    opacity 600ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 600ms cubic-bezier(0.22, 1, 0.36, 1);
+    opacity 600ms var(--ease-out-quint),
+    transform 600ms var(--ease-out-quint);
 }
 
 .hintLineVisible {
@@ -302,7 +309,7 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-md);
   max-width: 420px;
-  animation: errorEnter 300ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: errorEnter 300ms var(--ease-out-quint);
 }
 
 @keyframes errorEnter {
@@ -318,7 +325,7 @@
 
 .errorText {
   margin: 0;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-label);
   font-weight: var(--font-weight-medium);
   color: var(--color-text-inverse);
   text-align: center;

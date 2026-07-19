@@ -85,7 +85,6 @@
   ──────────────────────────────────────────────────────────────── */
   --panel-bg: rgba(255, 255, 255, 0.88);
   --panel-border: rgba(0, 0, 0, 0.06);
-  --panel-shadow: 0 0.5px 0 rgba(0, 0, 0, 0.05);
   --panel-radius: 8px;
 
   /* 胶片条 */
@@ -121,7 +120,6 @@
   --radius-xl: 10px;
   --radius-2xl: 12px;
   --radius-3xl: 14px;
-  --radius-pill: 24px;
   --radius-full: 999px;
 
   /* ────────────────────────────────────────────────────────────────
@@ -131,16 +129,17 @@
     'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial,
     sans-serif;
 
-  /* 字体尺寸刻度 (模块化系统) */
-  --font-size-2xs: 10px;
-  --font-size-xs: 11px;
-  --font-size-base: 12px;
-  --font-size-sm: 13px;
-  --font-size-md: 15px;
-  --font-size-lg: 17px;
-  --font-size-xl: 20px;
-  --font-size-2xl: 24px;
-  --font-size-3xl: 28px;
+  /* 字体尺寸刻度 (语义化，对齐 DESIGN.md 排版角色)
+     micro/meta/subtitle 为文档层级之外的扩展档，克制使用 */
+  --font-size-micro: 10px;
+  --font-size-caption: 11px;
+  --font-size-meta: 12px;
+  --font-size-label: 13px;
+  --font-size-body: 15px;
+  --font-size-subtitle: 17px;
+  --font-size-title: 20px;
+  --font-size-headline: 24px;
+  --font-size-display: 28px;
 
   /* 字重 */
   --font-weight-normal: 400;
@@ -178,14 +177,23 @@
   --shadow-deep: 0 8px 16px rgba(0, 0, 0, 0.14), 0 16px 32px rgba(0, 0, 0, 0.18);
 
   /* ────────────────────────────────────────────────────────────────
-     过渡和动画 (自然感)
+     缓动函数 (产品的"语气"，按场景选用，禁止自由发挥)
+     standard   — 默认：hover/focus 等状态过渡
+     out-quint  — 入场与揭示：弹入、进度推进、对话框进场
+     swift      — 微交互：缩略图、胶片条、图标反馈
+     bounce     — 仅按压反馈（active press），其他场景禁用
   ──────────────────────────────────────────────────────────────── */
-  --transition-fast: 120ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-normal: 200ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-swift: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
 
-  /* 弹簧效果 (轻微反弹) */
-  --transition-bounce: 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* ────────────────────────────────────────────────────────────────
+     过渡时长 (自然感)
+  ──────────────────────────────────────────────────────────────── */
+  --transition-fast: 120ms var(--ease-standard);
+  --transition-normal: 200ms var(--ease-standard);
+  --transition-slow: 300ms var(--ease-standard);
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -235,7 +243,7 @@
   --color-text-muted: #7C7C82;
   --color-text-inverse: #FFFFFF;
   --color-bg-primary: #1C1C1E;
-  --color-bg-secondary: #1C1C1E;
+  --color-bg-secondary: #242426;
   --color-bg-tertiary: #2C2C2E;
   --color-border: #38383A;
   --color-border-light: #2C2C2E;
@@ -266,16 +274,15 @@
   ──────────────────────────────────────────────────────────────── */
   --panel-bg: rgba(28, 28, 30, 0.90);
   --panel-border: rgba(255, 255, 255, 0.06);
-  --panel-shadow: 0 0.5px 0 rgba(0, 0, 0, 0.3);
   --panel-radius: 8px;
 
   --filmstrip-bg: rgba(28, 28, 30, 0.92);
 
   /* ────────────────────────────────────────────────────────────────
-     阴影系统 (暗色优化)
+     阴影系统 (暗色优化：更大模糊半径 + 收敛不透明度，避免糊边)
   ──────────────────────────────────────────────────────────────── */
-  --shadow-subtle: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.4);
-  --shadow-normal: 0 2px 4px rgba(0, 0, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.5);
-  --shadow-elevated: 0 4px 8px rgba(0, 0, 0, 0.5), 0 8px 16px rgba(0, 0, 0, 0.6);
-  --shadow-deep: 0 8px 16px rgba(0, 0, 0, 0.6), 0 16px 32px rgba(0, 0, 0, 0.7);
+  --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.35), 0 3px 8px rgba(0, 0, 0, 0.35);
+  --shadow-normal: 0 2px 6px rgba(0, 0, 0, 0.4), 0 6px 16px rgba(0, 0, 0, 0.4);
+  --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.45), 0 10px 28px rgba(0, 0, 0, 0.45);
+  --shadow-deep: 0 8px 24px rgba(0, 0, 0, 0.5), 0 20px 48px rgba(0, 0, 0, 0.5);
 }

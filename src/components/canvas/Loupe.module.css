@@ -26,7 +26,7 @@
   position: absolute;
   right: 8px;
   bottom: 8px;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-caption);
   font-weight: var(--font-weight-semibold);
   color: rgba(255, 255, 255, 0.85);
   background: rgba(0, 0, 0, 0.55);

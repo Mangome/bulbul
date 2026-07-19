@@ -42,7 +42,7 @@
 }
 
 .title {
-  font-size: var(--font-size-xl);
+  font-size: var(--font-size-title);
   font-weight: var(--font-weight-bold);
   color: var(--color-text-primary);
   user-select: none;
@@ -112,7 +112,7 @@
 }
 
 .groupTitle {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-label);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
   user-select: none;
@@ -143,6 +143,7 @@
 }
 
 .summaryValue {
+  /* Stat 豁免：DESIGN.md Typography 登记的唯一 off-scale 尺寸 */
   font-size: 36px;
   font-weight: var(--font-weight-bold);
   color: var(--color-primary);
@@ -152,7 +153,7 @@
 }
 
 .summaryLabel {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-caption);
   color: var(--color-text-secondary);
   font-weight: var(--font-weight-medium);
   user-select: none;
@@ -178,7 +179,7 @@
 }
 
 .barLabel {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-label);
   font-weight: var(--font-weight-medium);
   color: var(--color-text-primary);
   width: 88px;
@@ -221,7 +222,7 @@
 }
 
 .barCount {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-label);
   font-weight: var(--font-weight-bold);
   color: var(--color-text-primary);
   font-variant-numeric: tabular-nums;
@@ -263,13 +264,13 @@
 }
 
 .emptyTitle {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-label);
   font-weight: var(--font-weight-medium);
   color: var(--color-text-secondary);
 }
 
 .emptyHint {
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-meta);
   color: var(--color-text-muted);
   line-height: 1.4;
 }
