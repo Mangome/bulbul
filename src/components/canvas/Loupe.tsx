@@ -22,7 +22,7 @@ const LOUPE_MAX = 1350;
 
 const OFFSET_X = 20;
 const OFFSET_Y = 20;
-const FADE_IN_MS = 150;
+const FADE_IN_MS = 120;
 const FADE_OUT_MS = 100;
 
 const prefersReducedMotion =
@@ -318,8 +318,9 @@ export const Loupe = forwardRef<LoupeHandle, LoupeProps>(function Loupe(
         left: position.x,
         top: position.y,
         opacity,
+        /* 与 variables.css 动效矩阵对齐：opacity=fast/standard，transform=normal/out-quint */
         transition: opacity > 0
-          ? `opacity ${FADE_IN_DURATION}ms ease, transform 200ms cubic-bezier(0.16, 1, 0.3, 1)`
+          ? `opacity ${FADE_IN_DURATION}ms cubic-bezier(0.4, 0, 0.2, 1), transform 200ms cubic-bezier(0.22, 1, 0.36, 1)`
           : undefined,
       }}
     >

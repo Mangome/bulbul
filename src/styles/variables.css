@@ -194,6 +194,24 @@
   --transition-fast: 120ms var(--ease-standard);
   --transition-normal: 200ms var(--ease-standard);
   --transition-slow: 300ms var(--ease-standard);
+
+  /* ────────────────────────────────────────────────────────────────
+     动效矩阵 (方案 A · Token Lock，详见 docs/design-proposals/proposal-a/design-language.md)
+     时长与曲线解耦，供 JS/motion 侧桥接；矩阵外取值视为违规
+  ──────────────────────────────────────────────────────────────── */
+  --duration-press: 80ms;
+  --duration-fast: 120ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+
+  /* 语义组合：按压 / 微交互 / 入场 */
+  --transition-press: var(--duration-press) var(--ease-bounce);
+  --transition-swift: var(--duration-fast) var(--ease-swift);
+  --transition-enter: var(--duration-normal) var(--ease-out-quint);
+
+  /* 入场位移刻度：小件 4px / 条板 8px，禁止自由发挥 */
+  --motion-distance-sm: 4px;
+  --motion-distance-md: 8px;
 }
 
 /* ════════════════════════════════════════════════════════════════════════════

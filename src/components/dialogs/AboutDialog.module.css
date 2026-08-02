@@ -47,7 +47,7 @@
 
 /* ─── 交错入场容器 ──────────────────────────────────── */
 
-.staggerContainer {
+.content {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -71,7 +71,7 @@
   position: relative;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   cursor: default;
-  transition: transform 0.2s var(--ease-swift);
+  transition: transform var(--duration-normal) var(--ease-swift);
 }
 
 .icon:hover {

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>方案 A · 收敛 Token Lock — Bulbul</title>
+<style>
+  /* ═══ 方案 A 的核心主张：只允许这 3×3 矩阵存在 ═══ */
+  :root{
+    --p:#1E3A5F; --p-h:#264A78; --p-a:#152D4A; --p-l:#E4ECF5;
+    --ink:#1D1D1F; --sub:#6E6E73; --mut:#7C7C82;
+    --bg:#FFFFFF; --bg2:#F5F5F7; --bg3:#E8E8ED; --bd:#D2D2D7; --bdl:#E8E8ED;
+    --ok:#2E7D4F; --warn:#A67B1A; --err:#B33B3B;
+    --panel:rgba(255,255,255,.88);
+    /* 时长三档 —— 全库唯一合法取值 */
+    --t-fast:120ms; --t-mid:200ms; --t-slow:300ms;
+    /* 缓动三条 —— bounce 仅限按压 */
+    --e-std:cubic-bezier(.4,0,.2,1);
+    --e-out:cubic-bezier(.22,1,.36,1);
+    --e-swift:cubic-bezier(.25,1,.5,1);
+    --e-press:cubic-bezier(.34,1.56,.64,1);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;
+       background:var(--bg2);color:var(--ink);font-size:15px;line-height:1.6}
+  .wrap{max-width:1080px;margin:0 auto;padding:48px 32px 96px}
+  .kicker{font-size:11px;font-weight:600;letter-spacing:.12em;color:var(--p);text-transform:uppercase}
+  h1{font-size:28px;font-weight:600;margin:8px 0 12px}
+  .lede{color:var(--sub);max-width:68ch;margin-bottom:32px}
+  h2{font-size:20px;font-weight:600;margin:48px 0 6px}
+  .sub{font-size:13px;color:var(--mut);margin-bottom:16px}
+  .back{font-size:13px;color:var(--p);text-decoration:none}
+  code{background:var(--bg2);border:1px solid var(--bdl);border-radius:4px;padding:0 5px;font-size:12px;color:var(--p)}
+
+  /* ─── 界面全图 mockup ─── */
+  .app{border:1px solid var(--bd);border-radius:12px;overflow:hidden;background:#fff;
+       box-shadow:0 8px 16px rgba(0,0,0,.08)}
+  .nav{height:48px;display:flex;align-items:center;gap:12px;padding:0 16px;
+       background:var(--panel);backdrop-filter:blur(12px);border-bottom:.5px solid rgba(0,0,0,.06)}
+  .nav .logo{font-weight:600;font-size:15px}
+  .nav .crumb{font-size:13px;color:var(--mut)}
+  .nav .sp{flex:1}
+  .btn{height:30px;padding:0 14px;border-radius:4px;border:none;font-size:13px;font-weight:500;cursor:pointer;
+       background:var(--p);color:#fff;transition:background var(--t-fast) var(--e-std)}
+  .btn:hover{background:var(--p-h)}
+  .btn:active{background:var(--p-a);transform:scale(.98);transition:transform 80ms var(--e-press)}
+  .btn.ghost{background:transparent;color:var(--p)}
+  .btn.ghost:hover{background:var(--p-l)}
+  .tool{width:32px;height:32px;border-radius:6px;border:none;background:transparent;color:var(--sub);
+        cursor:pointer;font-size:14px;transition:background var(--t-fast) var(--e-std),color var(--t-fast) var(--e-std)}
+  .tool:hover{background:var(--bg3);color:var(--ink)}
+  .tool:active{transform:scale(.92);transition:transform 80ms var(--e-press)}
+  .tool.on{background:var(--p-l);color:var(--p)}
+  .canvas{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:20px;background:
+          radial-gradient(circle, var(--bdl) 1px, transparent 1px) 0 0/24px 24px, #fff}
+  .ph{position:relative;aspect-ratio:3/2;border-radius:6px;overflow:hidden;cursor:pointer;
+      border:1.5px solid transparent;transition:transform var(--t-fast) var(--e-swift),border-color var(--t-fast) var(--e-std),box-shadow var(--t-fast) var(--e-std)}
+  .ph:hover{transform:scale(1.02);box-shadow:0 2px 4px rgba(0,0,0,.06),0 4px 8px rgba(0,0,0,.1)}
+  .ph.sel{border-color:#2563A8;box-shadow:0 0 0 2px rgba(37,99,168,.25)}
+  .ph .grad{position:absolute;inset:0}
+  .ph .meta{position:absolute;left:0;right:0;bottom:0;padding:16px 8px 6px;display:flex;align-items:center;gap:6px;
+            background:linear-gradient(transparent,rgba(0,0,0,.6));color:#fff;font-size:11px}
+  .ph .stars{color:#E0A830;letter-spacing:1px}
+  .ph .score{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:600;background:rgba(0,0,0,.55);
+             border-radius:4px;padding:0 5px}
+  .ph .grp{position:absolute;top:6px;left:6px;font-size:10px;font-weight:600;color:#fff;border-radius:999px;padding:1px 7px}
+  .strip{height:72px;display:flex;align-items:center;gap:8px;padding:0 16px;
+         background:rgba(255,255,255,.92);backdrop-filter:blur(12px);border-top:.5px solid rgba(0,0,0,.06)}
+  .fi{width:48px;height:48px;border-radius:4px;flex:none;position:relative;cursor:pointer;
+      border:1.5px solid transparent;transition:transform var(--t-fast) var(--e-swift),border-color var(--t-fast) var(--e-std),background var(--t-fast) var(--e-std)}
+  .fi:hover{background:var(--bg3);border-color:var(--bd)}
+  .fi:active{transform:scale(.96);transition:transform 80ms var(--e-press)}
+  .fi.on{background:var(--p-l);border-color:var(--p)}
+  .fi.on::after{content:"";position:absolute;left:14px;right:14px;bottom:-6px;height:2px;border-radius:1px;background:var(--p)}
+  .fi .n{position:absolute;bottom:2px;right:4px;font-size:10px;color:var(--mut);font-variant-numeric:tabular-nums}
+  .fi.on .n{color:var(--p);font-weight:600}
+  .thumb{position:absolute;inset:4px;border-radius:3px}
+
+  /* ─── 令牌矩阵表 ─── */
+  table{width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid var(--bdl);border-radius:12px;overflow:hidden}
+  th,td{padding:10px 14px;border-bottom:1px solid var(--bdl);text-align:left}
+  th{font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--mut);text-transform:uppercase;background:var(--bg2)}
+  td:first-child{font-weight:600;white-space:nowrap}
+  .tv{font-variant-numeric:tabular-nums;color:var(--p);font-weight:600}
+
+  /* ─── 现场演示 ─── */
+  .demo{background:#fff;border:1px solid var(--bdl);border-radius:12px;padding:24px;display:flex;gap:32px;flex-wrap:wrap;align-items:center}
+  .demo .cell{display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+  .demo .lbl{font-size:11px;font-weight:600;color:var(--mut);letter-spacing:.06em}
+  .dlgloop{width:220px;height:130px;border-radius:10px;background:#2C2C2E;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .dlg{width:150px;background:#fff;border-radius:14px;padding:12px;text-align:center;box-shadow:0 4px 8px rgba(0,0,0,.1),0 8px 16px rgba(0,0,0,.14);
+       animation:dlgIn 2.6s var(--e-out) infinite}
+  .dlg b{font-size:13px;display:block}.dlg span{font-size:11px;color:var(--mut)}
+  @keyframes dlgIn{0%{opacity:0;transform:scale(.95) translateY(4px)}12%{opacity:1;transform:none}82%{opacity:1}92%,100%{opacity:0;transform:scale(.97)}}
+  .toastloop{width:220px;height:130px;border-radius:10px;background:var(--bg2);display:flex;align-items:flex-start;justify-content:center;padding-top:16px;overflow:hidden}
+  .toast{display:flex;gap:8px;align-items:center;background:#fff;border-radius:6px;padding:8px 12px;font-size:13px;
+         box-shadow:0 2px 4px rgba(0,0,0,.06),0 4px 8px rgba(0,0,0,.1);animation:tIn 2.6s var(--e-out) infinite}
+  .toast i{width:22px;height:22px;border-radius:50%;background:var(--ok);color:#fff;font-style:normal;font-size:12px;display:grid;place-items:center;flex:none}
+  @keyframes tIn{0%{opacity:0;transform:translateY(-8px)}10%{opacity:1;transform:none}80%{opacity:1}90%,100%{opacity:0;transform:translateY(-4px)}}
+  .swatch{width:220px;height:130px;border-radius:10px;background:var(--bg2);display:grid;place-items:center}
+  .ball{width:16px;height:16px;border-radius:50%;background:var(--p);animation:slide 1.8s var(--e-swift) infinite}
+  @keyframes slide{0%,15%{transform:translateX(-80px)}50%,65%{transform:translateX(80px)}100%{transform:translateX(-80px)}}
+
+  .mig{background:#fff;border:1px solid var(--bdl);border-radius:12px;padding:24px}
+  .mig li{font-size:13px;color:var(--sub);margin:6px 0 6px 18px}
+  .mig li b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="index.html">← 返回方案对比</a>
+  <div class="kicker" style="margin-top:16px">方案 A · 收敛 Token Lock</div>
+  <h1>视觉零改动，只给动效「上锁」</h1>
+  <p class="lede">现有视觉语言不动一丝像素。把散落在 JS、CSS、Canvas 三处的动效收编进一个 <strong>3 档时长 × 3 条缓动</strong> 的令牌矩阵；<code>motion</code> 库只保留 AnimatePresence 的卸载动画场景，其余全部回到 CSS 令牌。页面上所有可交互元素都是真实生效的规范——hover 感受 120ms，按压感受 bounce。<br><strong>完整规范文档：<a href="proposal-a/design-language.md" style="color:var(--p)">proposal-a/design-language.md</a></strong>（五条具名规则 · 令牌矩阵 · 逐组件规范 · 迁移清单 · Review 检查表）</p>
+
+  <h2>界面全图（浅色 · 现行视觉）</h2>
+  <p class="sub">悬停缩略图 = <code>--t-fast + --e-swift</code> · 按压按钮 = <code>80ms + --e-press</code> · 选中态切换 = <code>--t-fast + --e-std</code></p>
+  <div class="app">
+    <div class="nav">
+      <span class="logo">Bulbul</span>
+      <span class="crumb">2024-05-12 · 千岛湖 / 全部照片</span>
+      <span class="sp"></span>
+      <button class="tool on" title="筛选">⌘</button>
+      <button class="tool" title="标注">◎</button>
+      <button class="tool" title="放大镜">⊕</button>
+      <button class="tool" title="设置">⚙</button>
+      <button class="btn ghost">导出</button>
+      <button class="btn">开始评选</button>
+    </div>
+    <div class="canvas">
+      <div class="ph sel"><div class="grad" style="background:linear-gradient(160deg,#3E6B4F,#1B3A2E 60%,#0F241B)"></div><span class="grp" style="background:#2E7D4F">翠鸟 · 12</span><div class="meta"><span class="stars">★★★★★</span><span>普通翠鸟</span><span class="score">98</span></div></div>
+      <div class="ph"><div class="grad" style="background:linear-gradient(150deg,#7FA8D9,#4A6FA5 55%,#2C4A73)"></div><span class="grp" style="background:#4A90E2">白鹭 · 8</span><div class="meta"><span class="stars">★★★★</span><span>大白鹭</span><span class="score">95</span></div></div>
+      <div class="ph"><div class="grad" style="background:linear-gradient(170deg,#8C5A2B,#5C3A1A 60%,#33200E)"></div><span class="grp" style="background:#A67B1A">锦鸡 · 5</span><div class="meta"><span class="stars">★★★★</span><span>红腹锦鸡</span><span class="score">93</span></div></div>
+      <div class="ph"><div class="grad" style="background:linear-gradient(155deg,#4E4A45,#2B2825 60%,#171513)"></div><span class="grp" style="background:#6E6E73">雕鸮 · 3</span><div class="meta"><span class="stars">★★★</span><span>雕鸮</span><span class="score">88</span></div></div>
+      <div class="ph"><div class="grad" style="background:linear-gradient(145deg,#2E6E5E,#17473C 55%,#0B2922)"></div><span class="grp" style="background:#2E7D4F">太阳鸟 · 9</span><div class="meta"><span class="stars">★★★★★</span><span>叉尾太阳鸟</span><span class="score">97</span></div></div>
+      <div class="ph"><div class="grad" style="background:linear-gradient(165deg,#5A7186,#33414F 60%,#1C252E)"></div><span class="grp" style="background:#4A90E2">斑鱼狗 · 4</span><div class="meta"><span class="stars">★★★</span><span>斑鱼狗</span><span class="score">86</span></div></div>
+      <div class="ph"><div class="grad" style="background:linear-gradient(150deg,#74553E,#4A3626 55%,#2A1E14)"></div><span class="grp" style="background:#A67B1A">画眉 · 6</span><div class="meta"><span class="stars">★★★★</span><span>画眉</span><span class="score">91</span></div></div>
+      <div class="ph"><div class="grad" style="background:linear-gradient(160deg,#3D5A80,#24374F 60%,#131E2C)"></div><span class="grp" style="background:#6E6E73">夜鹭 · 7</span><div class="meta"><span class="stars">★★★</span><span>夜鹭</span><span class="score">84</span></div></div>
+    </div>
+    <div class="strip">
+      <div class="fi on"><div class="thumb" style="background:linear-gradient(160deg,#3E6B4F,#0F241B)"></div><span class="n">12</span></div>
+      <div class="fi"><div class="thumb" style="background:linear-gradient(150deg,#7FA8D9,#2C4A73)"></div><span class="n">8</span></div>
+      <div class="fi"><div class="thumb" style="background:linear-gradient(170deg,#8C5A2B,#33200E)"></div><span class="n">5</span></div>
+      <div class="fi"><div class="thumb" style="background:linear-gradient(155deg,#4E4A45,#171513)"></div><span class="n">3</span></div>
+      <div class="fi"><div class="thumb" style="background:linear-gradient(145deg,#2E6E5E,#0B2922)"></div><span class="n">9</span></div>
+      <div class="fi"><div class="thumb" style="background:linear-gradient(165deg,#5A7186,#1C252E)"></div><span class="n">4</span></div>
+    </div>
+  </div>
+
+  <h2>动效令牌矩阵（全库唯一合法集）</h2>
+  <p class="sub">矩阵之外的任何时长、曲线、编排都视为违规，code review 直接打回</p>
+  <table>
+    <tr><th>场景</th><th>时长</th><th>缓动</th><th>示例</th></tr>
+    <tr><td>状态反馈（hover/focus/变色）</td><td class="tv">120ms</td><td><code>--e-std</code></td><td>按钮变色、工具图标、选中描边</td></tr>
+    <tr><td>入场与揭示</td><td class="tv">200ms</td><td><code>--e-out</code></td><td>对话框、Toast、Popover，统一 fade+4px 位移</td></tr>
+    <tr><td>面板级进出场</td><td class="tv">300ms</td><td><code>--e-out</code></td><td>设置抽屉、物种面板滑入</td></tr>
+    <tr><td>微交互位移</td><td class="tv">120ms</td><td><code>--e-swift</code></td><td>缩略图 hover scale(1.02)、胶片条反馈</td></tr>
+    <tr><td>按压反馈（唯一允许 bounce）</td><td class="tv">80ms</td><td><code>--e-press</code></td><td>按钮 scale(.98)、工具 scale(.92)</td></tr>
+    <tr><td>stagger / 错落入场</td><td class="tv">禁用</td><td>—</td><td>About 对话框 stagger 删除，改为整体 200ms 入场</td></tr>
+  </table>
+
+  <h2>现场演示</h2>
+  <p class="sub">左：对话框入场循环（200ms out-quint）· 中：Toast（200ms out-quint）· 右：swift 曲线滑块 · 按钮可直接按压</p>
+  <div class="demo">
+    <div class="cell"><span class="lbl">DIALOG · 200ms out-quint</span><div class="dlgloop"><div class="dlg"><b>导出完成</b><span>12 张照片已复制</span></div></div></div>
+    <div class="cell"><span class="lbl">TOAST · 200ms out-quint</span><div class="toastloop"><div class="toast"><i>✓</i>已复制到剪贴板</div></div></div>
+    <div class="cell"><span class="lbl">MICRO · 120ms swift</span><div class="swatch"><div class="ball"></div></div></div>
+    <div class="cell"><span class="lbl">PRESS · 80ms bounce</span><button class="btn" style="height:36px">按住感受回弹</button></div>
+  </div>
+
+  <h2>落地清单</h2>
+  <div class="mig"><ul>
+    <li><b>删</b>：两个对话框里重复定义的 <code>EASE_OUT_QUART</code>、Loupe 的 <code>cubic-bezier(0.16,1,0.3,1)</code>、Toast 的 <code>'easeOut'</code>，全部替换为令牌引用。</li>
+    <li><b>改</b>：JS 侧所有 <code>duration: 0.15/0.18/0.24/0.28</code> 就近取整到 120/200/300ms 三档。</li>
+    <li><b>留</b>：<code>motion</code> 仅用于 AnimatePresence 卸载动画；Canvas 2D 补间保留 <code>easeOutQuart</code>（渲染循环内无法走 CSS），但重命名对齐令牌语义。</li>
+    <li><b>禁</b>：About 对话框 staggerChildren 删除；新增动效必须引用矩阵，否则 review 打回。</li>
+  </ul></div>
+</div>
+</body>
+</html>

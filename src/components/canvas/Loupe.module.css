@@ -2,7 +2,7 @@
   position: absolute;
   pointer-events: none;
   z-index: var(--z-index-loupe);
-  transition: opacity 150ms ease, transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity var(--transition-fast), transform var(--transition-enter);
   transform-origin: center center;
 }
 

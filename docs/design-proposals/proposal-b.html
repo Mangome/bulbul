@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>方案 B · 暗房纪律 Darkroom — Bulbul</title>
+<style>
+  /* ═══ 方案 B：动效做减法到极致 —— 两档时长、两条曲线、只有 fade ═══ */
+  :root{
+    --p:#4A90E2; --p-h:#5FA0F0; --p-a:#3B7FD6; --p-l:rgba(74,144,226,.15);
+    --ink:#F5F5F7; --sub:#A1A1A6; --mut:#7C7C82;
+    --bg:#000000; --bg1:#1C1C1E; --bg2:#242426; --bg3:#2C2C2E; --bd:#38383A;
+    --ok:#5CB870; --warn:#E0A830; --err:#E05A5A;
+    --panel:rgba(28,28,30,.9);
+    /* 全库仅有的两档时长 */
+    --t-ui:120ms; --t-panel:240ms;
+    /* 全库仅有的两条曲线 */
+    --e-std:cubic-bezier(.4,0,.2,1);
+    --e-out:cubic-bezier(.22,1,.36,1);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;
+       background:var(--bg1);color:var(--ink);font-size:15px;line-height:1.6}
+  .wrap{max-width:1080px;margin:0 auto;padding:48px 32px 96px}
+  .kicker{font-size:11px;font-weight:600;letter-spacing:.12em;color:var(--p);text-transform:uppercase}
+  h1{font-size:28px;font-weight:600;margin:8px 0 12px}
+  .lede{color:var(--sub);max-width:68ch;margin-bottom:32px}
+  h2{font-size:20px;font-weight:600;margin:48px 0 6px}
+  .sub{font-size:13px;color:var(--mut);margin-bottom:16px}
+  .back{font-size:13px;color:var(--p);text-decoration:none}
+  code{background:var(--bg2);border:1px solid var(--bd);border-radius:4px;padding:0 5px;font-size:12px;color:var(--p)}
+
+  /* ─── 界面全图：纯黑画布，chrome 只有一层细线 ─── */
+  .app{border:1px solid var(--bd);border-radius:12px;overflow:hidden;background:var(--bg);position:relative}
+  .chrome{transition:opacity var(--t-panel) var(--e-std)}
+  .app.idle .chrome{opacity:0;pointer-events:none}
+  .app.idle .hint{opacity:1}
+  .hint{position:absolute;inset:0;display:grid;place-items:center;color:var(--mut);font-size:12px;
+        opacity:0;transition:opacity var(--t-panel) var(--e-std);pointer-events:none;letter-spacing:.05em}
+  .nav{height:44px;display:flex;align-items:center;gap:10px;padding:0 16px;
+       background:var(--panel);backdrop-filter:blur(12px);border-bottom:.5px solid rgba(255,255,255,.06)}
+  .nav .logo{font-weight:600;font-size:14px}
+  .nav .crumb{font-size:12px;color:var(--mut)}
+  .nav .sp{flex:1}
+  .btn{height:28px;padding:0 12px;border-radius:4px;border:none;font-size:12px;font-weight:500;cursor:pointer;
+       background:var(--p);color:#fff;transition:background var(--t-ui) var(--e-std),opacity var(--t-ui) var(--e-std)}
+  .btn:hover{background:var(--p-h)}
+  .btn:active{opacity:.7}  /* 按压 = 透明度下沉，不做缩放弹跳 */
+  .btn.ghost{background:transparent;color:var(--p)}
+  .btn.ghost:hover{background:var(--p-l)}
+  .tool{width:30px;height:30px;border-radius:6px;border:none;background:transparent;color:var(--sub);
+        cursor:pointer;font-size:13px;transition:background var(--t-ui) var(--e-std),color var(--t-ui) var(--e-std)}
+  .tool:hover{background:rgba(255,255,255,.06);color:var(--ink)}
+  .tool:active{opacity:.7}
+  .tool.on{background:var(--p-l);color:var(--p)}
+  .canvas{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;padding:2px;background:#000}
+  .ph{position:relative;aspect-ratio:3/2;overflow:hidden;cursor:pointer}
+  .ph::after{content:"";position:absolute;inset:0;background:#000;opacity:0;transition:opacity var(--t-ui) var(--e-std)}
+  .ph:hover::after{opacity:.12}
+  .ph:active::after{opacity:.2}
+  .ph .grad{position:absolute;inset:0}
+  .ph.sel{box-shadow:inset 0 0 0 2px var(--p)}
+  .ph .meta{position:absolute;left:0;right:0;bottom:0;padding:14px 8px 5px;display:flex;align-items:center;gap:6px;
+            background:linear-gradient(transparent,rgba(0,0,0,.65));color:#fff;font-size:10px;opacity:0;
+            transition:opacity var(--t-ui) var(--e-std)}
+  .ph:hover .meta,.ph.sel .meta{opacity:1}
+  .ph .stars{color:var(--warn);letter-spacing:1px}
+  .ph .score{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:600;background:rgba(0,0,0,.55);border-radius:4px;padding:0 5px}
+  .ph .grp{position:absolute;top:6px;left:6px;width:8px;height:8px;border-radius:50%}
+  .strip{height:64px;display:flex;align-items:center;gap:2px;padding:0 12px;
+         background:var(--panel);backdrop-filter:blur(12px);border-top:.5px solid rgba(255,255,255,.06)}
+  .fi{width:44px;height:44px;flex:none;position:relative;cursor:pointer;opacity:.55;
+      transition:opacity var(--t-ui) var(--e-std)}
+  .fi:hover{opacity:.85}
+  .fi.on{opacity:1}
+  .fi.on::after{content:"";position:absolute;left:10px;right:10px;bottom:-4px;height:2px;background:var(--p)}
+  .fi .n{position:absolute;bottom:2px;right:4px;font-size:10px;color:rgba(255,255,255,.75);font-variant-numeric:tabular-nums}
+  .thumb{position:absolute;inset:3px;border-radius:2px}
+
+  .toggleRow{display:flex;align-items:center;gap:10px;margin:12px 0 0;font-size:13px;color:var(--sub)}
+  .tg{width:44px;height:24px;border-radius:12px;background:rgba(255,255,255,.15);border:none;cursor:pointer;position:relative;
+      transition:background var(--t-ui) var(--e-std)}
+  .tg::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;
+             transition:transform var(--t-ui) var(--e-std)}
+  .tg.on{background:var(--p)}
+  .tg.on::after{transform:translateX(20px)}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;background:var(--bg1);border:1px solid var(--bd);border-radius:12px;overflow:hidden}
+  th,td{padding:10px 14px;border-bottom:1px solid var(--bd);text-align:left}
+  th{font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--mut);text-transform:uppercase;background:var(--bg2)}
+  td:first-child{font-weight:600;white-space:nowrap}
+  .tv{font-variant-numeric:tabular-nums;color:var(--p);font-weight:600}
+  .ban{color:var(--err)}
+
+  .demo{background:var(--bg1);border:1px solid var(--bd);border-radius:12px;padding:24px;display:flex;gap:32px;flex-wrap:wrap}
+  .demo .cell{display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+  .demo .lbl{font-size:11px;font-weight:600;color:var(--mut);letter-spacing:.06em}
+  .dlgloop{width:220px;height:130px;border-radius:10px;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .dlg{width:150px;background:var(--bg3);border:1px solid var(--bd);border-radius:10px;padding:12px;text-align:center;
+       animation:dlgIn 2.6s var(--e-out) infinite}
+  .dlg b{font-size:13px;display:block}.dlg span{font-size:11px;color:var(--mut)}
+  @keyframes dlgIn{0%{opacity:0}12%{opacity:1}82%{opacity:1}92%,100%{opacity:0}}   /* 纯 fade，无位移无缩放 */
+  .toastloop{width:220px;height:130px;border-radius:10px;background:#000;display:flex;align-items:flex-start;justify-content:center;padding-top:16px;overflow:hidden}
+  .toast{display:flex;gap:8px;align-items:center;background:var(--bg3);border:1px solid var(--bd);border-radius:6px;
+         padding:8px 12px;font-size:13px;animation:tIn 2.6s var(--e-out) infinite}
+  .toast i{width:20px;height:20px;border-radius:50%;background:var(--ok);color:#000;font-style:normal;font-size:11px;display:grid;place-items:center;flex:none}
+  @keyframes tIn{0%{opacity:0}10%{opacity:1}80%{opacity:1}90%,100%{opacity:0}}
+
+  .mig{background:var(--bg1);border:1px solid var(--bd);border-radius:12px;padding:24px}
+  .mig li{font-size:13px;color:var(--sub);margin:6px 0 6px 18px}
+  .mig li b{color:var(--ink)}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="index.html">← 返回方案对比</a>
+  <div class="kicker" style="margin-top:16px">方案 B · 暗房纪律 Darkroom Discipline</div>
+  <h1>把动效减到只剩「出现与消失」</h1>
+  <p class="lede">定位转向极致专业工具：纯黑画布即正义，chrome 退到只剩一层细线，闲置时整个界面隐入黑暗。动效做彻底减法——<strong>两档时长、两条曲线、只有 fade</strong>。删除 bounce、删除 stagger、删除位移缩放入场；按压反馈用透明度下沉代替回弹。打开的「暗房模式」开关可以看到 chrome 自动隐藏后的状态。</p>
+
+  <h2>界面全图（深色 · 暗房）</h2>
+  <p class="sub">元信息默认隐藏，悬停才浮现（120ms fade）· 打开「暗房模式」看 chrome 隐去</p>
+  <div class="app" id="app">
+    <div class="nav chrome">
+      <span class="logo">Bulbul</span>
+      <span class="crumb">2024-05-12 · 千岛湖</span>
+      <span class="sp"></span>
+      <button class="tool on">⌘</button>
+      <button class="tool">◎</button>
+      <button class="tool">⊕</button>
+      <button class="tool">⚙</button>
+      <button class="btn ghost">导出</button>
+      <button class="btn">评选</button>
+    </div>
+    <div class="canvas">
+      <div class="ph sel"><div class="grad" style="background:linear-gradient(160deg,#2E5240,#122A20 60%,#081810)"></div><span class="grp" style="background:#5CB870"></span><div class="meta"><span class="stars">★★★★★</span><span>普通翠鸟</span><span class="score">98</span></div></div>
+      <div class="ph"><div class="grad" style="background:linear-gradient(150deg,#5A7FA8,#33486B 55%,#1B2840)"></div><span class="grp" style="background:#4A90E2"></span><div class="meta"><span class="stars">★★★★</span><span>大白鹭</span><span class="score">95</span></div></div>
+      <div class="ph"><div class="grad" style="background:linear-gradient(170deg,#6B4622,#402A12 60%,#211508)"></div><span class="grp" style="background:#E0A830"></span><div class="meta"><span class="stars">★★★★</span><span>红腹锦鸡</span><span class="score">93</span></div></div>
+      <div class="ph"><div class="grad" style="background:linear-gradient(155deg,#3A3733,#1E1C1A 60%,#0D0C0B)"></div><span class="grp" style="background:#7C7C82"></span><div class="meta"><span class="stars">★★★</span><span>雕鸮</span><span class="score">88</span></div></div>
+      <div class="ph"><div class="grad" style="background:linear-gradient(145deg,#1F5245,#0E332B 55%,#051A15)"></div><span class="grp" style="background:#5CB870"></span><div class="meta"><span class="stars">★★★★★</span><span>叉尾太阳鸟</span><span class="score">97</span></div></div>
+      <div class="ph"><div class="grad" style="background:linear-gradient(165deg,#42556A,#232E3B 60%,#10161D)"></div><span class="grp" style="background:#4A90E2"></span><div class="meta"><span class="stars">★★★</span><span>斑鱼狗</span><span class="score">86</span></div></div>
+      <div class="ph"><div class="grad" style="background:linear-gradient(150deg,#57412E,#33251A 55%,#1A120B)"></div><span class="grp" style="background:#E0A830"></span><div class="meta"><span class="stars">★★★★</span><span>画眉</span><span class="score">91</span></div></div>
+      <div class="ph"><div class="grad" style="background:linear-gradient(160deg,#2B3D57,#161F2E 60%,#0A0F17)"></div><span class="grp" style="background:#7C7C82"></span><div class="meta"><span class="stars">★★★</span><span>夜鹭</span><span class="score">84</span></div></div>
+    </div>
+    <div class="strip chrome">
+      <div class="fi on"><div class="thumb" style="background:linear-gradient(160deg,#2E5240,#081810)"></div><span class="n">12</span></div>
+      <div class="fi"><div class="thumb" style="background:linear-gradient(150deg,#5A7FA8,#1B2840)"></div><span class="n">8</span></div>
+      <div class="fi"><div class="thumb" style="background:linear-gradient(170deg,#6B4622,#211508)"></div><span class="n">5</span></div>
+      <div class="fi"><div class="thumb" style="background:linear-gradient(155deg,#3A3733,#0D0C0B)"></div><span class="n">3</span></div>
+      <div class="fi"><div class="thumb" style="background:linear-gradient(145deg,#1F5245,#051A15)"></div><span class="n">9</span></div>
+      <div class="fi"><div class="thumb" style="background:linear-gradient(165deg,#42556A,#10161D)"></div><span class="n">4</span></div>
+    </div>
+    <div class="hint">暗房模式 · 移动鼠标或按任意键唤出界面</div>
+  </div>
+  <div class="toggleRow">
+    <button class="tg" id="idleTg" aria-label="暗房模式"></button>
+    <span>暗房模式：chrome 闲置 3 秒后淡出（此处为手动演示，240ms）</span>
+  </div>
+
+  <h2>动效规范（减法清单）</h2>
+  <p class="sub">允许存在的全部动效如下表；表外一律删除</p>
+  <table>
+    <tr><th>场景</th><th>时长</th><th>曲线</th><th>形式</th></tr>
+    <tr><td>一切 hover / focus / 按压</td><td class="tv">120ms</td><td><code>--e-std</code></td><td>颜色或透明度变化</td></tr>
+    <tr><td>面板、对话框、Toast 进出场</td><td class="tv">240ms</td><td><code>--e-out</code></td><td>纯 fade，禁止位移与缩放</td></tr>
+    <tr><td>按压反馈</td><td class="tv">120ms</td><td><code>--e-std</code></td><td>opacity .7（<span class="ban">删除 scale bounce</span>）</td></tr>
+    <tr><td>stagger 错落入场</td><td class="tv ban">删除</td><td class="ban">—</td><td>暗房不表演</td></tr>
+    <tr><td>胶片条指示条滑动</td><td class="tv ban">删除</td><td class="ban">—</td><td>改为即时显现，选中即所见</td></tr>
+  </table>
+
+  <h2>现场演示</h2>
+  <p class="sub">对话框与 Toast 均为纯 fade（240ms out-quint），无任何位移——对比方案 A 的 4px 位移</p>
+  <div class="demo">
+    <div class="cell"><span class="lbl">DIALOG · 240ms 纯 fade</span><div class="dlgloop"><div class="dlg"><b>导出完成</b><span>12 张照片已复制</span></div></div></div>
+    <div class="cell"><span class="lbl">TOAST · 240ms 纯 fade</span><div class="toastloop"><div class="toast"><i>✓</i>已复制到剪贴板</div></div></div>
+    <div class="cell"><span class="lbl">PRESS · 透明度下沉</span><button class="btn" style="height:34px">按住感受</button></div>
+  </div>
+
+  <h2>落地清单</h2>
+  <div class="mig"><ul>
+    <li><b>前提</b>：深色成为默认主题，浅色保留但降级为维护模式；全量回归文字对比度（正文 ≥ 4.5:1）。</li>
+    <li><b>删</b>：bounce 缓动令牌、全部 scale 按压、stagger、指示条滑动动画、胶片条 hover 位移。</li>
+    <li><b>改</b>：所有入场动画统一为 240ms 纯 fade；motion 库可整体移除，AnimatePresence 用 CSS 替代。</li>
+    <li><b>增</b>：chrome 闲置隐藏（一个全局 idle 定时器 + 一条 opacity 过渡），元信息悬停浮现。</li>
+  </ul></div>
+</div>
+<script>
+  // 仅用于演示暗房开关，非生产代码
+  var tg=document.getElementById('idleTg'),app=document.getElementById('app');
+  tg.addEventListener('click',function(){tg.classList.toggle('on');app.classList.toggle('idle');});
+</script>
+</body>
+</html>

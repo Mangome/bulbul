@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>方案 C · 灯箱策展 Light Table — Bulbul</title>
+<style>
+  /* ═══ 方案 C：spring 扶正为唯一官方入场语言，stagger 写入规范 ═══ */
+  :root{
+    --p:#1E3A5F; --p-h:#264A78; --p-l:#E4ECF5;
+    --ink:#1D1D1F; --sub:#6E6E73; --mut:#7C7C82;
+    /* 暖纸面 —— 中性色整体向暖偏移，兑现「灯箱」隐喻 */
+    --paper:#FAF7F2; --paper2:#F3EFE8; --paper3:#E9E3D8; --bd:#D9D2C4; --bdl:#E9E3D8;
+    --ok:#2E7D4F; --warn:#A67B1A; --err:#B33B3B;
+    --panel:rgba(250,247,242,.9);
+    /* hover 仍保持 120ms 即应；弹性只给入场 */
+    --t-ui:120ms;
+    --e-std:cubic-bezier(.4,0,.2,1);
+    /* 官方 spring（stiffness 260 / damping 28）的 CSS 近似，生产用 motion 执行 */
+    --e-spring:cubic-bezier(.3,1.35,.4,1);
+    --t-spring:420ms;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;
+       background:var(--paper2);color:var(--ink);font-size:15px;line-height:1.6}
+  .wrap{max-width:1080px;margin:0 auto;padding:48px 32px 96px}
+  .kicker{font-size:11px;font-weight:600;letter-spacing:.12em;color:var(--p);text-transform:uppercase}
+  h1{font-size:28px;font-weight:600;margin:8px 0 12px}
+  .lede{color:var(--sub);max-width:68ch;margin-bottom:32px}
+  h2{font-size:20px;font-weight:600;margin:48px 0 6px}
+  .sub{font-size:13px;color:var(--mut);margin-bottom:16px}
+  .back{font-size:13px;color:var(--p);text-decoration:none}
+  code{background:var(--paper);border:1px solid var(--bdl);border-radius:4px;padding:0 5px;font-size:12px;color:var(--p)}
+
+  /* ─── 界面全图：暖纸灯箱 ─── */
+  .app{border:1px solid var(--bd);border-radius:12px;overflow:hidden;background:var(--paper)}
+  .nav{height:52px;display:flex;align-items:center;gap:12px;padding:0 20px;
+       background:var(--panel);backdrop-filter:blur(12px);border-bottom:1px solid var(--bdl)}
+  .nav .logo{font-weight:700;font-size:16px;letter-spacing:.01em}
+  .nav .crumb{font-size:13px;color:var(--mut)}
+  .nav .crumb b{color:var(--ink);font-weight:600}
+  .nav .sp{flex:1}
+  .btn{height:30px;padding:0 14px;border-radius:999px;border:none;font-size:13px;font-weight:500;cursor:pointer;
+       background:var(--p);color:#fff;transition:background var(--t-ui) var(--e-std)}
+  .btn:hover{background:var(--p-h)}
+  .btn:active{transform:scale(.97);transition:transform 100ms var(--e-std)}
+  .btn.ghost{background:transparent;color:var(--p)}
+  .btn.ghost:hover{background:var(--p-l)}
+  .tool{width:32px;height:32px;border-radius:50%;border:none;background:transparent;color:var(--sub);
+        cursor:pointer;font-size:14px;transition:background var(--t-ui) var(--e-std),color var(--t-ui) var(--e-std)}
+  .tool:hover{background:var(--paper3);color:var(--ink)}
+  .tool.on{background:var(--p-l);color:var(--p)}
+  /* 照片卡：白边装裱，hover 上浮 —— 策展灯箱的核心手势 */
+  .canvas{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;padding:24px;
+          background:radial-gradient(circle, var(--paper3) 1px, transparent 1px) 0 0/26px 26px, var(--paper)}
+  .ph{position:relative;background:#fff;padding:6px 6px 0;border:1px solid var(--bdl);border-radius:3px;cursor:pointer;
+      transition:transform var(--t-spring) var(--e-spring),box-shadow var(--t-spring) var(--e-spring)}
+  .ph:hover{transform:translateY(-4px) rotate(-.4deg);box-shadow:0 6px 16px rgba(60,50,30,.14)}
+  .ph.sel{border-color:var(--p);box-shadow:0 0 0 2px var(--p-l)}
+  .ph.sel::before{content:"✓";position:absolute;top:-8px;right:-8px;width:20px;height:20px;border-radius:50%;
+                  background:var(--p);color:#fff;font-size:11px;display:grid;place-items:center;z-index:2}
+  .ph .grad{aspect-ratio:3/2;border-radius:2px}
+  .ph .meta{display:flex;align-items:baseline;gap:6px;padding:7px 2px 6px;font-size:11px}
+  .ph .nm{font-weight:600;font-size:12px}
+  .ph .stars{color:var(--warn);letter-spacing:1px}
+  .ph .score{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--mut);font-weight:600}
+  .strip{height:76px;display:flex;align-items:center;gap:10px;padding:0 20px;
+         background:var(--panel);backdrop-filter:blur(12px);border-top:1px solid var(--bdl)}
+  .fi{flex:none;position:relative;cursor:pointer;text-align:center}
+  .fi .thumb{width:46px;height:46px;border-radius:3px;border:1px solid var(--bdl);margin:0 auto;
+             transition:transform var(--t-spring) var(--e-spring)}
+  .fi:hover .thumb{transform:translateY(-3px)}
+  .fi.on .thumb{box-shadow:0 0 0 2px var(--p)}
+  .fi .n{font-size:10px;color:var(--mut);font-variant-numeric:tabular-nums}
+  .fi.on .n{color:var(--p);font-weight:700}
+
+  /* ─── stagger 演示：装裱卡片依次落位 ─── */
+  .staggerDemo{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+  .staggerDemo .c{aspect-ratio:3/2;border-radius:3px;border:1px solid var(--bdl);
+                  animation:place 3.2s var(--e-spring) infinite}
+  .staggerDemo .c:nth-child(1){animation-delay:0s}
+  .staggerDemo .c:nth-child(2){animation-delay:.04s}
+  .staggerDemo .c:nth-child(3){animation-delay:.08s}
+  .staggerDemo .c:nth-child(4){animation-delay:.12s}
+  .staggerDemo .c:nth-child(5){animation-delay:.16s}
+  .staggerDemo .c:nth-child(6){animation-delay:.20s}
+  @keyframes place{0%{opacity:0;transform:translateY(10px) scale(.96)}14%{opacity:1;transform:none}
+                   80%{opacity:1}90%,100%{opacity:0;transform:translateY(4px)}}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;background:var(--paper);border:1px solid var(--bdl);border-radius:12px;overflow:hidden}
+  th,td{padding:10px 14px;border-bottom:1px solid var(--bdl);text-align:left}
+  th{font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--mut);text-transform:uppercase;background:var(--paper2)}
+  td:first-child{font-weight:600;white-space:nowrap}
+  .tv{font-variant-numeric:tabular-nums;color:var(--p);font-weight:600}
+
+  .demo{background:var(--paper);border:1px solid var(--bdl);border-radius:12px;padding:24px;display:flex;gap:32px;flex-wrap:wrap}
+  .demo .cell{display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+  .demo .lbl{font-size:11px;font-weight:600;color:var(--mut);letter-spacing:.06em}
+  .dlgloop{width:220px;height:130px;border-radius:10px;background:var(--paper2);display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .dlg{width:150px;background:#fff;border:1px solid var(--bdl);border-radius:14px;padding:12px;text-align:center;
+       box-shadow:0 8px 24px rgba(60,50,30,.12);animation:dlgIn 2.6s var(--e-spring) infinite}
+  .dlg b{font-size:13px;display:block}.dlg span{font-size:11px;color:var(--mut)}
+  @keyframes dlgIn{0%{opacity:0;transform:translateY(14px) scale(.92)}16%{opacity:1;transform:none}82%{opacity:1}92%,100%{opacity:0;transform:scale(.97)}}
+  .toastloop{width:220px;height:130px;border-radius:10px;background:var(--paper2);display:flex;align-items:flex-start;justify-content:center;padding-top:14px;overflow:hidden}
+  .toast{display:flex;gap:8px;align-items:center;background:#fff;border:1px solid var(--bdl);border-radius:999px;
+         padding:7px 14px;font-size:13px;box-shadow:0 4px 12px rgba(60,50,30,.1);animation:tIn 2.6s var(--e-spring) infinite}
+  .toast i{width:20px;height:20px;border-radius:50%;background:var(--ok);color:#fff;font-style:normal;font-size:11px;display:grid;place-items:center;flex:none}
+  @keyframes tIn{0%{opacity:0;transform:translateY(-14px)}14%{opacity:1;transform:none}80%{opacity:1}90%,100%{opacity:0}}
+
+  .mig{background:var(--paper);border:1px solid var(--bdl);border-radius:12px;padding:24px}
+  .mig li{font-size:13px;color:var(--sub);margin:6px 0 6px 18px}
+  .mig li b{color:var(--ink)}
+  .guard{color:var(--err)}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="index.html">← 返回方案对比</a>
+  <div class="kicker" style="margin-top:16px">方案 C · 灯箱策展 Light Table Editorial</div>
+  <h1>把 spring 从「野生」扶正为「官方语言」</h1>
+  <p class="lede">现状里 spring 和 stagger 已经在野生生长（About 对话框、设置面板各自发明参数），与其剿灭不如收编：定义<strong>唯一一组官方 spring 参数（stiffness 260 / damping 28）与唯一 stagger 步长（40ms）</strong>，只准用于入场编排。视觉上兑现 DESIGN.md 的「策展灯箱」——暖纸面、白边装裱卡片、hover 如拈起一张相片。悬停反馈仍保持 120ms 即应，弹性绝不用于高频交互。</p>
+
+  <h2>界面全图（暖纸 · 装裱卡片）</h2>
+  <p class="sub">悬停卡片 = 官方 spring 上浮 · 下方卡片带 stagger 依次落位演示</p>
+  <div class="app">
+    <div class="nav">
+      <span class="logo">Bulbul</span>
+      <span class="crumb">2024-05-12 · 千岛湖 / <b>精选集 36 张</b></span>
+      <span class="sp"></span>
+      <button class="tool on">⌘</button>
+      <button class="tool">◎</button>
+      <button class="tool">⚙</button>
+      <button class="btn ghost">导出</button>
+      <button class="btn">开始评选</button>
+    </div>
+    <div class="canvas">
+      <div class="ph sel"><div class="grad" style="background:linear-gradient(160deg,#3E6B4F,#0F241B)"></div><div class="meta"><span class="nm">普通翠鸟</span><span class="stars">★★★★★</span><span class="score">98</span></div></div>
+      <div class="ph"><div class="grad" style="background:linear-gradient(150deg,#7FA8D9,#2C4A73)"></div><div class="meta"><span class="nm">大白鹭</span><span class="stars">★★★★</span><span class="score">95</span></div></div>
+      <div class="ph"><div class="grad" style="background:linear-gradient(170deg,#8C5A2B,#33200E)"></div><div class="meta"><span class="nm">红腹锦鸡</span><span class="stars">★★★★</span><span class="score">93</span></div></div>
+      <div class="ph"><div class="grad" style="background:linear-gradient(155deg,#4E4A45,#171513)"></div><div class="meta"><span class="nm">雕鸮</span><span class="stars">★★★</span><span class="score">88</span></div></div>
+      <div class="ph"><div class="grad" style="background:linear-gradient(145deg,#2E6E5E,#0B2922)"></div><div class="meta"><span class="nm">叉尾太阳鸟</span><span class="stars">★★★★★</span><span class="score">97</span></div></div>
+      <div class="ph"><div class="grad" style="background:linear-gradient(165deg,#5A7186,#1C252E)"></div><div class="meta"><span class="nm">斑鱼狗</span><span class="stars">★★★</span><span class="score">86</span></div></div>
+      <div class="ph"><div class="grad" style="background:linear-gradient(150deg,#74553E,#2A1E14)"></div><div class="meta"><span class="nm">画眉</span><span class="stars">★★★★</span><span class="score">91</span></div></div>
+      <div class="ph"><div class="grad" style="background:linear-gradient(160deg,#3D5A80,#131E2C)"></div><div class="meta"><span class="nm">夜鹭</span><span class="stars">★★★</span><span class="score">84</span></div></div>
+    </div>
+    <div class="strip">
+      <div class="fi on"><div class="thumb" style="background:linear-gradient(160deg,#3E6B4F,#0F241B)"></div><div class="n">翠鸟 12</div></div>
+      <div class="fi"><div class="thumb" style="background:linear-gradient(150deg,#7FA8D9,#2C4A73)"></div><div class="n">白鹭 8</div></div>
+      <div class="fi"><div class="thumb" style="background:linear-gradient(170deg,#8C5A2B,#33200E)"></div><div class="n">锦鸡 5</div></div>
+      <div class="fi"><div class="thumb" style="background:linear-gradient(155deg,#4E4A45,#171513)"></div><div class="n">雕鸮 3</div></div>
+      <div class="fi"><div class="thumb" style="background:linear-gradient(145deg,#2E6E5E,#0B2922)"></div><div class="n">太阳鸟 9</div></div>
+    </div>
+  </div>
+
+  <h2>官方入场编排：stagger 40ms（循环演示）</h2>
+  <p class="sub">照片分组落位、对话框内容、导出清单，共用这一套编排——不再是 About 对话框的私货</p>
+  <div class="staggerDemo">
+    <div class="c" style="background:linear-gradient(160deg,#3E6B4F,#0F241B)"></div>
+    <div class="c" style="background:linear-gradient(150deg,#7FA8D9,#2C4A73)"></div>
+    <div class="c" style="background:linear-gradient(170deg,#8C5A2B,#33200E)"></div>
+    <div class="c" style="background:linear-gradient(155deg,#4E4A45,#171513)"></div>
+    <div class="c" style="background:linear-gradient(145deg,#2E6E5E,#0B2922)"></div>
+    <div class="c" style="background:linear-gradient(165deg,#5A7186,#1C252E)"></div>
+  </div>
+
+  <h2>动效规范（spring 带护栏）</h2>
+  <table>
+    <tr><th>场景</th><th>参数</th><th>形式</th></tr>
+    <tr><td>hover / focus / 变色</td><td class="tv">120ms · --e-std</td><td>高频交互保持即应，<span class="guard">禁止 spring</span></td></tr>
+    <tr><td>入场（卡片、对话框、Toast）</td><td class="tv">spring 260/28</td><td>translateY 10~14px + scale .96→1，过冲可见</td></tr>
+    <tr><td>编组入场</td><td class="tv">stagger 40ms</td><td>最多 8 项，超出整体入场（<span class="guard">防长列表拖沓</span>）</td></tr>
+    <tr><td>按压</td><td class="tv">100ms · scale(.97)</td><td>轻下沉，不用大回弹（弹性已属于入场）</td></tr>
+    <tr><td>出场</td><td class="tv">160ms fade</td><td>出场永远比入场安静</td></tr>
+  </table>
+
+  <h2>现场演示</h2>
+  <p class="sub">对话框与 Toast 均为官方 spring 入场——与方案 A 的匀速滑入、方案 B 的纯 fade 对比手感</p>
+  <div class="demo">
+    <div class="cell"><span class="lbl">DIALOG · spring 260/28</span><div class="dlgloop"><div class="dlg"><b>导出完成</b><span>12 张照片已装裱</span></div></div></div>
+    <div class="cell"><span class="lbl">TOAST · spring 260/28</span><div class="toastloop"><div class="toast"><i>✓</i>已加入精选集</div></div></div>
+    <div class="cell"><span class="lbl">PRESS · 100ms 轻下沉</span><button class="btn" style="height:34px">按住感受</button></div>
+  </div>
+
+  <h2>落地清单</h2>
+  <div class="mig"><ul>
+    <li><b>扶正</b>：About 对话框的 spring(d30/s400) 与设置面板的 spring(d30/s300) 统一为官方 <code>260/28</code>；stagger 0.06s 统一为 40ms。</li>
+    <li><b>视觉</b>：中性色整体向暖偏移（Paper #FAF7F2 系），照片卡片加白边装裱；工具图标改圆形。</li>
+    <li><b>护栏</b>：spring 只允许入场；stagger 上限 8 项；hover/按压禁用弹性——写进 DESIGN.md 的 Don'ts。</li>
+    <li><b>成本</b>：视觉调整面最大（全部中性面 + 卡片化改造），适合配合一次版本视觉焕新一起做。</li>
+  </ul></div>
+</div>
+</body>
+</html>

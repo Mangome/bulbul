@@ -7,7 +7,8 @@
    - 毛玻璃胶囊 —— 操作按钮悬浮于 Logo 之上，融入而非侵入
 
    入场编排（stagger 延迟在此集中调整）：
-   logo 0ms → 按钮 380ms → 关闭按钮 500ms
+   logo 0ms → 按钮 80ms → 关闭按钮 160ms
+   （动效矩阵豁免条款：全库唯一 stagger，项数 ≤3、间隔 ≤80ms、单项 300ms）
 ════════════════════════════════════════════════════════════════════════════ */
 
 .window {
@@ -19,8 +20,8 @@
   background: var(--color-bg-primary);
 
   /* 入场编排延迟（stagger） */
-  --stagger-btn: 380ms;
-  --stagger-close: 500ms;
+  --stagger-btn: 80ms;
+  --stagger-close: 160ms;
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -37,7 +38,7 @@
   pointer-events: none;
   will-change: transform;
   transition: transform 200ms var(--ease-out-quint);
-  animation: logoEnter 500ms var(--ease-out-quint) both;
+  animation: logoEnter 300ms var(--ease-out-quint) both;
 }
 
 @keyframes logoEnter {
@@ -164,7 +165,7 @@
     box-shadow var(--transition-normal),
     transform var(--transition-normal);
   white-space: nowrap;
-  animation: btnEnter 400ms var(--ease-out-quint) var(--stagger-btn) both;
+  animation: btnEnter 300ms var(--ease-out-quint) var(--stagger-btn) both;
 }
 
 @keyframes btnEnter {
@@ -247,8 +248,8 @@
   opacity: 0;
   transform: translateY(4px);
   transition:
-    opacity 600ms var(--ease-out-quint),
-    transform 600ms var(--ease-out-quint);
+    opacity var(--duration-slow) var(--ease-out-quint),
+    transform var(--duration-slow) var(--ease-out-quint);
 }
 
 .hintLineVisible {

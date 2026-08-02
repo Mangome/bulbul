@@ -51,11 +51,11 @@ const HOVER_BORDER_COLOR = 'rgba(255, 255, 255, 0.65)';
 const HOVER_BORDER_SHADOW = 'rgba(0, 0, 0, 0.35)';
 /** 悬停边框宽度（屏幕像素） */
 const HOVER_BORDER_WIDTH = 1.5;
-/** 悬停动画时长（ms） */
+/** 悬停动画时长（ms）—— 对齐 --duration-fast */
 const getHoverAnimDuration = (): number => {
-  if (typeof window === 'undefined') return 150;
+  if (typeof window === 'undefined') return 120;
   const prefersReduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-  return prefersReduced ? 0 : 150;
+  return prefersReduced ? 0 : 120;
 };
 
 // ─── 信息覆盖层常量 ─────────────────────────────────
@@ -359,7 +359,7 @@ export class CanvasImageItem {
   }
 
   /**
-   * 设置悬停状态（带 150ms easeOutQuart 补间）
+   * 设置悬停状态（带 120ms easeOutQuart 补间）
    * 非选中态下显示 1.5px 轻描边；选中态下为 no-op（避免视觉叠加）
    */
   setHovered(hovered: boolean): void {

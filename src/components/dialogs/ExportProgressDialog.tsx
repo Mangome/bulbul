@@ -1,13 +1,12 @@
 import { motion, AnimatePresence } from 'motion/react';
 import type { ExportProgress } from '../../services/exportService';
 import { formatDuration } from '../../utils/format';
+import { DURATION, EASE } from '../../utils/motionTokens';
 import cls from './ExportProgressDialog.module.css';
 
 interface ExportProgressDialogProps {
   progress: ExportProgress | null;
 }
-
-const EASE_OUT_QUART = [0.25, 1, 0.5, 1] as const;
 
 export function ExportProgressDialog({ progress }: ExportProgressDialogProps) {
   const percent = progress ? (progress.total > 0 ? (progress.current / progress.total) * 100 : 0) : 0;
@@ -24,14 +23,14 @@ export function ExportProgressDialog({ progress }: ExportProgressDialogProps) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.2, ease: EASE_OUT_QUART }}
+          transition={{ duration: DURATION.normal, ease: EASE.outQuint }}
         >
           <motion.div
             className={cls.dialog}
             initial={{ opacity: 0, scale: 0.96, y: -8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: -4 }}
-            transition={{ duration: 0.24, ease: EASE_OUT_QUART }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: DURATION.normal, ease: EASE.outQuint }}
           >
             <div className={cls.title}>正在导出...</div>
 

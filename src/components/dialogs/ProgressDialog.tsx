@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'motion/react';
 import type { ProcessingProgress, ProcessingState } from '../../types';
 import { formatDuration } from '../../utils/format';
+import { DURATION, EASE } from '../../utils/motionTokens';
 import cls from './ProgressDialog.module.css';
 
 /** 阶段标签映射 */
@@ -43,9 +44,6 @@ export function ProgressDialog({ processingState, progress, onCancel }: Progress
     processingState === 'analyzing' ||
     processingState === 'grouping';
 
-  // 自然减速曲线（easeOutQuart / easeOutQuint 的贝塞尔近似）
-  const EASE_OUT_QUART = [0.25, 1, 0.5, 1] as const;
-
   return (
     <AnimatePresence>
       {visible && (
@@ -54,14 +52,14 @@ export function ProgressDialog({ processingState, progress, onCancel }: Progress
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.2, ease: EASE_OUT_QUART }}
+          transition={{ duration: DURATION.normal, ease: EASE.outQuint }}
         >
           <motion.div
             className={cls.dialog}
             initial={{ opacity: 0, scale: 0.96, y: -8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: -4 }}
-            transition={{ duration: 0.24, ease: EASE_OUT_QUART }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: DURATION.normal, ease: EASE.outQuint }}
           >
             {/* 阶段标签 + spinner */}
             <div className={cls.stageRow}>
@@ -73,7 +71,7 @@ export function ProgressDialog({ processingState, progress, onCancel }: Progress
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.18, ease: EASE_OUT_QUART }}
+                  transition={{ duration: DURATION.fast, ease: EASE.standard }}
                 >
                   {label}
                 </motion.span>

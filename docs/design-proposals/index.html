@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bulbul 界面与动效治理 — 方案对比</title>
+<style>
+  :root{
+    --p:#1E3A5F; --p-h:#264A78; --p-l:#E4ECF5;
+    --ink:#1D1D1F; --sub:#6E6E73; --mut:#7C7C82;
+    --bg:#F5F5F7; --card:#FFFFFF; --bd:#E8E8ED; --bd2:#D2D2D7;
+    --ok:#2E7D4F; --warn:#A67B1A; --err:#B33B3B;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;
+       background:var(--bg);color:var(--ink);font-size:15px;line-height:1.6}
+  .wrap{max-width:1080px;margin:0 auto;padding:48px 32px 96px}
+  .kicker{font-size:11px;font-weight:600;letter-spacing:.12em;color:var(--p);text-transform:uppercase}
+  h1{font-size:28px;font-weight:600;line-height:1.3;margin:8px 0 12px}
+  .lede{color:var(--sub);max-width:65ch;margin-bottom:40px}
+  h2{font-size:20px;font-weight:600;margin:48px 0 16px}
+  .card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:24px;margin-bottom:16px}
+  .diag-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .diag h3{font-size:13px;font-weight:600;color:var(--err);margin-bottom:6px}
+  .diag p{font-size:13px;color:var(--sub)}
+  .diag code{background:var(--bg);border:1px solid var(--bd);border-radius:4px;padding:0 5px;font-size:12px;color:var(--p)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--bd)}
+  th{font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--mut);text-transform:uppercase}
+  td:first-child{font-weight:600}
+  .num{font-variant-numeric:tabular-nums;color:var(--p);font-weight:600}
+  .plans{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:8px}
+  .plan{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--bd);border-radius:12px;
+        padding:24px;text-decoration:none;color:inherit;transition:transform 120ms cubic-bezier(.4,0,.2,1),box-shadow 120ms cubic-bezier(.4,0,.2,1)}
+  .plan:hover{transform:translateY(-2px);box-shadow:0 2px 4px rgba(0,0,0,.06),0 4px 8px rgba(0,0,0,.1)}
+  .plan .tag{align-self:flex-start;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--p);color:#fff;margin-bottom:12px}
+  .plan.b .tag{background:#2C2C2E}
+  .plan.c .tag{background:#A67B1A}
+  .plan h3{font-size:17px;font-weight:600;margin-bottom:6px}
+  .plan p{font-size:13px;color:var(--sub);flex:1}
+  .plan .meta{margin-top:16px;font-size:12px;color:var(--mut);border-top:1px solid var(--bd);padding-top:12px}
+  .plan .meta b{color:var(--ink)}
+  .reco{font-size:11px;font-weight:600;color:var(--ok)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="kicker">Bulbul · 设计治理提案</div>
+  <h1>界面与动效：从「各自为政」到「一套语言」</h1>
+  <p class="lede">现状审计发现：视觉令牌（variables.css + DESIGN.md）已经成体系，真正零散的是<strong>动效层</strong>——三套并行的动画系统、11 种时长、7 条缓动曲线，每个组件自己发明入场方式。以下三套静态页方案，差异不在皮肤，而在<strong>动效性格的统一策略</strong>。</p>
+
+  <h2>一、问题诊断（基于源码审计）</h2>
+  <div class="diag-grid">
+    <div class="card diag">
+      <h3>① 三套动效系统并行</h3>
+      <p>CSS transition（令牌化）、<code>motion</code> JS 库（8 个组件）、Canvas 2D 手写补间（<code>easeOutQuart</code>）。同一类交互（如对话框入场）在不同页面走不同系统，手感无法统一。</p>
+    </div>
+    <div class="card diag">
+      <h3>② 时长失控：11 种取值</h3>
+      <p>令牌只定义 120 / 200 / 300ms 三档，实际代码出现 80、120、150、180、200、240、250、260、280、300、500ms。JS 侧硬编码 <code>duration: 0.15 / 0.18 / 0.24 / 0.28</code>，全部偏离刻度。</p>
+    </div>
+    <div class="card diag">
+      <h3>③ 缓动失控：7 条曲线</h3>
+      <p>令牌 4 条（standard / out-quint / swift / bounce），代码另造 3 条：<code>easeOutQuart</code>、<code>cubic-bezier(0.16,1,0.3,1)</code>（Loupe）、<code>'easeOut'</code>（Toast）。DESIGN.md 明令「禁止自由发挥」，实际人人发挥。</p>
+    </div>
+    <div class="card diag">
+      <h3>④ 名实不符 + 重复定义</h3>
+      <p><code>EASE_OUT_QUART</code> 常量在两个对话框里各抄一份，其值 <code>[0.25,1,0.5,1]</code> 其实就是令牌的 <code>--ease-swift</code>——名字叫 quart，值是 swift，令牌里的 out-quint 几乎没人用。</p>
+    </div>
+  </div>
+
+  <h2>二、三套解决方案</h2>
+  <table>
+    <tr><th></th><th>方案 A · 收敛</th><th>方案 B · 暗房纪律</th><th>方案 C · 灯箱策展</th></tr>
+    <tr><td>策略</td><td>视觉不动，只收编动效层</td><td>深色优先，动效做减法到极致</td><td>把 spring/stagger 扶正为官方语言</td></tr>
+    <tr><td>时长档</td><td class="num">120 / 200 / 300ms</td><td class="num">120 / 240ms 两档</td><td class="num">120ms + 统一 spring</td></tr>
+    <tr><td>缓动</td><td>3 条（standard/out-quint/swift）</td><td>2 条（禁用 bounce）</td><td>2 条 + 1 组标准 spring 参数</td></tr>
+    <tr><td>编排</td><td>禁止 stagger，入场统一 200ms</td><td>只剩 fade，无位移</td><td>stagger 40ms 写入规范</td></tr>
+    <tr><td>改动成本</td><td>低：改令牌引用，删硬编码</td><td>中：重做主题 + 砍动效</td><td>中高：重排视觉 + 统一 spring</td></tr>
+    <tr><td>风险</td><td>几乎为零</td><td>深色需全量回归对比度</td><td>spring 滥用风险需护栏</td></tr>
+    <tr><td>适合</td><td>当前版本快速止血 <span class="reco">● 推荐</span></td><td>专业暗房工作流定位</td><td>强化「策展灯箱」品牌叙事</td></tr>
+  </table>
+
+  <div class="plans" style="margin-top:24px">
+    <a class="plan a" href="proposal-a.html">
+      <span class="tag">方案 A</span>
+      <h3>收敛 · Token Lock</h3>
+      <p>不动一丝视觉，把 11 种时长、7 条曲线收进 3×3 令牌矩阵。motion 库降级为「仅 AnimatePresence 场景」，其余全部回归 CSS 令牌。</p>
+      <div class="meta"><b>成本最低</b> · 2~3 天收敛全库</div>
+    </a>
+    <a class="plan b" href="proposal-b.html">
+      <span class="tag">方案 B</span>
+      <h3>暗房 · Darkroom Discipline</h3>
+      <p>纯黑画布、chrome 极致退后、闲时自动隐藏面板。动效只做 fade，两档时长两条曲线，删掉全部弹性与错落——相机的冷静。</p>
+      <div class="meta"><b>定位向</b> · 专业工具气质最强</div>
+    </a>
+    <a class="plan c" href="proposal-c.html">
+      <span class="tag">方案 C</span>
+      <h3>灯箱策展 · Light Table</h3>
+      <p>兑现 DESIGN.md 的「策展灯箱」隐喻：暖纸面、编辑排版，把 spring 与 stagger 从野生状态扶正为唯一官方入场语言。</p>
+      <div class="meta"><b>品牌向</b> · 叙事感与温度最强</div>
+    </a>
+  </div>
+</div>
+</body>
+</html>

@@ -9,6 +9,7 @@
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { DURATION, EASE } from '../../utils/motionTokens';
 import { Button } from '../common/Button';
 import { Badge } from '../common/Badge';
 import { useCanvasStore } from '../../stores/useCanvasStore';
@@ -193,9 +194,9 @@ export function TopNavBar({
   return (
     <motion.div
       className={cls.container}
-      initial={{ opacity: 0, y: -10 }}
+      initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+      transition={{ duration: DURATION.normal, ease: EASE.outQuint }}
       role="navigation"
       aria-label="分组导航"
     >
@@ -215,7 +216,7 @@ export function TopNavBar({
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ duration: 0.15 }}
+                  transition={{ duration: DURATION.fast, ease: EASE.standard }}
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
                   <span>已复制</span>
@@ -227,7 +228,7 @@ export function TopNavBar({
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  transition={{ duration: 0.15 }}
+                  transition={{ duration: DURATION.fast, ease: EASE.standard }}
                 >
                   <svg className={cls.pathIcon} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg>
                   <span className={cls.pathText}>{displayPath}</span>
@@ -272,8 +273,8 @@ export function TopNavBar({
                 className={cls.provincePopover}
                 initial={{ opacity: 0, y: -4 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.15 }}
+                exit={{ opacity: 0, y: -4, transition: { duration: DURATION.fast, ease: EASE.standard } }}
+                transition={{ duration: DURATION.normal, ease: EASE.outQuint }}
               >
                 <input
                   className={cls.provinceSearch}

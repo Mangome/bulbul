@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { useToastStore } from '../../stores/useToastStore';
+import { DURATION, EASE } from '../../utils/motionTokens';
 import { Toast } from './Toast';
 
 const containerStyle: React.CSSProperties = {
@@ -22,10 +23,10 @@ export function ToastContainer() {
         {toasts.map((toast) => (
           <motion.div
             key={toast.id}
-            initial={{ opacity: 0, x: '100%' }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: '100%' }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, transition: { duration: DURATION.fast, ease: EASE.standard } }}
+            transition={{ duration: DURATION.normal, ease: EASE.outQuint }}
           >
             <Toast toast={toast} />
           </motion.div>

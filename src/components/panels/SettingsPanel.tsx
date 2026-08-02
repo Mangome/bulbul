@@ -7,6 +7,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { DURATION, EASE } from '../../utils/motionTokens';
 import { Slider } from '../common/Slider';
 import { useCanvasStore } from '../../stores/useCanvasStore';
 import { useGroupingStore } from '../../stores/useGroupingStore';
@@ -355,7 +356,7 @@ export function SettingsPanel({ open, onClose, onCacheCleared, onOpenAbout, proc
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
+          transition={{ duration: DURATION.normal, ease: EASE.standard }}
         >
           {/* 遮罩 */}
           <div className={cls.backdrop} onClick={onClose} />
@@ -366,7 +367,7 @@ export function SettingsPanel({ open, onClose, onCacheCleared, onOpenAbout, proc
             initial={{ x: 320 }}
             animate={{ x: 0 }}
             exit={{ x: 320 }}
-            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+            transition={{ duration: DURATION.slow, ease: EASE.outQuint }}
           >
             {/* 头部 */}
             <div className={cls.header}>

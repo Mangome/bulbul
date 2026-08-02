@@ -19,8 +19,8 @@
   position: relative;
 
   transition:
-    background-color 200ms var(--ease-swift),
-    transform 120ms var(--ease-swift);
+    background-color var(--transition-swift),
+    transform var(--transition-swift);
 }
 
 .item:hover {
@@ -33,6 +33,7 @@
 
 .item:active {
   transform: scale(0.96);
+  transition: transform var(--transition-press);
 }
 
 /* 激活态 */
@@ -57,7 +58,7 @@
   background: var(--color-primary);
   transform: translateX(-50%) scaleX(0.3);
   opacity: 0;
-  animation: indicatorSlideIn 260ms var(--ease-out-quint) forwards;
+  animation: indicatorSlideIn var(--duration-normal) var(--ease-swift) forwards;
 }
 
 @keyframes indicatorSlideIn {
@@ -96,9 +97,9 @@
   background: var(--color-bg-tertiary);
 
   transition:
-    border-color 200ms var(--ease-swift),
-    box-shadow 200ms var(--ease-swift),
-    filter 150ms var(--ease-swift);
+    border-color var(--transition-swift),
+    box-shadow var(--transition-swift),
+    filter var(--transition-swift);
 }
 
 .item:hover .thumbImg {
@@ -113,7 +114,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: filter 150ms var(--ease-swift);
+  transition: filter var(--transition-swift);
 }
 
 .thumbPlaceholder {
@@ -132,7 +133,7 @@
   color: var(--color-text-muted);
   line-height: 1;
   font-variant-numeric: tabular-nums;
-  transition: color 200ms var(--ease-swift);
+  transition: color var(--transition-swift);
 }
 
 .active .count {
