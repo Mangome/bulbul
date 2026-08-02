@@ -9,7 +9,7 @@ interface CanvasStoreState {
 
   /** 是否显示检测框覆盖层 */
   showDetectionOverlay: boolean;
-  /** 是否显示图片信息覆盖层 */
+  /** 是否常驻显示图片信息覆盖层（关闭时悬停图片仍可查看） */
   showImageInfo: boolean;
   /** 是否显示直方图 */
   showHistogram: boolean;
@@ -48,7 +48,7 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
   currentGroupIndex: 0,
   groupCount: 0,
   showDetectionOverlay: false,
-  showImageInfo: true,
+  showImageInfo: false,
   showHistogram: false,
   groupHighlightEnabled: true,
 

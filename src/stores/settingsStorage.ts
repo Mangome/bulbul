@@ -23,7 +23,7 @@ export interface PersistedSettings {
 const DEFAULTS: PersistedSettings = {
   theme: 'light',
   showDetectionOverlay: false,
-  showImageInfo: true,
+  showImageInfo: false,
   showHistogram: false,
   similarityThreshold: 90.0,
   timeGapSeconds: 10,

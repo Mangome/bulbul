@@ -217,4 +217,26 @@ describe('CanvasImageItem', () => {
       expect(canvasItem.hash).toBe('test-hash');
     });
   });
+
+  describe('组内最优徽章', () => {
+    it('setIsBestInGroup 切换标记', () => {
+      expect(canvasItem.isBestInGroup).toBe(false);
+      canvasItem.setIsBestInGroup(true);
+      expect(canvasItem.isBestInGroup).toBe(true);
+      canvasItem.setIsBestInGroup(false);
+      expect(canvasItem.isBestInGroup).toBe(false);
+    });
+
+    it('重复设置相同值为 no-op（不重建补间）', () => {
+      canvasItem.setIsBestInGroup(true);
+      canvasItem.setIsBestInGroup(true);
+      expect(canvasItem.isBestInGroup).toBe(true);
+    });
+
+    it('destroy 后徽章状态重置', () => {
+      canvasItem.setIsBestInGroup(true);
+      canvasItem.destroy();
+      expect(canvasItem.isBestInGroup).toBe(false);
+    });
+  });
 });

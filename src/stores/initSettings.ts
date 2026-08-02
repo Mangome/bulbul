@@ -51,7 +51,8 @@ export async function initSettings(): Promise<void> {
     if (saved.showDetectionOverlay) {
       useCanvasStore.getState().toggleDetectionOverlay();
     }
-    if (!saved.showImageInfo) {
+    // store 默认 false：仅当持久化为 true 时翻转为常驻
+    if (saved.showImageInfo) {
       useCanvasStore.getState().toggleImageInfo();
     }
     if (saved.showHistogram) {

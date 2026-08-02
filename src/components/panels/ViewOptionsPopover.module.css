@@ -104,6 +104,12 @@
   background: var(--panel-border);
 }
 
+.hint {
+  margin: -2px 8px 4px;
+  font-size: var(--font-size-meta);
+  color: var(--color-text-muted);
+}
+
 .shortcutRow {
   display: flex;
   align-items: center;

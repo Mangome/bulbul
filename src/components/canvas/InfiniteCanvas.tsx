@@ -169,17 +169,11 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
         bestInGroupMapRef.current.delete(groupId);
       }
 
-      // 更新同组可见 item 的 isBestInGroup + 刷新 segments
+      // 更新同组可见 item 的 isBestInGroup（徽章补间由 item 内部触发）
       const items = canvasItemsRef.current;
       for (const item of items.values()) {
         if (item.groupId !== groupId) continue;
-        const isBest = item.hash === bestHash;
-        if (item.isBestInGroup !== isBest) {
-          item.setIsBestInGroup(isBest);
-          const meta = metaMap.get(item.hash);
-          const fileName = fileNamesRef.current.get(item.hash) ?? item.hash;
-          item.setImageInfo(fileName, meta);
-        }
+        item.setIsBestInGroup(item.hash === bestHash);
       }
 
       return true;
@@ -407,7 +401,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
         const canvasItem = new CanvasImageItem(item);
         const fileName = fileNamesRef.current.get(item.hash) ?? item.hash;
         const meta = metadataMapRef.current.get(item.hash);
-        // 先设置 isBestInGroup（从已有缓存中查找），再 setImageInfo 避免二次刷新
+        // 从缓存恢复组内最优标记（徽章绘制独立于信息段，无顺序依赖）
         const existingBest = bestInGroupMapRef.current.get(item.groupId);
         canvasItem.setIsBestInGroup(item.hash === existingBest);
         canvasItem.setImageInfo(fileName, meta);

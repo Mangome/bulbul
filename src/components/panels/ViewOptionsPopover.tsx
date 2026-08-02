@@ -119,7 +119,8 @@ export function ViewOptionsPopover({ onOpenShortcuts }: ViewOptionsPopoverProps)
             transition={{ duration: DURATION.normal, ease: EASE.outQuint }}
           >
             <ToggleRow label="显示鸟种检测框" checked={showDetectionOverlay} onToggle={toggleDetectionOverlay} />
-            <ToggleRow label="图片信息" checked={showImageInfo} onToggle={toggleImageInfo} />
+            <ToggleRow label="常驻图片信息" checked={showImageInfo} onToggle={toggleImageInfo} />
+            <p className={cls.hint}>关闭后悬停图片仍可查看信息</p>
             <ToggleRow label="直方图" checked={showHistogram} onToggle={toggleHistogram} />
             <ToggleRow label="分组高亮" checked={groupHighlightEnabled} onToggle={toggleGroupHighlight} />
 

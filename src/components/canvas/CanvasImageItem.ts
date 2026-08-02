@@ -72,14 +72,13 @@ const FA_ICON_Y_OFFSET = -1;
 const SCORE_COLOR_GREEN = '#4ade80';
 const SCORE_COLOR_YELLOW = '#fbbf24';
 const SCORE_COLOR_RED = '#ef4444';
-const CROWN_ICON_COLOR = 'rgba(251, 191, 36, 0.65)';
 
 // FA Solid 图标 Unicode 码位
 const FA_CIRCLE_DOT = '\uf192';       // 光圈
 const FA_CLOCK = '\uf017';            // 快门速度
 const FA_FILM = '\uf008';             // ISO
 const FA_ARROWS_LR = '\uf07e';        // 焦距
-const FA_CROWN = '\uf521';            // 合焦(最优)
+const FA_CROWN = '\uf521';            // 组内最优徽章            // 合焦(最优)
 const INFO_TEXT_COLOR_CSS = '--color-text-inverse';
 function getInfoTextColor(): string {
   return getCssVar(INFO_TEXT_COLOR_CSS) || '#FFFFFF';
@@ -93,6 +92,21 @@ const INFO_PADDING_BOTTOM = 6;
 const INFO_LINE_GAP = 3;
 /** 估算字符宽度（用于截断，避免 measureText） */
 const INFO_CHAR_WIDTH = 6.5;
+/** 信息层最小屏宽（px）：低于此宽度不绘制文字层，避免淹没小图 */
+const INFO_MIN_SCREEN_WIDTH = 100;
+
+// ─── 组内最优徽章常量 ─────────────────────────────
+
+/** 徽章半径（屏幕像素），与组标签同高（18px） */
+const BEST_BADGE_RADIUS = 9;
+/** 皇冠颜色：全透明 amber，叠加在深色徽章底上 */
+const BEST_BADGE_CROWN_COLOR = '#fbbf24';
+/** 徽章出现/迁移动画时长（ms）—— 对齐 --duration-fast */
+const getBestAnimDuration = (): number => {
+  if (typeof window === 'undefined') return 120;
+  const prefersReduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+  return prefersReduced ? 0 : 120;
+};
 
 // ─── 分组角标常量 ─────────────────────────────────────
 
@@ -187,6 +201,10 @@ export class CanvasImageItem {
 
   // 组内合焦最优标记
   private _isBestInGroup: boolean = false;
+  // 最优徽章动画状态（与悬停动画同构）
+  private _bestAnimStartTime: number = 0;
+  private _bestAnimDirection: 'in' | 'out' = 'out';
+  private _bestAnimValue: number = 0;
 
   // 分组角标
   private _isFirstInGroup: boolean = false;
@@ -210,9 +228,12 @@ export class CanvasImageItem {
 
   // ── 公共方法 ────────────────────────────────────────
 
-  /** 设置组内合焦最优标记 */
+  /** 设置组内合焦最优标记（触发徽章出现/消失补间） */
   setIsBestInGroup(value: boolean): void {
+    if (this._isBestInGroup === value) return;
     this._isBestInGroup = value;
+    this._bestAnimStartTime = performance.now();
+    this._bestAnimDirection = value ? 'in' : 'out';
   }
 
   /** 获取组内合焦最优标记 */
@@ -245,10 +266,10 @@ export class CanvasImageItem {
    * 设置图片信息（文件名 + 拍摄参数）
    * 预计算渲染段，避免 draw() 中每帧重复计算
    */
-  setImageInfo(fileName: string, metadata?: ImageMetadata | null): void {
+    setImageInfo(fileName: string, metadata?: ImageMetadata | null): void {
     this.infoFileName = fileName;
     this.infoCaptureTime = CanvasImageItem._formatCaptureTime(metadata?.captureTime);
-    this.infoSegments = CanvasImageItem._buildSegments(metadata, this._isBestInGroup);
+    this.infoSegments = CanvasImageItem._buildSegments(metadata);
     this.infoVisible = fileName.length > 0;
   }
 
@@ -296,6 +317,14 @@ export class CanvasImageItem {
     const brightnessNeedsFrame = this._updateBrightnessAnimation(now);
     needsNextFrame = needsNextFrame || brightnessNeedsFrame;
 
+    // 悬停动画先行更新：悬停描边与信息层浮现共用其进度
+    const hoverAnimNeedsFrame = this._updateHoverAnimation(now);
+    needsNextFrame = needsNextFrame || hoverAnimNeedsFrame;
+
+    // 最优徽章补间
+    const bestAnimNeedsFrame = this._updateBestAnimation(now);
+    needsNextFrame = needsNextFrame || bestAnimNeedsFrame;
+
     // 绘制占位色块或图片
     if (this.image && this._isImageUsable()) {
       this._drawImageWithOrientation(ctx);
@@ -311,7 +340,10 @@ export class CanvasImageItem {
     // 绘制分组角标（首图左上角）
     this._drawGroupBadge(ctx, zoom);
 
-    // 绘制信息覆盖层（渐变背景 + 直方图 + 信息文字）
+    // 绘制组内最优徽章（左上角常驻，首图时排组标签右侧）
+    this._drawBestBadge(ctx, zoom);
+
+    // 绘制信息覆盖层（常驻开关 / 悬停浮现，渐变背景 + 直方图 + 信息文字）
     this._drawInfoOverlay(ctx, zoom, showImageInfo, showHistogram);
 
     // 绘制检测框覆盖层
@@ -320,8 +352,6 @@ export class CanvasImageItem {
     }
 
     // 绘制悬停效果（仅在未选中时）
-    const hoverAnimNeedsFrame = this._updateHoverAnimation(now);
-    needsNextFrame = needsNextFrame || hoverAnimNeedsFrame;
     if (!this._isSelected && this.hoverAnimValue > 0.01) {
       this._drawHover(ctx, zoom);
     }
@@ -420,6 +450,9 @@ export class CanvasImageItem {
     this._brightnessAnimStartTime = 0;
     this._brightnessAnimValue = 0;
     this._isGroupActive = true;
+    this._isBestInGroup = false;
+    this._bestAnimStartTime = 0;
+    this._bestAnimValue = 0;
     this.detectionBoxes = [];
     this.detectionVisible = false;
     this.histogramR = null;
@@ -497,8 +530,21 @@ export class CanvasImageItem {
    * @param showImageInfo 是否显示信息文字
    * @param showHistogram 是否显示直方图（需同时有直方图数据）
    */
+  /**
+   * 绘制信息覆盖层（渐变背景 + 直方图 + 信息文字）
+   * 使用反向缩放补偿保持文字恒定大小
+   * @param showImageInfo 常驻信息开关；关闭时信息层随悬停浮现
+   * @param showHistogram 是否显示直方图（需同时有直方图数据）
+   */
   private _drawInfoOverlay(ctx: CanvasRenderingContext2D, zoom: number, showImageInfo: boolean, showHistogram: boolean): void {
-    const hasInfo = showImageInfo && this.infoVisible && (this.infoFileName || this.infoSegments.length > 0);
+    // 常驻开关 → 常显；否则跟随悬停补间进度浮现
+    const overlayAlpha = showImageInfo ? 1 : this.hoverAnimValue;
+    if (overlayAlpha <= 0.01) return;
+
+    // 缩放门禁：屏宽过小时不绘制文字层，避免淹没小图
+    if (this.width * zoom < INFO_MIN_SCREEN_WIDTH) return;
+
+    const hasInfo = this.infoVisible && (this.infoFileName || this.infoSegments.length > 0);
     const hasHistogram = showHistogram && this.histogramR !== null;
 
     // 两者均不可见时不绘制
@@ -521,6 +567,7 @@ export class CanvasImageItem {
     const gradientContentH = Math.max(overlayContentH, h * INFO_GRADIENT_RATIO);
 
     ctx.save();
+    ctx.globalAlpha *= overlayAlpha;
 
     // 绘制渐变背景
     const gradientY = h - gradientContentH;
@@ -830,6 +877,67 @@ export class CanvasImageItem {
   }
 
   /**
+   * 更新最优徽章动画进度，返回是否需要继续渲染
+   */
+  private _updateBestAnimation(now: number): boolean {
+    const duration = this._bestAnimDirection === 'in'
+      ? getBestAnimDuration()
+      : getBestAnimDuration() * 0.75;
+
+    if (duration <= 0) {
+      this._bestAnimValue = this._isBestInGroup ? 1 : 0;
+      return false;
+    }
+
+    const elapsed = now - this._bestAnimStartTime;
+    const rawProgress = Math.max(0, Math.min(1, elapsed / duration));
+    const eased = easeOutQuart(rawProgress);
+    this._bestAnimValue = this._bestAnimDirection === 'in' ? eased : 1 - eased;
+    return rawProgress < 1;
+  }
+
+  /**
+   * 绘制组内最优徽章（左上角常驻皇冠）
+   * 首图时排在组标签右侧；出现/迁移带 scale 补间
+   */
+  private _drawBestBadge(ctx: CanvasRenderingContext2D, zoom: number): void {
+    if (this._bestAnimValue <= 0.01) return;
+
+    const invZoom = 1 / zoom;
+    ctx.save();
+    ctx.translate(GROUP_BADGE_OFFSET * invZoom, GROUP_BADGE_OFFSET * invZoom);
+    ctx.scale(invZoom, invZoom);
+
+    // 首图：排在组标签右侧（标签宽 = 文字宽 + 水平 padding × 2，间隙 6px）
+    let badgeX = 0;
+    if (this._isFirstInGroup && this._groupLabel) {
+      ctx.font = GROUP_BADGE_FONT;
+      badgeX = ctx.measureText(this._groupLabel).width + GROUP_BADGE_PADDING_X * 2 + 6;
+    }
+
+    const r = BEST_BADGE_RADIUS;
+    const scale = 0.6 + 0.4 * this._bestAnimValue;
+    ctx.translate(badgeX + r, r);
+    ctx.scale(scale, scale);
+    ctx.globalAlpha *= this._bestAnimValue;
+
+    // 深色半透明圆形底（与组标签同色底）
+    ctx.fillStyle = getGroupBadgeBg();
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 全透明 amber 皇冠
+    ctx.font = FA_FONT;
+    ctx.fillStyle = BEST_BADGE_CROWN_COLOR;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(FA_CROWN, 0, 0.5);
+
+    ctx.restore();
+  }
+
+  /**
    * 更新悬停动画进度，返回是否需要继续渲染
    * 同时写入 this.hoverAnimValue（0-1）供 _drawHover 使用
    */
@@ -885,8 +993,8 @@ export class CanvasImageItem {
     ctx.restore();
   }
 
-  /** 构建拍摄参数渲染段 */
-  private static _buildSegments(meta?: ImageMetadata | null, isBestInGroup?: boolean): InfoSegment[] {
+  /** 构建拍摄参数渲染段（纯数据：分数仅数字+分档色，最优标识由徽章承担） */
+  private static _buildSegments(meta?: ImageMetadata | null): InfoSegment[] {
     if (!meta) return [];
     const segs: InfoSegment[] = [];
     const icon = (code: string): InfoSegment => ({ text: code, font: FA_FONT, color: FA_ICON_COLOR, yOffset: FA_ICON_Y_OFFSET });
@@ -917,12 +1025,9 @@ export class CanvasImageItem {
         : score >= 50 ? SCORE_COLOR_YELLOW
         : SCORE_COLOR_RED;
       if (segs.length > 0) segs.push(space());
-      if (isBestInGroup) {
-        segs.push({ text: FA_CROWN, font: FA_FONT, color: CROWN_ICON_COLOR, yOffset: FA_ICON_Y_OFFSET });
-        segs.push(space());
-      } else {
-        segs.push({ text: '\u2605', font: INFO_FONT_PARAMS, color: 'rgba(255, 255, 255, 0.6)' });
-      }
+      // 「合焦」标签提供语义，孤零零的彩色数字无法被理解
+      segs.push(text('合焦'));
+      segs.push(space());
       segs.push(text(String(score), scoreColor));
     }
 
