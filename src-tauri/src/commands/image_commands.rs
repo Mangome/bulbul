@@ -125,3 +125,28 @@ pub async fn open_original(
 
     Ok(())
 }
+
+/// 在系统文件管理器中显示原图
+///
+/// 打开资源管理器 / Finder 并选中对应源文件。
+#[tauri::command]
+pub async fn reveal_original(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, Arc<Mutex<SessionState>>>,
+    hash: String,
+) -> Result<(), String> {
+    let file_path = {
+        let s = state.lock().map_err(|e| e.to_string())?;
+        s.hash_path_map.get(&hash).cloned()
+    };
+
+    let file_path = file_path.ok_or_else(|| {
+        format!("未找到 hash '{}' 对应的源文件路径", hash)
+    })?;
+
+    app.opener()
+        .reveal_item_in_dir(file_path.to_string_lossy().to_string())
+        .map_err(|e| format!("打开文件管理器失败: {}", e))?;
+
+    Ok(())
+}

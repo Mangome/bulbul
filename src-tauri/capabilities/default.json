@@ -12,6 +12,7 @@
     "core:event:default",
     "core:app:default",
     "opener:default",
+    "opener:allow-reveal-item-in-dir",
     "dialog:default",
     "dialog:allow-open",
     "process:default",

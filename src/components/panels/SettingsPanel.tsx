@@ -9,7 +9,6 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { DURATION, EASE } from '../../utils/motionTokens';
 import { Slider } from '../common/Slider';
-import { useCanvasStore } from '../../stores/useCanvasStore';
 import { useGroupingStore } from '../../stores/useGroupingStore';
 import { useAppStore } from '../../stores/useAppStore';
 import { useProcessing } from '../../hooks/useProcessing';
@@ -65,19 +64,6 @@ function IconGrouping() {
   );
 }
 
-/** 外观图标：画笔/调色板 */
-function IconAppearance() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 15 15" fill="none">
-      <circle cx="7.5" cy="7.5" r="5.5" stroke="currentColor" strokeWidth="1.2" />
-      <circle cx="5.5" cy="5.5" r="1" fill="currentColor" />
-      <circle cx="9.5" cy="5.5" r="1" fill="currentColor" />
-      <circle cx="5.5" cy="9.5" r="1" fill="currentColor" />
-      <circle cx="9.5" cy="9" r="1" fill="currentColor" />
-    </svg>
-  );
-}
-
 /** 缓存图标：硬盘/存储 */
 function IconCache() {
   return (
@@ -129,18 +115,6 @@ export function SettingsPanel({ open, onClose, onCacheCleared, onOpenAbout, proc
     || processingState === 'analyzing'
     || processingState === 'grouping'
     || processingState === 'focus_scoring';
-
-  // 检测框
-  const showDetectionOverlay = useCanvasStore((s) => s.showDetectionOverlay);
-  const toggleDetectionOverlay = useCanvasStore((s) => s.toggleDetectionOverlay);
-
-  // 图片信息 & 直方图
-  const showImageInfo = useCanvasStore((s) => s.showImageInfo);
-  const toggleImageInfo = useCanvasStore((s) => s.toggleImageInfo);
-  const showHistogram = useCanvasStore((s) => s.showHistogram);
-  const toggleHistogram = useCanvasStore((s) => s.toggleHistogram);
-  const groupHighlightEnabled = useCanvasStore((s) => s.groupHighlightEnabled);
-  const toggleGroupHighlight = useCanvasStore((s) => s.toggleGroupHighlight);
 
   // 缓存
   const [cacheInfo, setCacheInfo] = useState<CacheSizeInfo | null>(null);
@@ -423,74 +397,6 @@ export function SettingsPanel({ open, onClose, onCacheCleared, onOpenAbout, proc
                     aria-label="时间间隔阈值"
                   />
                   <span className={cls.sliderHint}>长时段</span>
-                </div>
-              </div>
-
-              {/* ── 外观 ── */}
-              <div className={cls.group}>
-                <div className={cls.groupHeader}>
-                  <span className={cls.groupIcon}>
-                    <IconAppearance />
-                  </span>
-                  <span className={cls.groupTitle}>外观</span>
-                </div>
-
-                <div className={cls.row}>
-                  <span className={cls.rowLabel}>显示鸟种检测框</span>
-                  <button
-                    className={`${cls.toggle} ${showDetectionOverlay ? cls.toggleActive : ''}`}
-                    onClick={toggleDetectionOverlay}
-                    role="switch"
-                    aria-checked={showDetectionOverlay}
-                    aria-label="检测框覆盖层开关"
-                  >
-                    <span className={cls.toggleKnob} />
-                  </button>
-                </div>
-
-                <div className={cls.separator} />
-
-                <div className={cls.row}>
-                  <span className={cls.rowLabel}>图片信息</span>
-                  <button
-                    className={`${cls.toggle} ${showImageInfo ? cls.toggleActive : ''}`}
-                    onClick={toggleImageInfo}
-                    role="switch"
-                    aria-checked={showImageInfo}
-                    aria-label="图片信息开关"
-                  >
-                    <span className={cls.toggleKnob} />
-                  </button>
-                </div>
-
-                <div className={cls.separator} />
-
-                <div className={cls.row}>
-                  <span className={cls.rowLabel}>直方图</span>
-                  <button
-                    className={`${cls.toggle} ${showHistogram ? cls.toggleActive : ''}`}
-                    onClick={toggleHistogram}
-                    role="switch"
-                    aria-checked={showHistogram}
-                    aria-label="直方图开关"
-                  >
-                    <span className={cls.toggleKnob} />
-                  </button>
-                </div>
-
-                <div className={cls.separator} />
-
-                <div className={cls.row}>
-                  <span className={cls.rowLabel}>分组高亮</span>
-                  <button
-                    className={`${cls.toggle} ${groupHighlightEnabled ? cls.toggleActive : ''}`}
-                    onClick={toggleGroupHighlight}
-                    role="switch"
-                    aria-checked={groupHighlightEnabled}
-                    aria-label="分组高亮开关"
-                  >
-                    <span className={cls.toggleKnob} />
-                  </button>
                 </div>
               </div>
 

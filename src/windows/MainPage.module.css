@@ -34,8 +34,10 @@
   width: 100%;
   height: 100%;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: var(--spacing-lg);
   background: var(--color-bg-primary);
 }
 
@@ -46,4 +48,30 @@
   text-align: center;
   max-width: 300px;
   line-height: 1.6;
+}
+
+.placeholderBtn {
+  height: 32px;
+  padding: 0 18px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  box-shadow: var(--shadow-subtle);
+  transition:
+    background-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.placeholderBtn:hover {
+  background: var(--color-primary-hover);
+  box-shadow: var(--shadow-normal);
+}
+
+.placeholderBtn:active {
+  transform: scale(0.98);
+  transition: transform var(--transition-press);
 }

@@ -196,43 +196,6 @@
   letter-spacing: -0.1px;
 }
 
-/* ─── 开关 ────────────────────────────────────────── */
-
-.toggle {
-  position: relative;
-  width: 44px;
-  height: 24px;
-  border-radius: var(--radius-2xl);
-  background: var(--color-border);
-  cursor: pointer;
-  border: none;
-  padding: 0;
-  flex-shrink: 0;
-
-  transition: background-color var(--transition-normal);
-}
-
-.toggleActive {
-  background: var(--color-primary);
-}
-
-.toggleKnob {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--color-text-inverse);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
-
-  transition: transform var(--transition-normal);
-}
-
-.toggleActive .toggleKnob {
-  transform: translateX(20px);
-}
-
 /* ─── 缓存数值 ────────────────────────────────────── */
 
 .cacheValueRow {
@@ -501,14 +464,6 @@
 
 [data-theme="dark"] .closeBtn:hover {
   background: var(--color-surface-active);
-}
-
-[data-theme="dark"] .toggle {
-  background: var(--color-surface-toggle);
-}
-
-[data-theme="dark"] .toggleActive {
-  background: var(--color-primary);
 }
 
 [data-theme="dark"] .actionBtnDefault {

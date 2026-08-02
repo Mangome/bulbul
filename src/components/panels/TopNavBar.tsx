@@ -12,9 +12,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import { DURATION, EASE } from '../../utils/motionTokens';
 import { Button } from '../common/Button';
 import { Badge } from '../common/Badge';
+import { ViewOptionsPopover } from './ViewOptionsPopover';
+import { GroupOverviewPopover } from './GroupOverviewPopover';
 import { useCanvasStore } from '../../stores/useCanvasStore';
 import { useSelectionStore } from '../../stores/useSelectionStore';
-import { useThemeStore } from '../../stores/useThemeStore';
 import { useAppStore } from '../../stores/useAppStore';
 import { useGeoStore } from '../../stores/useGeoStore';
 import { reclassify } from '../../services/processService';
@@ -24,23 +25,6 @@ import type { GroupData } from '../../types';
 import cls from './TopNavBar.module.css';
 
 // ─── SVG 图标 ────────────────────────────────────────
-
-function IconSun() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-      <circle cx="7.5" cy="7.5" r="3" stroke="currentColor" strokeWidth="1.3" />
-      <path d="M7.5 1.5v1.5M7.5 12v1.5M1.5 7.5H3M12 7.5h1.5M3.3 3.3l1 1M10.7 10.7l1 1M3.3 11.7l1-1M10.7 3.3l1-1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function IconMoon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
-      <path d="M12.5 8.5a5.5 5.5 0 0 1-7-7 5.5 5.5 0 1 0 7 7Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-    </svg>
-  );
-}
 
 function IconFolder() {
   return (
@@ -89,6 +73,10 @@ export interface TopNavBarProps {
   onSwitchFolder: () => void;
   onOpenSettings: () => void;
   onOpenSpeciesDashboard: () => void;
+  /** 点击进度条总览 / 跳组 */
+  onNavigateGroup: (groupIndex: number) => void;
+  /** 打开快捷键速查表 */
+  onOpenShortcuts: () => void;
 }
 
 // ─── 工具函数 ─────────────────────────────────────────
@@ -110,14 +98,13 @@ export function TopNavBar({
   onSwitchFolder,
   onOpenSettings,
   onOpenSpeciesDashboard,
+  onNavigateGroup,
+  onOpenShortcuts,
 }: TopNavBarProps) {
   const currentGroupIndex = useCanvasStore((s) => s.currentGroupIndex);
   const groupCount = useCanvasStore((s) => s.groupCount);
   const selectedCount = useSelectionStore((s) => s.selectedCount);
-
-  // 主题
-  const theme = useThemeStore((s) => s.theme);
-  const toggleTheme = useThemeStore((s) => s.toggleTheme);
+  const clearSelection = useSelectionStore((s) => s.clearSelection);
 
   // 省份选择
   const selectedProvince = useGeoStore((s) => s.selectedProvince);
@@ -156,8 +143,10 @@ export function TopNavBar({
 
   const [copied, setCopied] = useState(false);
   const [showProvincePopover, setShowProvincePopover] = useState(false);
+  const [showGroupOverview, setShowGroupOverview] = useState(false);
   const [reclassifyLoading, setReclassifyLoading] = useState(false);
   const provincePopoverRef = useRef<HTMLDivElement>(null);
+  const progressRef = useRef<HTMLDivElement>(null);
 
   const displayPath = useMemo(
     () => (folderPath ? shortenPath(folderPath) : null),
@@ -171,18 +160,21 @@ export function TopNavBar({
     setTimeout(() => setCopied(false), 1500);
   }, [folderPath]);
 
-  // 点击外部关闭省份弹窗
+  // 点击外部关闭省份弹窗 / 分组总览
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (showProvincePopover && provincePopoverRef.current && !provincePopoverRef.current.contains(e.target as Node)) {
         setShowProvincePopover(false);
       }
+      if (showGroupOverview && progressRef.current && !progressRef.current.contains(e.target as Node)) {
+        setShowGroupOverview(false);
+      }
     };
-    if (showProvincePopover) {
+    if (showProvincePopover || showGroupOverview) {
       document.addEventListener('pointerdown', handleClickOutside);
     }
     return () => document.removeEventListener('pointerdown', handleClickOutside);
-  }, [showProvincePopover]);
+  }, [showProvincePopover, showGroupOverview]);
 
   const group = groups[currentGroupIndex];
   if (!group) return null;
@@ -238,21 +230,56 @@ export function TopNavBar({
           </button>
       )}
 
-      {/* 中区：进度条 */}
-      <div className={cls.progressSection}>
-        <div className={cls.progressTrack}>
-          <div
-            className={cls.progressFill}
-            style={{ width: `${progressPercent}%` }}
-          />
-        </div>
-        <span className={cls.progressText}>
-          {currentGroupIndex + 1}/{groupCount}
-        </span>
+      {/* 中区：进度条（点击弹出分组总览） */}
+      <div className={cls.progressSection} ref={progressRef}>
+        <button
+          className={cls.progressBtn}
+          onClick={() => setShowGroupOverview((v) => !v)}
+          title="分组总览"
+          aria-label="打开分组总览"
+          aria-expanded={showGroupOverview}
+        >
+          <div className={cls.progressTrack}>
+            <div
+              className={cls.progressFill}
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+          <span className={cls.progressText}>
+            {currentGroupIndex + 1}/{groupCount}
+          </span>
+        </button>
+        <AnimatePresence>
+          {showGroupOverview && (
+            <GroupOverviewPopover
+              groups={groups}
+              currentGroupIndex={currentGroupIndex}
+              onSelect={(i) => {
+                setShowGroupOverview(false);
+                onNavigateGroup(i);
+              }}
+            />
+          )}
+        </AnimatePresence>
       </div>
 
       {/* 右区：工具按钮 */}
       <div className={cls.toolsSection}>
+        {/* 显示选项（视图开关 + 主题 + 快捷键入口） */}
+        <ViewOptionsPopover onOpenShortcuts={onOpenShortcuts} />
+
+        {/* 切换目录 */}
+        <button
+          className={cls.toolBtn}
+          onClick={onSwitchFolder}
+          title="切换目录 (Ctrl+O)"
+          aria-label="切换目录"
+        >
+          <IconFolder />
+        </button>
+
+        <span className={cls.toolSep} />
+
         {/* 省份选择器 */}
         <div className={cls.popoverAnchor} ref={provincePopoverRef}>
           <button
@@ -339,27 +366,17 @@ export function TopNavBar({
 
         <span className={cls.toolSep} />
 
-        {/* 切换目录 */}
-        <button
-          className={cls.toolBtn}
-          onClick={onSwitchFolder}
-          title="切换目录 (Ctrl+O)"
-          aria-label="切换目录"
-        >
-          <IconFolder />
-        </button>
-
-        {/* 主题 */}
-        <button
-          className={cls.toolBtn}
-          onClick={toggleTheme}
-          title={theme === 'light' ? '切换暗色主题' : '切换亮色主题'}
-          aria-label={theme === 'light' ? '切换暗色主题' : '切换亮色主题'}
-        >
-          {theme === 'light' ? <IconMoon /> : <IconSun />}
-        </button>
-
-        <span className={cls.toolSep} />
+        {/* 选中状态（点击清空） */}
+        {selectedCount > 0 && (
+          <button
+            className={cls.selectionClear}
+            onClick={clearSelection}
+            title="清空选中"
+            aria-label={`已选 ${selectedCount} 张，点击清空`}
+          >
+            已选 {selectedCount} · 清空
+          </button>
+        )}
 
         {/* 导出 */}
         <Button

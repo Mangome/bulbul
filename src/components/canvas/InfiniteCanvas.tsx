@@ -42,6 +42,7 @@ import {
 import type { ImageMetadata } from "../../types";
 import { useCanvasStore } from "../../stores/useCanvasStore";
 import { useSelectionStore } from "../../stores/useSelectionStore";
+import { useAppStore } from "../../stores/useAppStore";
 import { useThemeStore } from "../../stores/useThemeStore";
 import { Loupe, type LoupeSourceRect } from "./Loupe";
 import type { ItemRect } from "./Loupe";
@@ -1085,12 +1086,36 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
         }
 
         switch (e.key.toLowerCase()) {
+          case " ": {
+            // 空格：选中/取消当前悬停图片
+            e.preventDefault();
+            const hovered = hoveredHashRef.current;
+            if (hovered) {
+              useSelectionStore.getState().toggleSelection(hovered);
+              syncSelectionVisuals();
+            }
+            break;
+          }
           case "w":
-            scrollToAdjacentGroup(-1);
+          case "s": {
+            // 与 A/D 同路径：store 驱动 → 外部分组导航 effect 负责滚动。
+            // （旧实现 scrollToAdjacentGroup 只滚画布不写 store；目标落点距
+            //   旧组边界 < SCROLL_GROUP_PADDING 时，updateViewport 判「当前组
+            //   仍可见」不回写索引 → 索引卡死，后续按键原地不动）
+            const canvasStore = useCanvasStore.getState();
+            if (e.key.toLowerCase() === "w") {
+              canvasStore.prevGroup();
+            } else {
+              canvasStore.nextGroup();
+            }
+            const idx = useCanvasStore.getState().currentGroupIndex;
+            const { groups } = useAppStore.getState();
+            if (groups[idx]) {
+              useAppStore.getState().selectGroup(groups[idx].id);
+            }
+            syncSelectionVisuals();
             break;
-          case "s":
-            scrollToAdjacentGroup(1);
-            break;
+          }
           case "q":
             useSelectionStore.getState().clearSelection();
             syncSelectionVisuals();
@@ -1111,58 +1136,6 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
             break;
         }
       };
-
-      /** 滚动到上/下一组 */
-      function scrollToAdjacentGroup(direction: 1 | -1) {
-        const currentLayout = layoutRef.current;
-        const pages = currentLayout.pages;
-        if (pages.length === 0) return;
-
-        // 中断当前动画
-        scrollAnimRef.current = null;
-        navigatingToGroupRef.current = null;
-
-        const currentIdx = useCanvasStore.getState().currentGroupIndex;
-        let targetIdx = currentIdx + direction;
-
-        // 循环
-        if (targetIdx < 0) targetIdx = pages.length - 1;
-        if (targetIdx >= pages.length) targetIdx = 0;
-
-        scrollToGroupIndex(targetIdx);
-      }
-
-      /** 滚动到指定分组（带动画），定位到该组首图 */
-      function scrollToGroupIndex(groupIndex: number) {
-        const currentLayout = layoutRef.current;
-        const page = currentLayout.pages[groupIndex];
-        if (!page || page.items.length === 0) return;
-
-        // 定位到首图 Y 坐标，首图上方预留呼吸空间
-        const firstItemY = page.items[0].y;
-        const targetY =
-          groupIndex === 0
-            ? firstItemY
-            : Math.max(0, firstItemY - SCROLL_GROUP_PADDING);
-
-        // 锁定分组索引，防止动画期间 updateViewport 覆盖
-        navigatingToGroupRef.current = groupIndex;
-
-        if (SCROLL_ANIMATION_MS === 0) {
-          scrollYRef.current = targetY;
-          navigatingToGroupRef.current = null; // 即时跳转，立即解锁
-          updateViewport();
-          markDirty();
-          return;
-        }
-
-        scrollAnimRef.current = {
-          startTime: performance.now(),
-          startScrollY: scrollYRef.current,
-          targetScrollY: targetY,
-        };
-        markDirty();
-      }
 
       // ── 绑定事件 ──
       canvas.addEventListener("wheel", handleWheel, { passive: false });

@@ -1,0 +1,69 @@
+/* ════════════════════════════════════════════════════════════
+   ShortcutsDialog - 快捷键速查表
+════════════════════════════════════════════════════════════ */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-index-dialog);
+  display: grid;
+  place-items: center;
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--overlay-medium);
+}
+
+.dialog {
+  position: relative;
+  width: 320px;
+  padding: 16px;
+  background: var(--color-bg-primary);
+  border: 0.5px solid var(--panel-border);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-elevated);
+}
+
+.title {
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  margin-bottom: 8px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 30px;
+}
+
+.row + .row {
+  border-top: 0.5px solid var(--color-border-light);
+}
+
+.kbd {
+  font-family: inherit;
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.action {
+  font-size: var(--font-size-label);
+  color: var(--color-text-primary);
+  text-align: right;
+}

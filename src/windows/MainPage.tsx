@@ -10,6 +10,7 @@ import { useTauriEvents } from '../hooks/useTauriEvents';
 import { useAutoUpdateCheck } from '../hooks/useAutoUpdateCheck';
 import { ProgressDialog } from '../components/dialogs/ProgressDialog';
 import { ExportProgressDialog } from '../components/dialogs/ExportProgressDialog';
+import { ShortcutsDialog } from '../components/dialogs/ShortcutsDialog';
 import InfiniteCanvas, { type InfiniteCanvasHandle } from '../components/canvas/InfiniteCanvas';
 import { TopNavBar } from '../components/panels/TopNavBar';
 import { BottomFilmstrip } from '../components/panels/BottomFilmstrip';
@@ -47,6 +48,7 @@ function MainPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [showSpeciesDashboard, setShowSpeciesDashboard] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   // ── 启动时自动检查更新 ──
   useAutoUpdateCheck(() => setShowSettings(true));
@@ -140,7 +142,18 @@ function MainPage() {
     onOpenFolder: handleOpenFolder,
     onExport: handleExport,
     onGroupNavigated: handleGroupNavigated,
+    onShowShortcuts: () => setShowShortcuts(true),
   });
+
+  // ── 选中集外部变更时同步画布视觉 ──
+  // 覆盖 Esc 清空、顶栏「清空」、右键菜单切换等不经画布点击的路径
+  useEffect(() => {
+    return useSelectionStore.subscribe((state, prev) => {
+      if (state.selectedHashes !== prev.selectedHashes) {
+        canvasRef.current?.syncSelectionVisuals();
+      }
+    });
+  }, []);
 
   // ── 监听后台合焦评分（逐张更新） ──
   // 更新 metadataMap 供后续新进入视口的 item 使用
@@ -367,6 +380,8 @@ function MainPage() {
               onSwitchFolder={handleOpenFolder}
               onOpenSettings={() => setShowSettings(true)}
               onOpenSpeciesDashboard={() => setShowSpeciesDashboard(true)}
+              onNavigateGroup={handleGroupClick}
+              onOpenShortcuts={() => setShowShortcuts(true)}
             />
 
             {/* 底部胶片条 */}
@@ -396,6 +411,12 @@ function MainPage() {
               open={showAbout}
               onClose={() => setShowAbout(false)}
             />
+
+            {/* 快捷键速查表 */}
+            <ShortcutsDialog
+              open={showShortcuts}
+              onClose={() => setShowShortcuts(false)}
+            />
           </>
         ) : (
           <div className={cls.placeholder}>
@@ -404,8 +425,14 @@ function MainPage() {
                 ? '该目录下未找到图片文件'
                 : processingState === 'completed'
                   ? '正在准备画布...'
-                  : '等待处理完成...'}
+                  : '选择文件夹开始评选'}
             </p>
+            {(processingState === 'idle' ||
+              (processingState === 'completed' && groups.length === 0)) && (
+              <button className={cls.placeholderBtn} onClick={handleOpenFolder}>
+                选择文件夹
+              </button>
+            )}
           </div>
         )}
       </div>

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useSelectionStore } from '../../stores/useSelectionStore';
 import styles from './ContextMenu.module.css';
 
 interface ContextMenuProps {
@@ -46,9 +47,25 @@ export function ContextMenu({ x, y, hash, onClose }: ContextMenuProps) {
     }
   };
 
+  const handleReveal = async () => {
+    onClose();
+    try {
+      await invoke('reveal_original', { hash });
+    } catch (e) {
+      console.error('[ContextMenu] 打开文件管理器失败:', e);
+    }
+  };
+
+  const handleToggleSelect = () => {
+    onClose();
+    useSelectionStore.getState().toggleSelection(hash);
+  };
+
+  const isSelected = useSelectionStore((s) => s.selectedHashes.has(hash));
+
   // 调整位置确保不超出视口
   const adjustedX = Math.min(x, window.innerWidth - 180);
-  const adjustedY = Math.min(y, window.innerHeight - 50);
+  const adjustedY = Math.min(y, window.innerHeight - 130);
 
   return (
     <div
@@ -58,9 +75,21 @@ export function ContextMenu({ x, y, hash, onClose }: ContextMenuProps) {
     >
       <button
         className={styles.contextMenuItem}
+        onClick={handleToggleSelect}
+      >
+        {isSelected ? '取消选中' : '选中'}
+      </button>
+      <button
+        className={styles.contextMenuItem}
         onClick={handleViewOriginal}
       >
         查看原图
+      </button>
+      <button
+        className={styles.contextMenuItem}
+        onClick={handleReveal}
+      >
+        在文件管理器中显示
       </button>
     </div>
   );

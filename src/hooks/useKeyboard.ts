@@ -20,6 +20,8 @@ export interface UseKeyboardOptions {
   onExport: () => void;
   /** 分组跳转回调（切换后触发画布滚动） */
   onGroupNavigated?: () => void;
+  /** 打开快捷键速查表（? 键） */
+  onShowShortcuts?: () => void;
 }
 
 // ─── 常量 ─────────────────────────────────────────────
@@ -45,6 +47,7 @@ export function useKeyboard({
   onOpenFolder,
   onExport,
   onGroupNavigated,
+  onShowShortcuts,
 }: UseKeyboardOptions): void {
   useEffect(() => {
     let lastNavigationTime = 0;
@@ -72,6 +75,13 @@ export function useKeyboard({
 
       // ── 单键 ──
       switch (e.key) {
+        // ? → 快捷键速查表
+        case '?': {
+          e.preventDefault();
+          onShowShortcuts?.();
+          return;
+        }
+
         // 左右箭头 / A/D → 水平分组切换（节流保护）
         case 'ArrowLeft':
         case 'a':
@@ -98,7 +108,7 @@ export function useKeyboard({
           return;
         }
 
-        // W/S/上下箭头不再切组，预留给组内滚动（画布层面通过滚轮处理）
+        // W/S 分组切换由画布层（InfiniteCanvas）实现；空格选中悬停项同在画布层
         case 'Escape': {
           e.preventDefault();
           const selectionStore = useSelectionStore.getState();
@@ -119,5 +129,5 @@ export function useKeyboard({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onOpenFolder, onExport, onGroupNavigated]);
+  }, [onOpenFolder, onExport, onGroupNavigated, onShowShortcuts]);
 }
