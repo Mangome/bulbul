@@ -270,10 +270,10 @@
 }
 
 /* ────────────────────────────────────────────────────────────────
-   省份选择器弹窗
+   地区选择器弹窗
 ──────────────────────────────────────────────────────────────── */
 
-.provincePopover {
+.regionPopover {
   position: absolute;
   top: calc(100% + 12px);
   right: -8px;
@@ -295,7 +295,7 @@
   z-index: var(--z-index-popover);
 }
 
-.provinceSearch {
+.regionSearch {
   width: 100%;
   padding: 6px 8px;
   font-size: var(--font-size-meta);
@@ -308,15 +308,15 @@
   transition: border-color var(--transition-fast);
 }
 
-.provinceSearch:focus {
+.regionSearch:focus {
   border-color: var(--color-primary);
 }
 
-.provinceSearch::placeholder {
+.regionSearch::placeholder {
   color: var(--color-text-muted);
 }
 
-.provinceList {
+.regionList {
   max-height: 280px;
   overflow-y: auto;
   display: flex;
@@ -340,7 +340,7 @@
   padding-top: 6px;
 }
 
-.provinceItem {
+.regionItem {
   display: flex;
   align-items: center;
   padding: 6px 8px;
@@ -358,18 +358,18 @@
     color var(--transition-fast);
 }
 
-.provinceItem:hover {
+.regionItem:hover {
   background-color: var(--color-bg-tertiary);
   color: var(--color-text-primary);
 }
 
-.provinceItemActive {
+.regionItemActive {
   background-color: var(--color-primary-light);
   color: var(--color-primary);
   font-weight: var(--font-weight-medium);
 }
 
-.provinceItemClear {
+.regionItemClear {
   color: var(--color-text-muted);
   font-style: italic;
   border-bottom: 1px solid var(--color-border);
@@ -377,11 +377,11 @@
   padding-bottom: 8px;
 }
 
-.provinceItemClear:hover {
+.regionItemClear:hover {
   color: var(--color-danger);
 }
 
-.provinceEmpty {
+.regionEmpty {
   padding: 12px 8px;
   font-size: var(--font-size-meta);
   color: var(--color-text-muted);

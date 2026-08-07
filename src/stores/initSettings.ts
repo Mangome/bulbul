@@ -16,7 +16,7 @@ function collectSettings(): PersistedSettings {
     showHistogram: useCanvasStore.getState().showHistogram,
     similarityThreshold: useGroupingStore.getState().similarityThreshold,
     timeGapSeconds: useGroupingStore.getState().timeGapSeconds,
-    province: useGeoStore.getState().selectedProvince,
+    region: useGeoStore.getState().selectedRegion,
   };
 }
 
@@ -60,8 +60,8 @@ export async function initSettings(): Promise<void> {
     }
     useGroupingStore.getState().setSimilarityThreshold(saved.similarityThreshold);
     useGroupingStore.getState().setTimeGapSeconds(saved.timeGapSeconds);
-    if (saved.province) {
-      useGeoStore.getState().setProvince(saved.province);
+    if (saved.region) {
+      useGeoStore.getState().setRegion(saved.region);
     }
 
     // 订阅变更，自动持久化
@@ -93,7 +93,7 @@ export async function initSettings(): Promise<void> {
 
     useGeoStore.subscribe(
       (state, prev) => {
-        if (state.selectedProvince !== prev.selectedProvince) {
+        if (state.selectedRegion !== prev.selectedRegion) {
           scheduleSave();
         }
       },

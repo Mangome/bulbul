@@ -37,14 +37,14 @@ export function useProcessing() {
       try {
         setProcessingState('scanning');
         const { similarityThreshold, timeGapSeconds } = useGroupingStore.getState();
-        const { selectedProvince } = useGeoStore.getState();
+        const { selectedRegion } = useGeoStore.getState();
         const result = await processService.processFolder(folderPath, {
           similarityThreshold,
           timeGapSeconds,
-          minLat: selectedProvince?.minLat,
-          maxLat: selectedProvince?.maxLat,
-          minLng: selectedProvince?.minLng,
-          maxLng: selectedProvince?.maxLng,
+          minLat: selectedRegion?.minLat,
+          maxLat: selectedRegion?.maxLat,
+          minLng: selectedRegion?.minLng,
+          maxLng: selectedRegion?.maxLng,
           forceRefresh,
         });
         setGroups(result.groups, result.totalImages);

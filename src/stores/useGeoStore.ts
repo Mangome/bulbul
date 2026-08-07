@@ -1,12 +1,12 @@
 import { create } from 'zustand';
-import type { Province } from '../data/provinces';
+import type { Region } from '../data/regions';
 
 interface GeoState {
-  selectedProvince: Province | null;
-  setProvince: (province: Province | null) => void;
+  selectedRegion: Region | null;
+  setRegion: (region: Region | null) => void;
 }
 
 export const useGeoStore = create<GeoState>((set) => ({
-  selectedProvince: null,
-  setProvince: (province) => set({ selectedProvince: province }),
+  selectedRegion: null,
+  setRegion: (region) => set({ selectedRegion: region }),
 }));

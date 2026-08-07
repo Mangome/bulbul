@@ -7,7 +7,7 @@ import {
 } from '@tauri-apps/plugin-fs';
 
 import type { Theme } from './useThemeStore';
-import type { Province } from '../data/provinces';
+import type { Region } from '../data/regions';
 
 /** 持久化设置的结构 */
 export interface PersistedSettings {
@@ -17,7 +17,7 @@ export interface PersistedSettings {
   showHistogram: boolean;
   similarityThreshold: number;
   timeGapSeconds: number;
-  province: Province | null;
+  region: Region | null;
 }
 
 const DEFAULTS: PersistedSettings = {
@@ -27,13 +27,13 @@ const DEFAULTS: PersistedSettings = {
   showHistogram: false,
   similarityThreshold: 90.0,
   timeGapSeconds: 10,
-  province: null,
+  region: null,
 };
 
 const SETTINGS_DIR = 'bulbul';
 const SETTINGS_FILE = 'bulbul/settings.json';
 
-function isValidProvince(value: unknown): value is Province {
+function isValidRegion(value: unknown): value is Region {
   if (!value || typeof value !== 'object') return false;
   const p = value as Record<string, unknown>;
   return typeof p.name === 'string'
@@ -42,10 +42,10 @@ function isValidProvince(value: unknown): value is Province {
 }
 
 /**
- * 为旧版 Province 数据补全边界框字段。
- * 缺少边界框字段时，用省会坐标推算默认值（lat±2, lng±2）。
+ * 为旧版 Region 数据补全边界框字段。
+ * 缺少边界框字段时，用中心坐标推算默认值（lat±2, lng±2）。
  */
-function migrateProvince(p: Province): Province {
+function migrateRegion(p: Region): Region {
   const rec = p as unknown as Record<string, unknown>;
   if (
     typeof rec.minLat === 'number' &&
@@ -82,7 +82,9 @@ export async function loadSettings(): Promise<PersistedSettings> {
     const raw = await readTextFile(SETTINGS_FILE, {
       baseDir: BaseDirectory.AppData,
     });
-    const parsed = JSON.parse(raw) as Partial<PersistedSettings>;
+    const parsed = JSON.parse(raw) as Partial<PersistedSettings> & { province?: unknown };
+    // 兼容旧版 key:province
+    const savedRegion = parsed.region ?? parsed.province;
     const result = {
       theme: parsed.theme === 'light' || parsed.theme === 'dark' ? parsed.theme : DEFAULTS.theme,
       showDetectionOverlay: typeof parsed.showDetectionOverlay === 'boolean' ? parsed.showDetectionOverlay : DEFAULTS.showDetectionOverlay,
@@ -90,7 +92,7 @@ export async function loadSettings(): Promise<PersistedSettings> {
       showHistogram: typeof parsed.showHistogram === 'boolean' ? parsed.showHistogram : DEFAULTS.showHistogram,
       similarityThreshold: typeof parsed.similarityThreshold === 'number' ? parsed.similarityThreshold : DEFAULTS.similarityThreshold,
       timeGapSeconds: typeof parsed.timeGapSeconds === 'number' ? parsed.timeGapSeconds : DEFAULTS.timeGapSeconds,
-      province: isValidProvince(parsed.province) ? migrateProvince(parsed.province) : DEFAULTS.province,
+      region: isValidRegion(savedRegion) ? migrateRegion(savedRegion) : DEFAULTS.region,
     };
     return result;
   } catch (e) {

@@ -4,7 +4,7 @@
 // 全宽顶部条，44px 高度。
 // 左区：路径
 // 中区：进度条
-// 右区：工具按钮（省份、设置、切换目录、主题）+ 导出
+// 右区：工具按钮（地区、设置、切换目录、主题）+ 导出
 // ============================================================
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
@@ -19,8 +19,8 @@ import { useSelectionStore } from '../../stores/useSelectionStore';
 import { useAppStore } from '../../stores/useAppStore';
 import { useGeoStore } from '../../stores/useGeoStore';
 import { reclassify } from '../../services/processService';
-import { getProvincesGrouped } from '../../data/provinces';
-import type { Province, RegionGroup } from '../../data/provinces';
+import { getRegionsGrouped } from '../../data/regions';
+import type { Region, RegionGroup } from '../../data/regions';
 import type { GroupData } from '../../types';
 import cls from './TopNavBar.module.css';
 
@@ -106,31 +106,32 @@ export function TopNavBar({
   const selectedCount = useSelectionStore((s) => s.selectedCount);
   const clearSelection = useSelectionStore((s) => s.clearSelection);
 
-  // 省份选择
-  const selectedProvince = useGeoStore((s) => s.selectedProvince);
-  const setProvince = useGeoStore((s) => s.setProvince);
+  // 地区选择
+  const selectedRegion = useGeoStore((s) => s.selectedRegion);
+  const setRegion = useGeoStore((s) => s.setRegion);
   const hasGroups = useAppStore((s) => s.groups.length > 0);
-  const [provinceSearch, setProvinceSearch] = useState('');
+  const [regionSearch, setRegionSearch] = useState('');
 
   const filteredGroups = useMemo((): RegionGroup[] => {
-    if (!provinceSearch) return getProvincesGrouped();
-    const keyword = provinceSearch;
-    return getProvincesGrouped()
+    if (!regionSearch) return getRegionsGrouped();
+    const keyword = regionSearch.trim().toLowerCase();
+    return getRegionsGrouped()
       .map((g) => ({
         ...g,
-        provinces: g.provinces.filter((p) => p.name.includes(keyword)),
+        regions: g.regions.filter((r) =>
+          r.name.includes(keyword) || r.aliases?.some((a) => a.includes(keyword))),
       }))
-      .filter((g) => g.provinces.length > 0);
-  }, [provinceSearch]);
+      .filter((g) => g.regions.length > 0);
+  }, [regionSearch]);
 
-  const handleSelectProvince = useCallback(async (province: Province | null) => {
-    setProvince(province);
-    setShowProvincePopover(false);
-    setProvinceSearch('');
+  const handleSelectRegion = useCallback(async (region: Region | null) => {
+    setRegion(region);
+    setShowRegionPopover(false);
+    setRegionSearch('');
     setReclassifyLoading(true);
     try {
-      if (province) {
-        await reclassify(province.minLat, province.maxLat, province.minLng, province.maxLng);
+      if (region) {
+        await reclassify(region.minLat, region.maxLat, region.minLng, region.maxLng);
       } else {
         await reclassify(0.0, 0.0, 0.0, 0.0);
       }
@@ -139,13 +140,13 @@ export function TopNavBar({
     } finally {
       setReclassifyLoading(false);
     }
-  }, [setProvince]);
+  }, [setRegion]);
 
   const [copied, setCopied] = useState(false);
-  const [showProvincePopover, setShowProvincePopover] = useState(false);
+  const [showRegionPopover, setShowRegionPopover] = useState(false);
   const [showGroupOverview, setShowGroupOverview] = useState(false);
   const [reclassifyLoading, setReclassifyLoading] = useState(false);
-  const provincePopoverRef = useRef<HTMLDivElement>(null);
+  const regionPopoverRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
 
   const displayPath = useMemo(
@@ -160,21 +161,21 @@ export function TopNavBar({
     setTimeout(() => setCopied(false), 1500);
   }, [folderPath]);
 
-  // 点击外部关闭省份弹窗 / 分组总览
+  // 点击外部关闭地区弹窗 / 分组总览
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (showProvincePopover && provincePopoverRef.current && !provincePopoverRef.current.contains(e.target as Node)) {
-        setShowProvincePopover(false);
+      if (showRegionPopover && regionPopoverRef.current && !regionPopoverRef.current.contains(e.target as Node)) {
+        setShowRegionPopover(false);
       }
       if (showGroupOverview && progressRef.current && !progressRef.current.contains(e.target as Node)) {
         setShowGroupOverview(false);
       }
     };
-    if (showProvincePopover || showGroupOverview) {
+    if (showRegionPopover || showGroupOverview) {
       document.addEventListener('pointerdown', handleClickOutside);
     }
     return () => document.removeEventListener('pointerdown', handleClickOutside);
-  }, [showProvincePopover, showGroupOverview]);
+  }, [showRegionPopover, showGroupOverview]);
 
   const group = groups[currentGroupIndex];
   if (!group) return null;
@@ -280,42 +281,42 @@ export function TopNavBar({
 
         <span className={cls.toolSep} />
 
-        {/* 省份选择器 */}
-        <div className={cls.popoverAnchor} ref={provincePopoverRef}>
+        {/* 地区选择器 */}
+        <div className={cls.popoverAnchor} ref={regionPopoverRef}>
           <button
-            className={`${cls.toolBtn} ${cls.toolBtnWithLabel} ${showProvincePopover ? cls.toolBtnActive : ''} ${selectedProvince ? cls.toolBtnActive : ''} ${!hasGroups || reclassifyLoading ? cls.toolBtnDisabled : ''}`}
-            onClick={() => hasGroups && !reclassifyLoading && setShowProvincePopover((v) => !v)}
+            className={`${cls.toolBtn} ${cls.toolBtnWithLabel} ${showRegionPopover ? cls.toolBtnActive : ''} ${selectedRegion ? cls.toolBtnActive : ''} ${!hasGroups || reclassifyLoading ? cls.toolBtnDisabled : ''}`}
+            onClick={() => hasGroups && !reclassifyLoading && setShowRegionPopover((v) => !v)}
             disabled={!hasGroups || reclassifyLoading}
-            title={selectedProvince ? `当前地区: ${selectedProvince.name}` : '选择地区'}
+            title={selectedRegion ? `当前地区: ${selectedRegion.name}` : '选择地区'}
             aria-label="选择地区"
           >
             <IconMap />
             <span className={cls.toolBtnLabel}>
-              {selectedProvince ? selectedProvince.name : '地区'}
+              {selectedRegion ? selectedRegion.name : '地区'}
             </span>
           </button>
           <AnimatePresence>
-            {showProvincePopover && (
+            {showRegionPopover && (
               <motion.div
-                className={cls.provincePopover}
+                className={cls.regionPopover}
                 initial={{ opacity: 0, y: -4 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -4, transition: { duration: DURATION.fast, ease: EASE.standard } }}
                 transition={{ duration: DURATION.normal, ease: EASE.outQuint }}
               >
                 <input
-                  className={cls.provinceSearch}
+                  className={cls.regionSearch}
                   type="text"
-                  placeholder="搜索省份..."
-                  value={provinceSearch}
-                  onChange={(e) => setProvinceSearch(e.target.value)}
+                  placeholder="搜索地区..."
+                  value={regionSearch}
+                  onChange={(e) => setRegionSearch(e.target.value)}
                   autoFocus
                 />
-                <div className={cls.provinceList}>
-                  {selectedProvince && (
+                <div className={cls.regionList}>
+                  {selectedRegion && (
                     <button
-                      className={`${cls.provinceItem} ${cls.provinceItemClear}`}
-                      onClick={() => handleSelectProvince(null)}
+                      className={`${cls.regionItem} ${cls.regionItemClear}`}
+                      onClick={() => handleSelectRegion(null)}
                     >
                       清除选择
                     </button>
@@ -323,19 +324,19 @@ export function TopNavBar({
                   {filteredGroups.map((g) => (
                     <div key={g.label}>
                       <div className={cls.regionLabel}>{g.label}</div>
-                      {g.provinces.map((p) => (
+                      {g.regions.map((r) => (
                         <button
-                          key={p.name}
-                          className={`${cls.provinceItem} ${selectedProvince?.name === p.name ? cls.provinceItemActive : ''}`}
-                          onClick={() => handleSelectProvince(p)}
+                          key={r.name}
+                          className={`${cls.regionItem} ${selectedRegion?.name === r.name ? cls.regionItemActive : ''}`}
+                          onClick={() => handleSelectRegion(r)}
                         >
-                          {p.name}
+                          {r.name}
                         </button>
                       ))}
                     </div>
                   ))}
                   {filteredGroups.length === 0 && (
-                    <div className={cls.provinceEmpty}>无匹配结果</div>
+                    <div className={cls.regionEmpty}>无匹配结果</div>
                   )}
                 </div>
               </motion.div>
