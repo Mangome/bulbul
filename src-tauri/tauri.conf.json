@@ -41,7 +41,11 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": [
+      "msi",
+      "app",
+      "dmg"
+    ],
     "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
@@ -56,19 +60,7 @@
     "category": "Photography",
     "resources": [
       "resources/models"
-    ],
-    "windows": {
-      "nsis": {
-        "displayLanguageSelector": true,
-        "languages": [
-          "SimpChinese",
-          "English"
-        ],
-        "installerIcon": "icons/icon.ico",
-        "headerImage": null,
-        "sidebarImage": null
-      }
-    }
+    ]
   },
   "plugins": {
     "updater": {

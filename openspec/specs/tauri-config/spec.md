@@ -13,12 +13,12 @@
 
 ### Requirement: Bundle 完整配置
 
-`tauri.conf.json` 的 `bundle` 配置 SHALL 包含完整的发布配置：`active: true`、`targets: "all"`、完整图标列表、`windows.nsis` 安装器配置。
+`tauri.conf.json` 的 `bundle` 配置 SHALL 包含完整的发布配置：`active: true`、`targets: ["msi", "app", "dmg"]`（Windows 只出 MSI，macOS 出 dmg/app）、完整图标列表；MUST NOT 包含 `windows.nsis` 配置块。
 
-#### Scenario: NSIS 安装器配置
+#### Scenario: Windows MSI 安装器配置
 
 - **WHEN** 执行 `cargo tauri build`
-- **THEN** SHALL 生成 NSIS 安装器，支持选择安装路径和创建桌面快捷方式
+- **THEN** SHALL 仅生成 MSI 安装器（不再生成 NSIS `setup.exe`），支持选择安装路径
 
 #### Scenario: Bundle 元数据
 

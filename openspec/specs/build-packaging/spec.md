@@ -14,9 +14,9 @@
 - **WHEN** 打包流程读取图标
 - **THEN** SHALL 找到 32x32、128x128、256x256 三种尺寸的 PNG 图标文件
 
-### Requirement: Windows NSIS 安装器配置
+### Requirement: Windows MSI 安装器配置
 
-`tauri.conf.json` 的 `bundle` 配置 SHALL 完善 Windows NSIS 安装器参数。
+`tauri.conf.json` 的 `bundle` 配置 SHALL 仅以 MSI 作为 Windows 安装器目标，MUST NOT 生成 NSIS `setup.exe`。
 
 #### Scenario: 安装器元数据
 
@@ -27,6 +27,11 @@
 
 - **WHEN** 用户运行安装器
 - **THEN** SHALL 支持选择安装路径、创建桌面快捷方式、添加到开始菜单
+
+#### Scenario: Windows 只产出 MSI
+
+- **WHEN** 构建 Windows 安装包
+- **THEN** 打包产物 SHALL 只包含 `*_x64_en-US.msi` 与其 `.sig` 签名，MUST NOT 包含 `*-setup.exe`
 
 ### Requirement: 生产构建优化
 
@@ -49,7 +54,7 @@
 #### Scenario: 生成 Windows updater 产物
 
 - **WHEN** 工作流构建 Windows 发布版本
-- **THEN** GitHub Release SHALL 包含 Windows 安装包、对应 `.sig` 签名文件和可供 updater 使用的 `latest.json`
+- **THEN** GitHub Release SHALL 包含 `.msi` 安装包、对应的 `.msi.sig` 签名文件和可供 updater 使用的 `latest.json`
 
 #### Scenario: 生成 macOS updater 产物
 

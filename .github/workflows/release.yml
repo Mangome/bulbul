@@ -73,7 +73,7 @@ jobs:
             ## Bulbul ${{ github.ref_name }}
 
             下载对应平台的安装包：
-            - **Windows**: `.msi` 或 `.exe` (NSIS 安装包)
+            - **Windows**: `.msi`
             - **macOS (Apple Silicon)**: `_aarch64.dmg`
 
             ### macOS 用户注意
@@ -105,8 +105,8 @@ jobs:
           }
 
           $hasLatestJson = $assetNames -contains 'latest.json'
-          $hasWindowsInstaller = @($assetNames | Where-Object { $_ -match '\.(msi|exe)$' }).Count -gt 0
-          $hasWindowsSignature = @($assetNames | Where-Object { $_ -match '\.(msi|exe)\.sig$' }).Count -gt 0
+          $hasWindowsInstaller = @($assetNames | Where-Object { $_ -match '\.msi$' }).Count -gt 0
+          $hasWindowsSignature = @($assetNames | Where-Object { $_ -match '\.msi\.sig$' }).Count -gt 0
           $hasMacInstaller = @($assetNames | Where-Object { $_ -match '\.dmg$' }).Count -gt 0
           $hasMacUpdaterArchive = @($assetNames | Where-Object { $_ -match '\.app\.tar\.gz$' }).Count -gt 0
           $hasMacUpdaterSignature = @($assetNames | Where-Object { $_ -match '\.app\.tar\.gz\.sig$' }).Count -gt 0
@@ -116,7 +116,7 @@ jobs:
           }
 
           if (-not $hasWindowsInstaller -or -not $hasWindowsSignature) {
-            throw 'Release is missing signed Windows updater assets (.msi/.exe and matching .sig).'
+            throw 'Release is missing signed Windows updater assets (.msi and matching .sig).'
           }
 
           if (-not $hasMacInstaller -or -not $hasMacUpdaterArchive -or -not $hasMacUpdaterSignature) {
