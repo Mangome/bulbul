@@ -179,7 +179,9 @@ export class CanvasImageItem {
   private hoverAnimValue: number = 0;
 
   // 分组亮度动画状态（0 = 暗 dim，1 = 亮 bright）
-  private _isGroupActive: boolean = true;
+  // 新建 item 视为「尚未收到画布的分组激活通知」：初始必须与 dim 一致，
+  // 否则画布首帧调 setGroupActive(true) 时会被提前返回，激活分组永久停留在压暗态
+  private _isGroupActive: boolean = false;
   private _brightnessAnimStartTime: number = 0;
   private _brightnessAnimDirection: 'in' | 'out' = 'out';
   private _brightnessAnimValue: number = 0;
@@ -449,7 +451,7 @@ export class CanvasImageItem {
     this._isHovered = false;
     this._brightnessAnimStartTime = 0;
     this._brightnessAnimValue = 0;
-    this._isGroupActive = true;
+    this._isGroupActive = false;
     this._isBestInGroup = false;
     this._bestAnimStartTime = 0;
     this._bestAnimValue = 0;

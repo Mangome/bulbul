@@ -239,4 +239,41 @@ describe('CanvasImageItem', () => {
       expect(canvasItem.isBestInGroup).toBe(false);
     });
   });
+
+  describe('分组亮度（groupActive）', () => {
+    /** 探针 ctx：记录压暗层（#000000 覆盖层）绘制时的 globalAlpha */
+    function createBrightnessProbe() {
+      const state = { overlayAlpha: 0 };
+      const ctx = {
+        save: vi.fn(), restore: vi.fn(), translate: vi.fn(), scale: vi.fn(), rotate: vi.fn(),
+        beginPath: vi.fn(), closePath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(),
+        arc: vi.fn(), arcTo: vi.fn(), fill: vi.fn(), stroke: vi.fn(), drawImage: vi.fn(),
+        strokeRect: vi.fn(), fillText: vi.fn(),
+        measureText: vi.fn().mockReturnValue({ width: 10 }),
+        createLinearGradient: vi.fn().mockReturnValue({ addColorStop: vi.fn() }),
+        globalAlpha: 1, globalCompositeOperation: 'source-over',
+        fillStyle: '', strokeStyle: '', lineWidth: 1, lineCap: 'butt', lineJoin: 'miter',
+        font: '', textAlign: 'left', textBaseline: 'alphabetic',
+        filter: 'none', shadowBlur: 0, shadowColor: '', shadowOffsetX: 0, shadowOffsetY: 0,
+        fillRect: vi.fn(() => {
+          if (ctx.fillStyle === '#000000') state.overlayAlpha = ctx.globalAlpha;
+        }),
+      };
+      return { ctx: ctx as unknown as CanvasRenderingContext2D, overlayAlpha: () => state.overlayAlpha };
+    }
+
+    it('新建 item 被标为激活后应亮起（不再停在压暗态）', () => {
+      const probe = createBrightnessProbe();
+      canvasItem.setGroupActive(true); // 画布首帧对激活分组的调用
+      canvasItem.draw(probe.ctx, 1, performance.now() + 500, false, false);
+      expect(probe.overlayAlpha()).toBe(0);
+    });
+
+    it('未激活分组的 item 保持压暗', () => {
+      const probe = createBrightnessProbe();
+      canvasItem.setGroupActive(false);
+      canvasItem.draw(probe.ctx, 1, performance.now() + 500, false, false);
+      expect(probe.overlayAlpha()).toBeCloseTo(0.6, 5);
+    });
+  });
 });
