@@ -165,6 +165,46 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* ─── 开关（44x24 药丸 + 20px 圆钮） ────────────── */
+
+.toggle {
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  border: none;
+  background: var(--color-surface-toggle);
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+  transition: background-color var(--transition-normal);
+}
+
+.toggleKnob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: var(--shadow-subtle);
+  transition: transform var(--transition-normal);
+}
+
+.toggleActive {
+  background: var(--color-primary);
+}
+
+.toggleActive .toggleKnob {
+  transform: translateX(20px);
+}
+
+.hint {
+  margin: -4px var(--spacing-base) 8px;
+  font-size: var(--font-size-meta);
+  color: var(--color-text-muted);
+}
+
 /* ─── 行分隔线 ────────────────────────────────────── */
 
 .separator {
@@ -480,4 +520,11 @@
 
 [data-theme="dark"] .updateNotes {
   background: var(--color-surface-hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toggle,
+  .toggleKnob {
+    transition: none;
+  }
 }

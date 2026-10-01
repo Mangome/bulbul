@@ -5,7 +5,7 @@
 ## Requirements
 
 ### Requirement: 设置面板 UI 组件
-系统 SHALL 提供右侧滑出设置面板（`SettingsPanel`），宽度 320px，包含四个区域：分组参数、外观设置、版本更新、缓存管理。面板 SHALL 使用毛玻璃背景和 `motion/react` 滑入动画。
+系统 SHALL 提供右侧滑出设置面板（`SettingsPanel`），宽度 320px，包含若干区域：分组参数、交互、版本更新、缓存管理。面板 SHALL 使用毛玻璃背景和 `motion/react` 滑入动画。
 
 #### Scenario: 打开设置面板
 - **WHEN** 用户点击 TopNavBar 的设置按钮（齿轮图标）
@@ -60,6 +60,18 @@
 #### Scenario: 直方图开关反映当前状态
 - **WHEN** 设置面板打开且 `showHistogram` 为 `true`
 - **THEN** 直方图开关 SHALL 显示为开启状态
+
+### Requirement: 设置面板交互区域
+设置面板 SHALL 包含交互区域，提供「悬停放大镜」开关（toggle），默认开启。关闭后放大镜 SHALL 仅由长按/拖拽触发（与旧版本行为一致）。
+
+#### Scenario: 切换悬停放大镜开关
+- **WHEN** 用户点击悬停放大镜开关
+- **THEN** `magnifierOnHover` 状态 SHALL 切换并立即生效
+
+#### Scenario: 开关反映当前状态
+- **WHEN** 设置面板打开且 `magnifierOnHover` 为 `true`
+- **THEN** 悬停放大镜开关 SHALL 显示为开启状态
+- **AND** 开关下方 SHALL 显示当前交互说明（悬停查看 / 关闭后需长按）
 
 ### Requirement: 设置面板版本更新区域
 设置面板 SHALL 提供版本更新区域，显示当前应用版本，并提供检查更新入口；当检测到新版本时，该区域 SHALL 显示最新版本号、更新说明和安装动作。

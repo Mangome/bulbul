@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { DURATION, EASE } from '../../utils/motionTokens';
 import { Slider } from '../common/Slider';
 import { useGroupingStore } from '../../stores/useGroupingStore';
+import { useCanvasStore } from '../../stores/useCanvasStore';
 import { useAppStore } from '../../stores/useAppStore';
 import { useProcessing } from '../../hooks/useProcessing';
 import { getCacheSize, clearCache, formatCacheSize } from '../../services/cacheService';
@@ -95,9 +96,45 @@ function IconAbout() {
   );
 }
 
+/** 放大镜图标 */
+function IconLoupe() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 15 15" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="6" cy="6" r="4" />
+      <line x1="9" y1="9" x2="13" y2="13" />
+    </svg>
+  );
+}
+
 // ─── 组件 ─────────────────────────────────────────────
 
 type UpdateStatus = 'idle' | 'checking' | 'upToDate' | 'available' | 'downloading' | 'installing' | 'error';
+
+/** 开关行 */
+function ToggleRow({
+  label,
+  checked,
+  onToggle,
+}: {
+  label: string;
+  checked: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className={cls.row}>
+      <span className={cls.rowLabel}>{label}</span>
+      <button
+        className={`${cls.toggle} ${checked ? cls.toggleActive : ''}`}
+        onClick={onToggle}
+        role="switch"
+        aria-checked={checked}
+        aria-label={`${label}开关`}
+      >
+        <span className={cls.toggleKnob} />
+      </button>
+    </div>
+  );
+}
 
 export function SettingsPanel({ open, onClose, onCacheCleared, onOpenAbout, processingState }: SettingsPanelProps) {
   // 分组参数
@@ -106,6 +143,8 @@ export function SettingsPanel({ open, onClose, onCacheCleared, onOpenAbout, proc
   const setSimilarityThreshold = useGroupingStore((s) => s.setSimilarityThreshold);
   const setTimeGapSeconds = useGroupingStore((s) => s.setTimeGapSeconds);
   const hasGroups = useAppStore((s) => s.groups.length > 0);
+  const magnifierOnHover = useCanvasStore((s) => s.magnifierOnHover);
+  const toggleMagnifierOnHover = useCanvasStore((s) => s.toggleMagnifierOnHover);
   const currentFolder = useAppStore((s) => s.currentFolder);
   const { startProcessing, cancelProcessing, regroupWith } = useProcessing();
 
@@ -398,6 +437,27 @@ export function SettingsPanel({ open, onClose, onCacheCleared, onOpenAbout, proc
                   />
                   <span className={cls.sliderHint}>长时段</span>
                 </div>
+              </div>
+
+              {/* ── 交互 ── */}
+              <div className={cls.group}>
+                <div className={cls.groupHeader}>
+                  <span className={cls.groupIcon}>
+                    <IconLoupe />
+                  </span>
+                  <span className={cls.groupTitle}>交互</span>
+                </div>
+
+                <ToggleRow
+                  label="悬停放大镜"
+                  checked={magnifierOnHover}
+                  onToggle={toggleMagnifierOnHover}
+                />
+                <p className={cls.hint}>
+                  {magnifierOnHover
+                    ? '鼠标停留在图片上即可查看放大细节'
+                    : '关闭后需长按图片查看放大细节'}
+                </p>
               </div>
 
               {/* ── 缓存管理 ── */}

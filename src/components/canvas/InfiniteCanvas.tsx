@@ -13,7 +13,8 @@
 //
 // 交互模式:
 // - 普通滚轮 → 纵向滚动
-// - 左键在图片上拖拽 → 放大镜
+// - 悬停图片 → 放大镜（magnifierOnHover 开启时，默认开启）
+// - 左键在图片上拖拽/长按 → 放大镜（关闭悬停开关时的兜底交互）
 // - 点击 → 选中/取消图片
 // - W/S → 纵向滚动到上/下一组
 // ============================================================
@@ -57,6 +58,8 @@ import { easeOutQuart, lerpColorNum } from "../../utils/easing";
 const LONG_PRESS_DELAY = 300;
 /** 长按期间允许的最大移动距离（px），超过则视为拖动 */
 const LONG_PRESS_MOVE_THRESHOLD = 10;
+/** 悬停后显示放大镜的延迟（ms），避免鼠标扫过时反复解码 medium 图 */
+const HOVER_LOUPE_DELAY_MS = 150;
 /** 画布背景色 — 从 CSS 变量读取，随主题自动切换 */
 const BG_COLOR_LIGHT = "#FFFFFF";
 const BG_COLOR_DARK = "#000000";
@@ -256,6 +259,12 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
     // ── 放大镜区域方框（由 Loupe 回调设置，renderFrame 中绘制） ──
     const loupeSourceRectRef = useRef<LoupeSourceRect | null>(null);
 
+    // ── 悬停放大镜状态（magnifierOnHover） ──
+    /** 当前由悬停显示的 hash；null 表示放大镜非悬停触发 */
+    const hoverLoupeHashRef = useRef<string | null>(null);
+    const hoverLoupeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const hoverLoupePendingRef = useRef<{ hash: string; x: number; y: number } | null>(null);
+
     // ── 放大镜首次使用提示 ──
     const LOUPE_HINT_KEY = "bulbul-loupe-hint-dismissed";
     const [loupeHintVisible, setLoupeHintVisible] = useState(
@@ -282,6 +291,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
     const showDetectionOverlay = useCanvasStore((s) => s.showDetectionOverlay);
     const showImageInfo = useCanvasStore((s) => s.showImageInfo);
     const showHistogram = useCanvasStore((s) => s.showHistogram);
+    const magnifierOnHover = useCanvasStore((s) => s.magnifierOnHover);
     const groupHighlightEnabled = useCanvasStore((s) => s.groupHighlightEnabled);
     const currentGroupIndex = useCanvasStore((s) => s.currentGroupIndex);
     const setViewport = useCanvasStore((s) => s.setViewport);
@@ -327,6 +337,22 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
       rafIdRef.current = requestAnimationFrame(renderFrame);
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    /** 隐藏悬停放大镜（长按/拖拽激活的放大镜不受影响） */
+    const hideHoverLoupe = useCallback(() => {
+      if (hoverLoupeTimerRef.current !== null) {
+        clearTimeout(hoverLoupeTimerRef.current);
+        hoverLoupeTimerRef.current = null;
+      }
+      hoverLoupePendingRef.current = null;
+      if (hoverLoupeHashRef.current === null) return;
+      hoverLoupeHashRef.current = null;
+      setMagnifierState((prev) =>
+        prev.visible ? { ...prev, visible: false } : prev,
+      );
+      loupeSourceRectRef.current = null;
+      markDirty();
+    }, [markDirty]);
 
     // ─── 坐标计算辅助 ────────────────────────────────────
 
@@ -756,6 +782,57 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
 
       // ── 事件处理器 ──
 
+      /** 悬停显示放大镜；换图时重新计时，避免扫过时解码多张 medium 图 */
+      const showHoverLoupe = (hash: string, x: number, y: number) => {
+        const ci = canvasItemsRef.current.get(hash);
+        if (!ci) return;
+        const itemRect = {
+          x: ci.x,
+          y: ci.y,
+          width: ci.getWidth(),
+          height: ci.getHeight(),
+        };
+
+        // 已显示该图 → 直接跟随光标
+        if (hoverLoupeHashRef.current === hash) {
+          setMagnifierState({ visible: true, hash, mouseX: x, mouseY: y, itemRect });
+          return;
+        }
+
+        const pending = hoverLoupePendingRef.current;
+        hoverLoupePendingRef.current = { hash, x, y };
+        if (
+          pending &&
+          pending.hash !== hash &&
+          hoverLoupeTimerRef.current !== null
+        ) {
+          clearTimeout(hoverLoupeTimerRef.current);
+          hoverLoupeTimerRef.current = null;
+        }
+        if (hoverLoupeTimerRef.current !== null) return;
+
+        hoverLoupeTimerRef.current = setTimeout(() => {
+          hoverLoupeTimerRef.current = null;
+          const next = hoverLoupePendingRef.current;
+          if (!next) return;
+          const item = canvasItemsRef.current.get(next.hash);
+          if (!item) return;
+          hoverLoupeHashRef.current = next.hash;
+          setMagnifierState({
+            visible: true,
+            hash: next.hash,
+            mouseX: next.x,
+            mouseY: next.y,
+            itemRect: {
+              x: item.x,
+              y: item.y,
+              width: item.getWidth(),
+              height: item.getHeight(),
+            },
+          });
+        }, HOVER_LOUPE_DELAY_MS);
+      };
+
       const handleWheel = (e: WheelEvent) => {
         e.preventDefault();
         if (destroyedRef.current) return;
@@ -774,6 +851,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
           updateViewport();
           lastWheelUpdateTimeRef.current = now;
         }
+        // 悬停放大镜的 itemRect 对应滚动前的坐标，滚动后内容已偏移 → 先隐藏
+        if (useCanvasStore.getState().magnifierOnHover) hideHoverLoupe();
         markDirty();
       };
 
@@ -929,6 +1008,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
           // 非拖拽模式：鼠标移出画布时清理放大镜方框
           const target = e.target as Node | null;
           if (!target || !container.contains(target)) {
+            hideHoverLoupe();
             if (loupeSourceRectRef.current !== null) {
               loupeSourceRectRef.current = null;
               markDirty();
@@ -970,8 +1050,12 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
                 const next = canvasItemsRef.current.get(newHoveredHash);
                 if (next) next.setHovered(true);
 
-                // 首次悬停 → 显示放大镜提示
-                if (loupeHintVisible && !localStorage.getItem(LOUPE_HINT_KEY)) {
+                // 首次悬停 → 显示放大镜提示（仅关闭悬停放大镜时）
+                if (
+                  !useCanvasStore.getState().magnifierOnHover &&
+                  loupeHintVisible &&
+                  !localStorage.getItem(LOUPE_HINT_KEY)
+                ) {
                   loupeHintPosRef.current = { x: screenX, y: screenY };
                   setLoupeHintVisible(true);
                   if (loupeHintTimerRef.current)
@@ -984,6 +1068,15 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
               }
               hoveredHashRef.current = newHoveredHash;
               markDirty();
+            }
+
+            // 悬停放大镜：停在图片上即显示，离开图片/空白处隐藏
+            if (useCanvasStore.getState().magnifierOnHover) {
+              if (newHoveredHash) {
+                showHoverLoupe(newHoveredHash, screenX, screenY);
+              } else {
+                hideHoverLoupe();
+              }
             }
           }
         }
@@ -999,8 +1092,11 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
           longPressTimerRef.current = null;
         }
 
-        // 隐藏放大镜（长按激活或拖动激活时）
-        if (longPressActivatedRef.current || hasDraggedRef.current) {
+        // 隐藏放大镜（长按激活或拖动激活时）；悬停模式保持显示
+        if (
+          (longPressActivatedRef.current || hasDraggedRef.current) &&
+          !useCanvasStore.getState().magnifierOnHover
+        ) {
           setMagnifierState((prev) =>
             prev.visible ? { ...prev, visible: false } : prev,
           );
@@ -1202,6 +1298,11 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
         window.removeEventListener("pointerup", handlePointerUp);
         window.removeEventListener("keydown", handleKeyDown);
 
+        if (hoverLoupeTimerRef.current !== null) {
+          clearTimeout(hoverLoupeTimerRef.current);
+          hoverLoupeTimerRef.current = null;
+        }
+
         resizeObserver.disconnect();
         dprMediaQuery?.removeEventListener("change", handleDprChange);
 
@@ -1226,6 +1327,9 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
       const currentLayout = layoutRef.current;
       if (!currentLayout.pages || currentLayout.pages.length === 0) return;
 
+      // 新布局 → 旧的悬停放大镜 itemRect 已失效
+      hideHoverLoupe();
+
       // 销毁所有旧的 CanvasImageItem，强制用新布局坐标重建
       const imageLoader = imageLoaderRef.current;
       for (const [hash, item] of canvasItemsRef.current) {
@@ -1245,7 +1349,7 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
       lastHoveredGroupIdxRef.current = null;
       updateViewport();
       markDirty();
-    }, [layout, updateViewport, markDirty]);
+    }, [layout, updateViewport, markDirty, hideHoverLoupe]);
 
     // ── 外部分组导航（胶片条点击、A/D 键触发）→ 纵向滚动到目标分组首图 ──
     const internalGroupUpdateRef = useRef(false);
@@ -1469,8 +1573,8 @@ const InfiniteCanvas = forwardRef<InfiniteCanvasHandle, InfiniteCanvasProps>(
           viewportWidth={screenWidthRef.current}
           viewportHeight={screenHeightRef.current}
         />
-        {/* 放大镜首次使用提示 */}
-        {loupeHintVisible && loupeHintPosRef.current && (
+        {/* 放大镜首次使用提示（仅关闭悬停放大镜时出现） */}
+        {!magnifierOnHover && loupeHintVisible && loupeHintPosRef.current && (
           <div
             style={{
               position: "absolute",

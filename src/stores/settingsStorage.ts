@@ -15,6 +15,8 @@ export interface PersistedSettings {
   showDetectionOverlay: boolean;
   showImageInfo: boolean;
   showHistogram: boolean;
+  /** 鼠标悬停图片即显示放大镜 */
+  magnifierOnHover: boolean;
   similarityThreshold: number;
   timeGapSeconds: number;
   region: Region | null;
@@ -25,6 +27,7 @@ const DEFAULTS: PersistedSettings = {
   showDetectionOverlay: false,
   showImageInfo: false,
   showHistogram: false,
+  magnifierOnHover: true,
   similarityThreshold: 90.0,
   timeGapSeconds: 10,
   region: null,
@@ -90,6 +93,7 @@ export async function loadSettings(): Promise<PersistedSettings> {
       showDetectionOverlay: typeof parsed.showDetectionOverlay === 'boolean' ? parsed.showDetectionOverlay : DEFAULTS.showDetectionOverlay,
       showImageInfo: typeof parsed.showImageInfo === 'boolean' ? parsed.showImageInfo : DEFAULTS.showImageInfo,
       showHistogram: typeof parsed.showHistogram === 'boolean' ? parsed.showHistogram : DEFAULTS.showHistogram,
+      magnifierOnHover: typeof parsed.magnifierOnHover === 'boolean' ? parsed.magnifierOnHover : DEFAULTS.magnifierOnHover,
       similarityThreshold: typeof parsed.similarityThreshold === 'number' ? parsed.similarityThreshold : DEFAULTS.similarityThreshold,
       timeGapSeconds: typeof parsed.timeGapSeconds === 'number' ? parsed.timeGapSeconds : DEFAULTS.timeGapSeconds,
       region: isValidRegion(savedRegion) ? migrateRegion(savedRegion) : DEFAULTS.region,

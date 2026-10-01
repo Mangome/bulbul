@@ -49,4 +49,17 @@ describe('useCanvasStore', () => {
       expect(useCanvasStore.getState().showDetectionOverlay).toBe(false);
     });
   });
+
+  describe('toggleMagnifierOnHover', () => {
+    it('默认开启', () => {
+      expect(useCanvasStore.getState().magnifierOnHover).toBe(true);
+    });
+
+    it('可关闭并重新开启', () => {
+      useCanvasStore.getState().toggleMagnifierOnHover();
+      expect(useCanvasStore.getState().magnifierOnHover).toBe(false);
+      useCanvasStore.getState().toggleMagnifierOnHover();
+      expect(useCanvasStore.getState().magnifierOnHover).toBe(true);
+    });
+  });
 });

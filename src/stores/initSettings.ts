@@ -14,6 +14,7 @@ function collectSettings(): PersistedSettings {
     showDetectionOverlay: useCanvasStore.getState().showDetectionOverlay,
     showImageInfo: useCanvasStore.getState().showImageInfo,
     showHistogram: useCanvasStore.getState().showHistogram,
+    magnifierOnHover: useCanvasStore.getState().magnifierOnHover,
     similarityThreshold: useGroupingStore.getState().similarityThreshold,
     timeGapSeconds: useGroupingStore.getState().timeGapSeconds,
     region: useGeoStore.getState().selectedRegion,
@@ -58,6 +59,10 @@ export async function initSettings(): Promise<void> {
     if (saved.showHistogram) {
       useCanvasStore.getState().toggleHistogram();
     }
+    // store 默认 true：仅当持久化为 false 时翻转为关闭
+    if (!saved.magnifierOnHover) {
+      useCanvasStore.getState().toggleMagnifierOnHover();
+    }
     useGroupingStore.getState().setSimilarityThreshold(saved.similarityThreshold);
     useGroupingStore.getState().setTimeGapSeconds(saved.timeGapSeconds);
     if (saved.region) {
@@ -77,7 +82,8 @@ export async function initSettings(): Promise<void> {
       (state, prev) => {
         if (state.showDetectionOverlay !== prev.showDetectionOverlay
           || state.showImageInfo !== prev.showImageInfo
-          || state.showHistogram !== prev.showHistogram) {
+          || state.showHistogram !== prev.showHistogram
+          || state.magnifierOnHover !== prev.magnifierOnHover) {
           scheduleSave();
         }
       },

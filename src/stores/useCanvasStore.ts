@@ -13,6 +13,8 @@ interface CanvasStoreState {
   showImageInfo: boolean;
   /** 是否显示直方图 */
   showHistogram: boolean;
+  /** 鼠标悬停图片即显示放大镜（关闭后需长按/拖拽触发） */
+  magnifierOnHover: boolean;
 
   /** 是否启用分组高亮（非当前组压暗） */
   groupHighlightEnabled: boolean;
@@ -30,6 +32,7 @@ interface CanvasStoreState {
   toggleDetectionOverlay: () => void;
   toggleImageInfo: () => void;
   toggleHistogram: () => void;
+  toggleMagnifierOnHover: () => void;
 
   toggleGroupHighlight: () => void;
 
@@ -50,6 +53,7 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
   showDetectionOverlay: false,
   showImageInfo: false,
   showHistogram: false,
+  magnifierOnHover: true,
   groupHighlightEnabled: true,
 
   setViewport: (x, y) =>
@@ -66,6 +70,9 @@ export const useCanvasStore = create<CanvasStoreState>((set, get) => ({
 
   toggleHistogram: () =>
     set((state) => ({ showHistogram: !state.showHistogram })),
+
+  toggleMagnifierOnHover: () =>
+    set((state) => ({ magnifierOnHover: !state.magnifierOnHover })),
 
   toggleGroupHighlight: () =>
     set((state) => ({ groupHighlightEnabled: !state.groupHighlightEnabled })),

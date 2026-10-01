@@ -79,3 +79,29 @@
 #### Scenario: prefers-reduced-motion
 - **WHEN** 系统偏好设置 reduced-motion
 - **THEN** 淡入淡出时长 SHALL 为 0ms（立即显示/隐藏）
+
+### Requirement: 放大镜触发方式（悬停 / 长按）
+系统 SHALL 支持两种放大镜触发方式：悬停触发（默认开启，本地设置 `magnifierOnHover` = true，无需按下鼠标）与长按/拖拽触发。关闭悬停触发后，行为 SHALL 与仅支持长按/拖拽时一致。
+
+#### Scenario: 悬停显示放大镜
+- **WHEN** magnifierOnHover 为 true 且鼠标停在缩略图上超过 150ms
+- **THEN** 放大镜 SHALL 显示并跟随鼠标位置实时更新
+- **AND** 鼠标移到图片外的空白区或画布外区域时 SHALL 隐藏并清除缩略图上的源区域方框
+
+#### Scenario: 快速扫过不触发
+- **WHEN** 鼠标在 150ms 内连续掠过多个缩略图
+- **THEN** 放大镜 SHALL 不显示（避免反复解码 medium 图）
+
+#### Scenario: 滚动时隐藏
+- **WHEN** 悬停放大镜可见且用户滚动滚轮
+- **THEN** 画布 SHALL 正常纵向滚动，悬停放大镜 SHALL 隐藏（避免显示滚动前的旧区域）
+
+#### Scenario: 关闭悬停触发
+- **WHEN** magnifierOnHover 为 false
+- **THEN** 悬停 SHALL 不显示放大镜
+- **AND** 长按（300ms）或按住拖拽缩略图 SHALL 显示放大镜，松开鼠标后隐藏
+- **AND** 首次悬停缩略图时 SHALL 显示「长按查看细节」提示
+
+#### Scenario: 设置持久化
+- **WHEN** 用户切换悬停放大镜开关后关闭应用
+- **THEN** 下次启动时 magnifierOnHover SHALL 恢复为上次设置的值

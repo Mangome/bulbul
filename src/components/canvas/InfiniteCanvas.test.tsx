@@ -24,7 +24,7 @@ vi.mock('../../services/imageService', () => ({
   getImageUrl: vi.fn().mockResolvedValue('mock://image.jpg'),
 }));
 
-import { render, cleanup } from '@testing-library/react';
+import { render, cleanup, waitFor } from '@testing-library/react';
 import { createRef } from 'react';
 import { useCanvasStore } from '../../stores/useCanvasStore';
 import { useSelectionStore } from '../../stores/useSelectionStore';
@@ -48,6 +48,7 @@ function createMockContext(): CanvasRenderingContext2D {
     restore: vi.fn(),
     translate: vi.fn(),
     scale: vi.fn(),
+    rotate: vi.fn(),
     setTransform: vi.fn(),
     fillRect: vi.fn(),
     clearRect: vi.fn(),
@@ -63,6 +64,7 @@ function createMockContext(): CanvasRenderingContext2D {
     moveTo: vi.fn(),
     lineTo: vi.fn(),
     arc: vi.fn(),
+    arcTo: vi.fn(),
     quadraticCurveTo: vi.fn(),
     fill: vi.fn(),
     stroke: vi.fn(),
@@ -249,5 +251,60 @@ describe('InfiniteCanvas', () => {
 
   it('无 pixi.js 模块导入', () => {
     expect(InfiniteCanvas).toBeTruthy();
+  });
+
+  describe('悬停放大镜（magnifierOnHover）', () => {
+    /** 固定容器尺寸：1:1 坐标映射，内容坐标 = 屏幕坐标 - paddingTop(12) */
+    const rect = {
+      left: 0, top: 0, width: 800, height: 600,
+      right: 800, bottom: 600, x: 0, y: 0,
+      toJSON: () => ({}),
+    } as DOMRect;
+
+    /** 第一张图（内容坐标 x 24-184 / y 80-180） */
+    const hoverImage = (canvas: HTMLCanvasElement) =>
+      canvas.dispatchEvent(new MouseEvent('pointermove', { clientX: 100, clientY: 142, bubbles: true }));
+    /** 图片之间的空白区域 */
+    const hoverEmpty = (canvas: HTMLCanvasElement) =>
+      canvas.dispatchEvent(new MouseEvent('pointermove', { clientX: 700, clientY: 200, bubbles: true }));
+
+    it('默认开启：悬停即显示放大镜，移开图片后隐藏', async () => {
+      const spy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(rect);
+      useCanvasStore.setState({ magnifierOnHover: true });
+      const { container } = render(
+        <InfiniteCanvas layout={layout} fileNames={fileNames} metadataMap={metadataMap as never} />
+      );
+      const canvas = container.querySelector('canvas')!;
+
+      hoverImage(canvas);
+      await waitFor(
+        () => expect(container.querySelector('[class*="magnificationLabel"]')).toBeTruthy(),
+        { timeout: 2000 },
+      );
+
+      hoverEmpty(canvas);
+      await waitFor(
+        () => expect(container.querySelector('[class*="canvasWrap"]')).toBeNull(),
+        { timeout: 2000 },
+      );
+
+      spy.mockRestore();
+    });
+
+    it('关闭后悬停不显示放大镜（保留长按交互）', async () => {
+      const spy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(rect);
+      useCanvasStore.setState({ magnifierOnHover: false });
+      const { container } = render(
+        <InfiniteCanvas layout={layout} fileNames={fileNames} metadataMap={metadataMap as never} />
+      );
+      const canvas = container.querySelector('canvas')!;
+
+      hoverImage(canvas);
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      expect(container.querySelector('[class*="canvasWrap"]')).toBeNull();
+
+      spy.mockRestore();
+      useCanvasStore.setState({ magnifierOnHover: true });
+    });
   });
 });
